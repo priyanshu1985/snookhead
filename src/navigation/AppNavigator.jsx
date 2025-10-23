@@ -11,6 +11,14 @@ import BillScreen from '../screens/BillScreen';
 import OrdersScreen from '../screens/OrdersScreen';
 import MenuScreen from '../screens/MenuScreen';
 
+import OwnerPanel from '../screens/OwnerPanel';
+import OwnerDashboard from '../screens/OwnerDashboard';
+// import SetupMenu from '../screens/SetupMenu';
+// import InventoryTracking from '../screens/InventoryTracking';
+import UpgradeSubscription from '../screens/UpgradeSubscription';
+import ReportBugs from '../screens/ReportBugs';
+import PrivacyPolicy from '../screens/PrivacyPolicy';
+
 const Tab = createBottomTabNavigator(); // Creates bottom tabs
 const Stack = createNativeStackNavigator(); // Creates stack navigation
 
@@ -92,6 +100,16 @@ export default function AppNavigator() {
             animation: 'slide_from_left',
           }}
         />
+        <Stack.Screen name="OwnerPanel" component={OwnerPanel} />
+        <Stack.Screen name="OwnerDashboard" component={OwnerDashboard} />
+        {/* <Stack.Screen name="SetupMenu" component={SetupMenu} />
+        <Stack.Screen name="InventoryTracking" component={InventoryTracking} /> */}
+        <Stack.Screen
+          name="UpgradeSubscription"
+          component={UpgradeSubscription}
+        />
+        <Stack.Screen name="ReportBugs" component={ReportBugs} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicy} />
       </Stack.Navigator>
     </NavigationContainer>
   );

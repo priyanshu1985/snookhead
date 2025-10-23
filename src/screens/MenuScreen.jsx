@@ -12,13 +12,29 @@ const { width } = Dimensions.get('window');
 
 export default function MenuScreen({ navigation }) {
   const menuItems = [
-    { icon: 'id-card-outline', title: 'Owners panel' },
-    { icon: 'settings-outline', title: 'Set up menu' },
-    { icon: 'stats-chart-outline', title: 'inventory tracking' },
-    { icon: 'refresh-outline', title: 'Upgrade subscription' },
-    { icon: 'bug-outline', title: 'Report bugs' },
-    { icon: 'shield-checkmark-outline', title: 'Privacy and Policy' },
+    { icon: 'id-card-outline', title: 'Owners panel', route: 'OwnerPanel' },
+    { icon: 'settings-outline', title: 'Set up menu', route: 'SetupMenu' },
+    {
+      icon: 'stats-chart-outline',
+      title: 'inventory tracking',
+      route: 'InventoryTracking',
+    },
+    {
+      icon: 'refresh-outline',
+      title: 'Upgrade subscription',
+      route: 'UpgradeSubscription',
+    },
+    { icon: 'bug-outline', title: 'Report bugs', route: 'ReportBugs' },
+    {
+      icon: 'shield-checkmark-outline',
+      title: 'Privacy and Policy',
+      route: 'PrivacyPolicy',
+    },
   ];
+
+  const handleMenuItemPress = route => {
+    navigation.navigate(route);
+  };
 
   return (
     <TouchableOpacity
@@ -42,9 +58,19 @@ export default function MenuScreen({ navigation }) {
 
         {/* Menu Items */}
         {menuItems.map((item, index) => (
-          <TouchableOpacity key={index} style={styles.menuItem}>
+          <TouchableOpacity
+            key={index}
+            style={styles.menuItem}
+            onPress={() => handleMenuItemPress(item.route)}
+          >
             <Icon name={item.icon} size={24} color="#FF8C42" />
             <Text style={styles.menuText}>{item.title}</Text>
+            <Icon
+              name="chevron-forward"
+              size={20}
+              color="#CCC"
+              style={{ marginLeft: 'auto' }}
+            />
           </TouchableOpacity>
         ))}
 
@@ -60,10 +86,10 @@ export default function MenuScreen({ navigation }) {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)', // Dark semi-transparent background
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   menu: {
-    width: width * 0.75, // 75% of screen width
+    width: width * 0.75,
     height: '100%',
     backgroundColor: '#fff',
     padding: 24,
@@ -103,13 +129,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     marginLeft: 16,
+    flex: 1,
   },
   logoutButton: {
     backgroundColor: '#FF8C42',
     padding: 16,
     borderRadius: 25,
     alignItems: 'center',
-    marginTop: 'auto', // Push to bottom
+    marginTop: 'auto',
   },
   logoutText: {
     color: '#fff',
