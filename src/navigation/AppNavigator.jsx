@@ -16,12 +16,7 @@ import OwnerPanel from '../screens/OwnerPanel';
 import OwnerDashboard from '../screens/OwnerDashboard';
 
 import SetupMenu from '../screens/SetupMenu';
-// import ManageTableGames from '../screens/ManageTableGames';
-// import ManageDigitalGame from '../screens/ManageDigitalGame';
-// import ManageMenuItems from '../screens/ManageMenuItems';
-// import AddNewTable from '../screens/AddNewTable';
-
-// import InventoryTracking from '../screens/InventoryTracking';
+import InventoryTracking from '../screens/InventoryTracking';
 import UpgradeSubscription from '../screens/UpgradeSubscription';
 import ReportBugs from '../screens/ReportBugs';
 import PrivacyPolicy from '../screens/PrivacyPolicy';
@@ -110,13 +105,7 @@ export default function AppNavigator() {
         <Stack.Screen name="OwnerPanel" component={OwnerPanel} />
         <Stack.Screen name="OwnerDashboard" component={OwnerDashboard} />
         <Stack.Screen name="SetupMenu" component={SetupMenu} />
-        {/* // Inside Stack.Navigator, add these screens: */}
-        {/* <Stack.Screen name="ManageTableGames" component={ManageTableGames} />
-        <Stack.Screen name="ManageDigitalGame" component={ManageDigitalGame} />
-        <Stack.Screen name="ManageMenuItems" component={ManageMenuItems} />
-        <Stack.Screen name="AddNewTable" component={AddNewTable} /> */}
-
-        {/* <Stack.Screen name="InventoryTracking" component={InventoryTracking} /> */}
+        <Stack.Screen name="InventoryTracking" component={InventoryTracking} />
         <Stack.Screen
           name="UpgradeSubscription"
           component={UpgradeSubscription}
