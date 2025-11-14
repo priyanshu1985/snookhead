@@ -4,6 +4,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Ionicons';
 
+import LoginScreen from '../screens/LoginScreen';
+import SignUpScreen from '../screens/SignUpScreen';
 // Import screens
 import HomeScreen from '../screens/HomeScreen';
 import QueueScreen from '../screens/QueueScreen';
@@ -92,7 +94,12 @@ function BottomTabs() {
 export default function AppNavigator() {
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator
+        initialRouteName="LoginScreen"
+        screenOptions={{ headerShown: false }}
+      >
+        <Stack.Screen name="LoginScreen" component={LoginScreen} />
+        <Stack.Screen name="SignUpScreen" component={SignUpScreen} />
         <Stack.Screen name="MainTabs" component={BottomTabs} />
         <Stack.Screen
           name="Menu"
