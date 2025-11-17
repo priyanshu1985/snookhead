@@ -23,6 +23,8 @@ import UpgradeSubscription from '../screens/UpgradeSubscription';
 import ReportBugs from '../screens/ReportBugs';
 import PrivacyPolicy from '../screens/PrivacyPolicy';
 
+import TableBookingScreen from '../screens/TableBookingScreen';
+
 const Tab = createBottomTabNavigator(); // Creates bottom tabs
 const Stack = createNativeStackNavigator(); // Creates stack navigation
 
@@ -119,6 +121,10 @@ export default function AppNavigator() {
         />
         <Stack.Screen name="ReportBugs" component={ReportBugs} />
         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicy} />
+        <Stack.Screen
+          name="TableBookingScreen"
+          component={TableBookingScreen}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

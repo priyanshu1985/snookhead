@@ -1,125 +1,128 @@
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 
-const { width } = Dimensions.get('window');
-const cardWidth = (width - 48) / 2; // 2 cards per row with spacing
-
-export default function TableCard({ table, color }) {
-  const isOccupied = table.status === 'occupied';
-
+export default function TableCard({ table, color, onPress, onDelete }) {
   return (
-    <View style={styles.card}>
+    <TouchableOpacity
+      style={[styles.card, { borderColor: color }]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      {/* Delete Button */}
+      <TouchableOpacity
+        style={styles.deleteButton}
+        onPress={e => {
+          e.stopPropagation();
+          onDelete();
+        }}
+      >
+        <Icon name="trash-outline" size={18} color="#FF4444" />
+      </TouchableOpacity>
+
       {/* Table Visual */}
+      <View style={[styles.table, { backgroundColor: color }]}>
+        <View style={styles.xLine} />
+        <View style={[styles.xLine, styles.xLineRotated]} />
+      </View>
+
+      {/* Table Info */}
+      <Text style={styles.tableName}>{table.name}</Text>
+      <Text style={styles.price}>{table.price}</Text>
+
+      {/* Status Badge */}
       <View
         style={[
-          styles.tableImage,
-          { backgroundColor: isOccupied ? '#555' : color },
+          styles.statusBadge,
+          table.status === 'occupied' ? styles.occupied : styles.available,
         ]}
       >
-        {/* Timer overlay if table is occupied */}
-        {isOccupied && (
-          <View style={styles.timerOverlay}>
-            <Icon name="time-outline" size={16} color="#fff" />
-            <Text style={styles.timerText}>{table.time}</Text>
-          </View>
-        )}
-
-        {/* Table graphics */}
-        {!isOccupied && (
-          <View style={styles.tableGraphics}>
-            <View style={styles.centerLine} />
-            <View style={styles.cue} />
-            <View style={styles.ballRack} />
-          </View>
-        )}
+        <Text style={styles.statusText}>
+          {table.status === 'occupied' ? `${table.time}` : 'Available'}
+        </Text>
       </View>
-
-      {/* Table info */}
-      <View style={styles.info}>
-        <Text style={styles.tableName}>{table.name}</Text>
-        <Text style={styles.price}>{table.price}</Text>
-      </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    width: cardWidth,
+    flex: 1,
     backgroundColor: '#fff',
     borderRadius: 12,
-    overflow: 'hidden',
+    padding: 16,
+    marginHorizontal: 8,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
     elevation: 2,
     shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 2,
+    minHeight: 180,
   },
-  tableImage: {
-    width: '100%',
-    height: 100,
+  deleteButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#FFF',
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    zIndex: 10,
+  },
+  table: {
+    width: 80,
+    height: 60,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'relative',
+    marginBottom: 12,
   },
-  timerOverlay: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  timerText: {
-    color: '#fff',
-    marginLeft: 4,
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  tableGraphics: {
-    width: '100%',
+  xLine: {
+    position: 'absolute',
+    width: 2,
     height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  centerLine: {
-    width: '60%',
-    height: 1,
     backgroundColor: '#fff',
-    opacity: 0.5,
+    opacity: 0.6,
   },
-  cue: {
-    width: 40,
-    height: 2,
-    backgroundColor: '#fff',
-    position: 'absolute',
-    left: 20,
-    top: 50,
-    transform: [{ rotate: '45deg' }],
-  },
-  ballRack: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#fff',
-    position: 'absolute',
-    right: 20,
-    top: 40,
-  },
-  info: {
-    padding: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  xLineRotated: {
+    transform: [{ rotate: '90deg' }],
   },
   tableName: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
+    marginBottom: 4,
   },
   price: {
-    fontSize: 14,
-    color: '#FF8C42',
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 8,
+  },
+  statusBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  available: {
+    backgroundColor: '#E8F5E9',
+  },
+  occupied: {
+    backgroundColor: '#FFEBEE',
+  },
+  statusText: {
+    fontSize: 12,
     fontWeight: '600',
+    color: '#333',
   },
 });
