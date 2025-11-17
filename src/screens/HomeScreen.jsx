@@ -1,23 +1,15 @@
 import React, { useState, useRef } from 'react';
-import {
-  View,
-  FlatList,
-  Dimensions,
-  StyleSheet,
-  TouchableOpacity,
-} from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import { View, FlatList, Dimensions, StyleSheet, Alert } from 'react-native';
 import Header from '../components/Header';
 import HeaderTabs from '../components/HeaderTabs';
 import TableCard from '../components/TableCard';
 
-const { width } = Dimensions.get('window'); // Get screen width
+const { width } = Dimensions.get('window');
 
-// Sample data for tables
-const gameData = [
+const initialGameData = [
   {
     name: 'Snooker',
-    color: '#4A7C59', // Green color for snooker table
+    color: '#4A7C59',
     tables: [
       { id: 1, name: 'T1', price: '₹200/hr', status: 'available' },
       { id: 2, name: 'T2', price: '₹200/hr', status: 'available' },
@@ -51,7 +43,7 @@ const gameData = [
   },
   {
     name: 'Pool',
-    color: '#2E5F8A', // Blue color for pool table
+    color: '#2E5F8A',
     tables: [
       {
         id: 1,
@@ -81,89 +73,83 @@ const gameData = [
       { id: 8, name: 'T8', price: '₹250/hr', status: 'available' },
     ],
   },
-  {
-    name: 'PlayStation5',
-    color: '#1E3A5F',
-    tables: [
-      { id: 1, name: 'PS1', price: '₹300/hr', status: 'available' },
-      {
-        id: 2,
-        name: 'PS2',
-        price: '₹300/hr',
-        status: 'occupied',
-        time: '12 min',
-      },
-    ],
-  },
-  {
-    name: 'Table Tennis',
-    color: '#D35400',
-    tables: [
-      { id: 1, name: 'TT1', price: '₹150/hr', status: 'available' },
-      {
-        id: 2,
-        name: 'TT2',
-        price: '₹150/hr',
-        status: 'occupied',
-        time: '22 min',
-      },
-    ],
-  },
 ];
 
 export default function HomeScreen({ navigation }) {
-  const [activeTab, setActiveTab] = useState(0); // Currently selected tab
-  const flatListRef = useRef(null); // Reference to FlatList for scrolling
+  const [activeTab, setActiveTab] = useState(0);
+  const [gameData, setGameData] = useState(initialGameData);
+  const flatListRef = useRef(null);
 
-  // When user taps a tab
   const handleTabPress = index => {
     setActiveTab(index);
     flatListRef.current?.scrollToIndex({ index, animated: true });
   };
 
-  // When user swipes the screen
   const handleScroll = event => {
     const index = Math.round(event.nativeEvent.contentOffset.x / width);
     setActiveTab(index);
   };
 
-  // Render each game category (Snooker, Pool, etc.)
-  const renderGame = ({ item }) => (
+  const handleTablePress = (table, gameType, color) => {
+    // If you have TableBooking screen, uncomment this:
+    navigation.navigate('TableBookingScreen', { table, gameType, color });
+  };
+
+  const handleDeleteTable = (gameIndex, tableId) => {
+    Alert.alert('Delete Table', 'Are you sure you want to delete this table?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          const updatedGameData = [...gameData];
+          updatedGameData[gameIndex].tables = updatedGameData[
+            gameIndex
+          ].tables.filter(table => table.id !== tableId);
+          setGameData(updatedGameData);
+        },
+      },
+    ]);
+  };
+
+  const renderGame = ({ item, index: gameIndex }) => (
     <View style={{ width, padding: 16 }}>
       <FlatList
         data={item.tables}
-        keyExtractor={table => table.id.toString()}
-        numColumns={2} // 2 cards per row
+        keyExtractor={table => `${item.name}-${table.id}`}
+        numColumns={2}
         renderItem={({ item: table }) => (
-          <TableCard table={table} color={item.color} />
+          <TableCard
+            table={table}
+            color={item.color}
+            onPress={() => handleTablePress(table, item.name, item.color)}
+            onDelete={() => handleDeleteTable(gameIndex, table.id)}
+          />
         )}
-        columnWrapperStyle={styles.row} // Space between columns
+        columnWrapperStyle={styles.row}
       />
     </View>
   );
 
   return (
     <View style={styles.container}>
-      {/* Top Header with logo, bell, menu */}
       <Header navigation={navigation} />
 
-      {/* Tabs: Snooker, Pool, PlayStation5, Table Tennis */}
       <HeaderTabs
         tabs={gameData.map(g => g.name)}
         activeTab={activeTab}
         onTabPress={handleTabPress}
       />
 
-      {/* Swipeable content for each tab */}
       <FlatList
         ref={flatListRef}
         data={gameData}
         keyExtractor={item => item.name}
         renderItem={renderGame}
-        horizontal // Swipe left/right
-        pagingEnabled // Snap to each page
-        showsHorizontalScrollIndicator={false} // Hide scrollbar
-        onMomentumScrollEnd={handleScroll} // Update tab on swipe
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={handleScroll}
       />
     </View>
   );
@@ -175,7 +161,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
   },
   row: {
-    justifyContent: 'space-between', // Space between cards
+    justifyContent: 'space-between',
     marginBottom: 16,
   },
 });
