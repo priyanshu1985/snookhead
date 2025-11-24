@@ -10,6 +10,7 @@ import SignUpScreen from '../screens/SignUpScreen';
 import HomeScreen from '../screens/HomeScreen';
 import QueueScreen from '../screens/QueueScreen';
 import BillScreen from '../screens/BillScreen';
+import ScannerScreen from '../screens/ScannerScreen';
 import OrdersScreen from '../screens/OrdersScreen';
 import MenuScreen from '../screens/MenuScreen';
 
@@ -62,6 +63,17 @@ function BottomTabs() {
           ),
         }}
       />
+      {/* Scanner Tab */}
+      <Tab.Screen
+        name="Scanner"
+        component={ScannerScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="people-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
       {/* Bill Tab (Center - Highlighted) */}
       <Tab.Screen
         name="Bill"
@@ -70,12 +82,6 @@ function BottomTabs() {
           tabBarIcon: ({ color }) => (
             <Icon name="receipt-outline" size={35} color="#fff" />
           ),
-          tabBarIconStyle: {
-            backgroundColor: '#FF8C42',
-            borderRadius: 50,
-            padding: 15,
-            marginBottom: 20,
-          },
         }}
       />
       {/* Bill Tab */}

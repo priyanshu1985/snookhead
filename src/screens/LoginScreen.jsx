@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { API_URL } from '../config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -29,7 +30,8 @@ export default function LoginScreen({ navigation }) {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (res.ok && data.token) {
+      if (res.ok && data.accessToken) {
+        await AsyncStorage.setItem('authToken', data.accessToken);
         Alert.alert('Login Success', 'Logged in!');
         navigation.replace('MainTabs');
       } else {
@@ -158,13 +160,3 @@ const styles = StyleSheet.create({
   textMuted: { color: '#878787', fontSize: 13 },
   signupText: { color: ORANGE, fontWeight: 'bold', fontSize: 14 },
 });
-
-// import React from 'react';
-// import { View, Text } from 'react-native';
-// export default function LoginScreen() {
-//   return (
-//     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-//       <Text>TEST LOGIN SCREEN</Text>
-//     </View>
-//   );
-// }
