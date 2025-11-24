@@ -7,22 +7,17 @@ import {
   SafeAreaView,
   ScrollView,
   FlatList,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 
-// Date generation helper
+// Move OUTSIDE component
 const getNextDates = () => {
   const dates = [];
   const today = new Date();
-  const days = [
-    'Today',
-    '17June',
-    '18June',
-    '19June',
-    '20June',
-    '21June',
-    '22June',
-  ];
 
   for (let i = 0; i < 7; i++) {
     const date = new Date(today);
@@ -36,12 +31,15 @@ const getNextDates = () => {
 };
 
 export default function TableBookingScreen({ route, navigation }) {
-  const { table, gameType, color } = route.params;
-
+  // ===== ALL HOOKS AT THE TOP - MUST BE FIRST =====
   const [selectedDate, setSelectedDate] = useState(0);
-  const [selectedTimeOption, setSelectedTimeOption] = useState('Set Time'); // 'Set Time', 'Timer', 'Select Frame'
+  const [selectedTimeOption, setSelectedTimeOption] = useState('Set Time');
   const [selectedFood, setSelectedFood] = useState([]);
+  const [showInstructionModal, setShowInstructionModal] = useState(false);
+  const [foodInstructions, setFoodInstructions] = useState('');
 
+  // ===== DATA AND CONSTANTS AFTER HOOKS =====
+  const { table, gameType, color } = route.params;
   const dates = getNextDates();
 
   const foodOptions = [
@@ -50,6 +48,7 @@ export default function TableBookingScreen({ route, navigation }) {
     { id: 3, name: 'Beverages', icon: '🥤' },
   ];
 
+  // ===== HANDLERS =====
   const toggleFoodSelection = id => {
     if (selectedFood.includes(id)) {
       setSelectedFood(selectedFood.filter(item => item !== id));
@@ -58,20 +57,32 @@ export default function TableBookingScreen({ route, navigation }) {
     }
   };
 
+  const handleAddInstructions = () => {
+    if (selectedFood.length === 0) {
+      alert('Please select at least one food item first');
+      return;
+    }
+    setShowInstructionModal(true);
+  };
+
+  const handleSaveInstructions = () => {
+    setShowInstructionModal(false);
+  };
+
   const handleBook = () => {
-    // Navigate to payment or confirmation
-    navigation.navigate('PaymentGateway', {
+    navigation.navigate('Scanner', {
       table,
       gameType,
       date: dates[selectedDate].label,
       timeOption: selectedTimeOption,
       food: selectedFood,
+      instructions: foodInstructions,
     });
   };
 
+  // ===== RENDER =====
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="chevron-back" size={24} color="#333" />
@@ -81,12 +92,10 @@ export default function TableBookingScreen({ route, navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Table Name Badge */}
         <View style={styles.tableBadge}>
           <Text style={styles.tableName}>{table.name} S0176</Text>
         </View>
 
-        {/* Select Date */}
         <Text style={styles.sectionTitle}>Select date</Text>
         <FlatList
           data={dates}
@@ -114,7 +123,6 @@ export default function TableBookingScreen({ route, navigation }) {
           )}
         />
 
-        {/* Select Time */}
         <Text style={styles.sectionTitle}>Select Time</Text>
         <View style={styles.timeOptions}>
           <TouchableOpacity
@@ -167,8 +175,15 @@ export default function TableBookingScreen({ route, navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Add Food */}
-        <Text style={styles.sectionTitle}>Add Food</Text>
+        <View style={styles.foodHeader}>
+          <Text style={styles.sectionTitle}>Add Food</Text>
+          {selectedFood.length > 0 && (
+            <TouchableOpacity onPress={handleAddInstructions}>
+              <Text style={styles.addInstructionLink}>+ Add Instructions</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
         <View style={styles.foodOptions}>
           {foodOptions.map(food => (
             <TouchableOpacity
@@ -185,25 +200,76 @@ export default function TableBookingScreen({ route, navigation }) {
           ))}
         </View>
 
-        {/* Book Button */}
+        {foodInstructions !== '' && (
+          <View style={styles.instructionsPreview}>
+            <Text style={styles.instructionsLabel}>Special Instructions:</Text>
+            <Text style={styles.instructionsText}>{foodInstructions}</Text>
+            <TouchableOpacity
+              onPress={handleAddInstructions}
+              style={styles.editInstructionBtn}
+            >
+              <Icon name="pencil" size={16} color="#FF9500" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         <TouchableOpacity style={styles.bookButton} onPress={handleBook}>
           <Text style={styles.bookButtonText}>Book</Text>
         </TouchableOpacity>
 
-        {/* New User Link */}
         <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
           <Text style={styles.newUserText}>New User</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal
+        visible={showInstructionModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowInstructionModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Food Instructions</Text>
+              <TouchableOpacity onPress={() => setShowInstructionModal(false)}>
+                <Icon name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSubtitle}>
+              Add any special instructions for your food order
+            </Text>
+
+            <TextInput
+              style={styles.textInput}
+              placeholder="E.g., Extra spicy, No onions, etc."
+              placeholderTextColor="#999"
+              multiline
+              numberOfLines={4}
+              value={foodInstructions}
+              onChangeText={setFoodInstructions}
+              autoFocus
+            />
+
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={handleSaveInstructions}
+            >
+              <Text style={styles.saveButtonText}>Save Instructions</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
+  container: { flex: 1, backgroundColor: '#F5F5F5' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -212,14 +278,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: '#fff',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  content: {
-    padding: 20,
-  },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#333' },
+  content: { padding: 20 },
   tableBadge: {
     alignSelf: 'center',
     backgroundColor: '#FF9500',
@@ -228,21 +288,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginBottom: 24,
   },
-  tableName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  sectionTitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 12,
-    marginTop: 8,
-  },
-  dateList: {
-    marginBottom: 20,
-    gap: 8,
-  },
+  tableName: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
+  sectionTitle: { fontSize: 14, color: '#666', marginBottom: 12, marginTop: 8 },
+  dateList: { marginBottom: 20, gap: 8 },
   dateButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
@@ -252,29 +300,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     marginRight: 8,
   },
-  dateButtonActive: {
-    backgroundColor: '#FF9500',
-    borderColor: '#FF9500',
-  },
-  dateText: {
-    fontSize: 13,
-    color: '#666',
-    fontWeight: '500',
-  },
-  dateTextActive: {
-    color: '#FFF',
-    fontWeight: '600',
-  },
+  dateButtonActive: { backgroundColor: '#FF9500', borderColor: '#FF9500' },
+  dateText: { fontSize: 13, color: '#666', fontWeight: '500' },
+  dateTextActive: { color: '#FFF', fontWeight: '600' },
   timeOptions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 20,
   },
-  timeOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
+  timeOption: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   radioCircle: {
     width: 20,
     height: 20,
@@ -283,18 +317,19 @@ const styles = StyleSheet.create({
     borderColor: '#CCC',
     backgroundColor: '#FFF',
   },
-  radioCircleActive: {
-    borderColor: '#FF9500',
-    backgroundColor: '#FF9500',
+  radioCircleActive: { borderColor: '#FF9500', backgroundColor: '#FF9500' },
+  timeOptionText: { fontSize: 14, color: '#333' },
+  foodHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  timeOptionText: {
-    fontSize: 14,
-    color: '#333',
-  },
+  addInstructionLink: { color: '#FF9500', fontSize: 13, fontWeight: '600' },
   foodOptions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 40,
+    marginBottom: 20,
   },
   foodButton: {
     flex: 1,
@@ -306,34 +341,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 4,
   },
-  foodButtonActive: {
-    borderColor: '#FF9500',
-    borderWidth: 2,
+  foodButtonActive: { borderColor: '#FF9500', borderWidth: 2 },
+  foodIcon: { fontSize: 32, marginBottom: 8 },
+  foodName: { fontSize: 12, color: '#333', fontWeight: '500' },
+  instructionsPreview: {
+    backgroundColor: '#FFF',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF9500',
   },
-  foodIcon: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  foodName: {
-    fontSize: 12,
-    color: '#333',
-    fontWeight: '500',
-  },
+  instructionsLabel: { fontSize: 12, color: '#666', marginBottom: 4 },
+  instructionsText: { fontSize: 14, color: '#333', paddingRight: 30 },
+  editInstructionBtn: { position: 'absolute', top: 12, right: 12 },
   bookButton: {
     backgroundColor: '#FF9500',
     paddingVertical: 16,
     borderRadius: 25,
     alignItems: 'center',
     marginBottom: 12,
+    marginTop: 20,
   },
-  bookButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
+  bookButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  newUserText: { color: '#CCC', fontSize: 14, textAlign: 'center' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
   },
-  newUserText: {
-    color: '#CCC',
-    fontSize: 14,
-    textAlign: 'center',
+  modalContent: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '70%',
   },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
+  modalSubtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
+  textInput: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 15,
+    color: '#333',
+    height: 120,
+    textAlignVertical: 'top',
+    marginBottom: 20,
+  },
+  saveButton: {
+    backgroundColor: '#FF9500',
+    paddingVertical: 16,
+    borderRadius: 25,
+    alignItems: 'center',
+  },
+  saveButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
 });
