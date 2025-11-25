@@ -1,17 +1,9 @@
-<<<<<<< HEAD
-// routes/orders.js
-=======
->>>>>>> backend2
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const { Order, OrderItem, FoodItem } = require('../models');
-const { auth, authorize } = require('../middleware/auth');
+const { Order, OrderItem, FoodItem } = require("../models");
+const { auth, authorize } = require("../middleware/auth");
 
-<<<<<<< HEAD
-// existing route (you already have)
-=======
->>>>>>> backend2
-router.post('/', auth, async (req, res) => {
+router.post("/", auth, async (req, res) => {
   try {
     const { userId, items } = req.body;
     let total = 0;
@@ -20,7 +12,12 @@ router.post('/', auth, async (req, res) => {
       const food = await FoodItem.findByPk(it.foodId);
       const price = food ? parseFloat(food.price) : 0;
       total += price * (it.qty || 1);
-      await OrderItem.create({ orderId: order.id, menuItemId: it.foodId, qty: it.qty || 1, priceEach: price });
+      await OrderItem.create({
+        orderId: order.id,
+        menuItemId: it.foodId,
+        qty: it.qty || 1,
+        priceEach: price,
+      });
     }
     order.total = total.toFixed(2);
     await order.save();
@@ -30,13 +27,12 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-<<<<<<< HEAD
 // NEW: add one or more items to an existing order (for active session)
-router.post('/:orderId/items', auth, async (req, res) => {
+router.post("/:orderId/items", auth, async (req, res) => {
   try {
     const { items } = req.body; // [{ foodId, qty }]
     const order = await Order.findByPk(req.params.orderId);
-    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!order) return res.status(404).json({ error: "Order not found" });
 
     let addedTotal = 0;
 
@@ -51,7 +47,7 @@ router.post('/:orderId/items', auth, async (req, res) => {
         orderId: order.id,
         menuItemId: it.foodId,
         qty,
-        priceEach: price
+        priceEach: price,
       });
     }
 
@@ -65,9 +61,7 @@ router.post('/:orderId/items', auth, async (req, res) => {
 });
 
 // list orders
-=======
->>>>>>> backend2
-router.get('/', auth, authorize('staff','admin'), async (req, res) => {
+router.get("/", auth, authorize("staff", "admin"), async (req, res) => {
   const list = await Order.findAll();
   res.json(list);
 });
