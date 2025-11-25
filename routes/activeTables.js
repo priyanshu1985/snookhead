@@ -9,16 +9,11 @@ router.post('/start', auth, authorize('staff','owner','admin'), async (req, res)
   try {
     const { table_id, game_id, user_id } = req.body;
 
-    // verify table exists for given game
-    const table = await TableAsset.findOne({
-      where: {
-        id: table_id,
-        game_id
-      }
-    });
+    // verify table exists
+    const table = await TableAsset.findByPk(table_id);
 
     if (!table) {
-      return res.status(404).json({ error: 'Table for this game not found' });
+      return res.status(404).json({ error: 'Table not found' });
     }
 
     if (table.status !== 'available') {
@@ -37,8 +32,7 @@ router.post('/start', auth, authorize('staff','owner','admin'), async (req, res)
     const order = await Order.create({
       userId: user_id ?? req.user.id ?? null,
       total: 0,
-      status: 'pending',
-      active_id: session.active_id
+      status: 'pending'
     });
 
     await table.update({ status: 'reserved' });
@@ -79,12 +73,7 @@ router.post('/stop', auth, authorize('staff','owner','admin'), async (req, res) 
     await session.save();
 
     // get table info (pricePerMin + frameCharge)
-    const table = await TableAsset.findOne({
-      where: {
-        id: session.table_id,
-        game_id: session.game_id
-      }
-    });
+    const table = await TableAsset.findByPk(session.table_id);
 
     if (!table) {
       return res.status(500).json({ error: 'Linked table not found for billing' });
@@ -98,23 +87,11 @@ router.post('/stop', auth, authorize('staff','owner','admin'), async (req, res) 
     const frameCharge = Number(table.frameCharge || 0);
     const tableAmount = minutes * pricePerMin + frameCharge;
 
-    // get food total from order
-    const order = await Order.findOne({
-      where: { active_id: session.active_id }
-    });
-
-    const foodTotal = order ? Number(order.total || 0) : 0;
-    const grandTotal = tableAmount + foodTotal;
-
-    if (order) {
-      order.total = grandTotal;
-      order.status = 'paid';
-      await order.save();
-    }
+    const grandTotal = tableAmount;
 
     // create bill record
     const bill = await Bill.create({
-      orderId: order ? order.id : null,
+      orderId: null,
       total: grandTotal,
       status: 'pending',
       details: JSON.stringify({
@@ -123,15 +100,12 @@ router.post('/stop', auth, authorize('staff','owner','admin'), async (req, res) 
         minutes,
         pricePerMin,
         frameCharge,
-        tableAmount,
-        foodTotal
+        tableAmount
       })
     });
 
     // free the table
-    if (table) {
-      await table.update({ status: 'available' });
-    }
+    await table.update({ status: 'available' });
 
     res.json({
       message: 'Bill generated',
@@ -140,7 +114,6 @@ router.post('/stop', auth, authorize('staff','owner','admin'), async (req, res) 
       breakdown: {
         minutes,
         tableAmount,
-        foodTotal,
         total: grandTotal
       }
     });

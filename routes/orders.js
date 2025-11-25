@@ -1,10 +1,16 @@
+<<<<<<< HEAD
 // routes/orders.js
+=======
+>>>>>>> backend2
 const express = require('express');
 const router = express.Router();
 const { Order, OrderItem, FoodItem } = require('../models');
 const { auth, authorize } = require('../middleware/auth');
 
+<<<<<<< HEAD
 // existing route (you already have)
+=======
+>>>>>>> backend2
 router.post('/', auth, async (req, res) => {
   try {
     const { userId, items } = req.body;
@@ -24,6 +30,7 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
+<<<<<<< HEAD
 // NEW: add one or more items to an existing order (for active session)
 router.post('/:orderId/items', auth, async (req, res) => {
   try {
@@ -58,6 +65,8 @@ router.post('/:orderId/items', auth, async (req, res) => {
 });
 
 // list orders
+=======
+>>>>>>> backend2
 router.get('/', auth, authorize('staff','admin'), async (req, res) => {
   const list = await Order.findAll();
   res.json(list);

@@ -11,13 +11,13 @@
 - Improved README and example env
 
 ## Setup
-1. Import `/mnt/data/snookhead_db.sql` into MySQL Workbench (creates `snookhead` DB).
+1. Import `/mnt/data/snookhead_db.sql` into MySQL Workbench (creates `snookhead_db` DB).
 2. Copy `.env.example` to `.env` and fill:
 ```
 DB_HOST=localhost
 DB_USER=root
 DB_PASS=cdac
-DB_NAME=snookhead
+DB_NAME=snookhead_db
 DB_PORT=3306
 JWT_SECRET=your_jwt_secret
 JWT_EXP=15m

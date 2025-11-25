@@ -64,9 +64,6 @@ OrderItem.belongsTo(Order, { foreignKey: 'orderId' });
 FoodItem.hasMany(OrderItem, { foreignKey: 'menuItemId' });
 OrderItem.belongsTo(FoodItem, { foreignKey: 'menuItemId' });
 
-// Order → Bill
-Order.hasOne(Bill, { foreignKey: 'orderId' });
-Bill.belongsTo(Order, { foreignKey: 'orderId' });
 
 //after chnages
 // Game ↔ Tables

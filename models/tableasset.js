@@ -1,7 +1,6 @@
 module.exports = (sequelize, DataTypes) => {
   return sequelize.define('TableAsset', {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-    game_id: { type: DataTypes.INTEGER,primaryKey: true, references: { model: 'games', key: 'game_id' }   },
     name: { type: DataTypes.STRING(50), allowNull: false },
     dimension: { type: DataTypes.STRING(32) },
     onboardDate: { type: DataTypes.DATEONLY },

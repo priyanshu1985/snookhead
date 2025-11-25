@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+<<<<<<< HEAD
 const { TableAsset, Game } = require('../models');
 const { auth, authorize } = require('../middleware/auth');
 
@@ -41,6 +42,20 @@ router.post('/', auth, authorize('staff','admin'), async (req, res) => {
     });
 
     res.status(201).json(table);
+=======
+const { TableAsset } = require('../models');
+const { auth, authorize } = require('../middleware/auth');
+
+router.get('/', auth, async (req, res) => {
+  const tables = await TableAsset.findAll();
+  res.json(tables);
+});
+
+router.post('/', auth, authorize('staff','admin'), async (req, res) => {
+  try {
+    const t = await TableAsset.create(req.body);
+    res.status(201).json(t);
+>>>>>>> backend2
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
