@@ -6,702 +6,671 @@ import {
   StyleSheet,
   FlatList,
   Dimensions,
-  TextInput,
-  Modal,
-  Alert,
   ScrollView,
+  Modal,
+  TextInput,
+  Image,
   ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../config'; // or your config location
 
 const { width } = Dimensions.get('window');
 
-// ===== API BASE URL - CHANGE THIS TO YOUR BACKEND URL =====
-const API_BASE_URL = 'http://10.0.2.2:4000/api'; // e.g., http://192.168.1.100:3000/api
+async function getAuthToken() {
+  try {
+    const token = await AsyncStorage.getItem('authToken');
+    return token;
+  } catch {
+    return null;
+  }
+}
 
 export default function SetupMenu({ navigation }) {
-  // ===== DECLARE ALL HOOKS AT THE VERY TOP - IN EXACT ORDER =====
-  // 1. Tab selection
-  const [activeTab, setActiveTab] = useState('MANAGE TABLE GAMES');
-
-  // 2. Loading state
-  const [loading, setLoading] = useState(false);
-
-  // 3-8. Table states
-  const [tables, setTables] = useState([]);
-  const [showTableForm, setShowTableForm] = useState(false);
-  const [showTablePopup, setShowTablePopup] = useState(false);
-  const [tableData, setTableData] = useState({
-    uploadedImage: false,
-    game_name: '',
-    dimensions: '',
-    assetDate: '',
-    pricePerMin: '',
-  });
-
-  // 9-14. Digital games states
-  const [digitalGames, setDigitalGames] = useState([]);
-  const [showDigitalForm, setShowDigitalForm] = useState(false);
-  const [showDigitalPopup, setShowDigitalPopup] = useState(false);
-  const [digitalData, setDigitalData] = useState({
-    uploadedImage: false,
-    gameName: '',
-    gameAssetDate: '',
-    gamePricePerMin: '',
-  });
-
-  // 15-20. Menu states
-  const [menuItems, setMenuItems] = useState([]);
-  const [showMenuForm, setShowMenuForm] = useState(false);
-  const [showMenuPopup, setShowMenuPopup] = useState(false);
+  const [activeTab, setActiveTab] = useState('SET DASHBOARD');
   const [selectedMenuCategory, setSelectedMenuCategory] =
     useState('Prepared food');
-  const [menuData, setMenuData] = useState({
-    uploadedImage: false,
+
+  const [games, setGames] = useState([]);
+  const [tables, setTables] = useState([]);
+  const [menus, setMenus] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // Add modals and forms
+  const [addGameModal, setAddGameModal] = useState(false);
+  const [addGameConfirm, setAddGameConfirm] = useState(false);
+  const [gameSuccess, setGameSuccess] = useState(false);
+  const [gameForm, setGameForm] = useState({
+    name: '',
+    dimension: '',
+    date: '',
+    framePrice: '',
+    hourPrice: '',
+  });
+
+  const [addTableModal, setAddTableModal] = useState(false);
+  const [addTableConfirm, setAddTableConfirm] = useState(false);
+  const [tableSuccess, setTableSuccess] = useState(false);
+  const [tableForm, setTableForm] = useState({
+    name: '',
+    dimension: '',
+    onboardDate: '',
+    type: '',
+    pricePerMin: '',
+    frameCharge: '',
+    game_id: '',
+    status: 'available',
+  });
+
+  const [addMenuModal, setAddMenuModal] = useState(false);
+  const [addMenuConfirm, setAddMenuConfirm] = useState(false);
+  const [menuSuccess, setMenuSuccess] = useState(false);
+  const [menuForm, setMenuForm] = useState({
     category: '',
-    itemName: '',
+    name: '',
     description: '',
     price: '',
     supplier: '',
   });
 
-  // ===== FETCH TOKEN FROM STORAGE =====
-  const getAuthToken = async () => {
-    try {
-      const token = await AsyncStorage.getItem('authToken');
-      return token;
-    } catch (error) {
-      console.error('Error getting token:', error);
-      return null;
-    }
-  };
+  const [selectedGameId, setSelectedGameId] = useState(null); // NEW
 
-  // ===== API CALLS =====
-
-  // Fetch all games (tables)
-  const fetchGames = async () => {
-    setLoading(true);
-    try {
+  // --- Fetch from backend, always array, with auth token ---
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
       const token = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/games`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch games');
+      try {
+        if (activeTab === 'SET DASHBOARD') {
+          const res = await fetch(`${API_URL}/api/games`, {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          const result = await res.json();
+          console.log('Returned games:', result);
+          setGames(
+            Array.isArray(result) ? result : result.games || result.data || [],
+          );
+        }
+        if (activeTab === 'MANAGE TABLE GAMES') {
+          const res = await fetch(`${API_URL}/api/tables`, {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          const result = await res.json();
+          setTables(
+            Array.isArray(result) ? result : result.tables || result.data || [],
+          );
+        }
+        if (activeTab === 'MANAGE MENU') {
+          const res = await fetch(`${API_URL}/api/menu`, {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          const result = await res.json();
+          setMenus(
+            Array.isArray(result)
+              ? result
+              : result.menus || result.items || result.data || [],
+          );
+        }
+      } catch {
+        setGames([]);
+        setTables([]);
+        setMenus([]);
+      } finally {
+        setLoading(false);
       }
+    };
+    fetchData();
+  }, [activeTab, gameSuccess, tableSuccess, menuSuccess]);
 
-      const data = await response.json();
-      const transformedData = data.map(item => ({
-        id: item.game_id,
-        name: item.game_name,
-        ...item,
-      }));
-      setTables(transformedData);
-    } catch (error) {
-      console.error('Error fetching games:', error);
-      Alert.alert('Error', 'Failed to load games');
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (games.length > 0 && !selectedGameId) {
+      setSelectedGameId(games[0].id);
     }
-  };
-
-  // Create new game
-  const createGame = async gameData => {
+  }, [games]);
+  // ----- Add APIs -----
+  async function addGameAPI(form) {
+    setLoading(true);
+    const token = await getAuthToken();
     try {
-      const token = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/games`, {
+      await fetch(`${API_URL}/api/games`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          game_name: gameData.game_name,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create game');
-      }
-
-      const newGame = await response.json();
-      return newGame;
-    } catch (error) {
-      console.error('Error creating game:', error);
-      Alert.alert('Error', 'Failed to create game');
-      throw error;
-    }
-  };
-
-  // Update game
-  const updateGame = async (id, gameData) => {
-    try {
-      const token = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/games/${id}`, {
-        method: 'PUT',
-        headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          game_name: gameData.game_name,
-        }),
+        body: JSON.stringify({ game_name: form.name }),
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to update game');
-      }
-
-      const updatedGame = await response.json();
-      return updatedGame;
-    } catch (error) {
-      console.error('Error updating game:', error);
-      Alert.alert('Error', 'Failed to update game');
-      throw error;
-    }
-  };
-
-  // Delete game
-  const deleteGame = async id => {
-    try {
-      const token = await getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/games/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete game');
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error deleting game:', error);
-      Alert.alert('Error', 'Failed to delete game');
-      throw error;
-    }
-  };
-
-  // ===== LOAD DATA ON MOUNT =====
-  useEffect(() => {
-    fetchGames();
-  }, []);
-
-  // ===== HANDLER FUNCTIONS =====
-
-  // Table Handlers
-  const handleAddTable = () => setShowTableForm(true);
-
-  const handleTableImageUpload = () => {
-    setTableData({ ...tableData, uploadedImage: true });
-    Alert.alert('Success', 'Table image uploaded!');
-  };
-
-  const handleTableContinue = () => {
-    if (
-      !tableData.game_name ||
-      !tableData.dimensions ||
-      !tableData.assetDate ||
-      !tableData.pricePerMin
-    ) {
-      Alert.alert('Error', 'Please fill all fields');
-      return;
-    }
-    setShowTableForm(false);
-    setShowTablePopup(true);
-  };
-
-  const handleTableConfirm = async () => {
-    try {
-      setLoading(true);
-      const newGame = await createGame({
-        game_name: tableData.game_name,
-      });
-
-      // Refresh the list
-      await fetchGames();
-
-      setShowTablePopup(false);
-      setTableData({
-        uploadedImage: false,
-        game_name: '',
-        dimensions: '',
-        assetDate: '',
-        pricePerMin: '',
-      });
-      Alert.alert('Success', 'Table added successfully!');
-    } catch (error) {
-      console.error('Error adding table:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const handleDeleteTable = async id => {
-    Alert.alert('Delete Table', 'Are you sure you want to delete this table?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            setLoading(true);
-            await deleteGame(id);
-            await fetchGames();
-            Alert.alert('Success', 'Table deleted successfully!');
-          } catch (error) {
-            console.error('Error deleting table:', error);
-          } finally {
-            setLoading(false);
-          }
+  async function addTableAPI(tableForm) {
+    setLoading(true);
+    const token = await getAuthToken();
+    try {
+      const response = await fetch(`${API_URL}/api/tables`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
-      },
-    ]);
-  };
-
-  // Digital Game Handlers
-  const handleAddDigitalGame = () => setShowDigitalForm(true);
-
-  const handleDigitalImageUpload = () => {
-    setDigitalData({ ...digitalData, uploadedImage: true });
-    Alert.alert('Success', 'Game image uploaded!');
-  };
-
-  const handleDigitalContinue = () => {
-    if (
-      !digitalData.gameName ||
-      !digitalData.gameAssetDate ||
-      !digitalData.gamePricePerMin
-    ) {
-      Alert.alert('Error', 'Please fill all fields');
-      return;
+        body: JSON.stringify(tableForm),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.error || 'Failed to add table');
+      }
+    } catch (err) {
+      alert(err.message || 'Network/error');
+    } finally {
+      setLoading(false);
     }
-    setShowDigitalForm(false);
-    setShowDigitalPopup(true);
-  };
-
-  const handleDigitalConfirm = () => {
-    setDigitalGames([
-      ...digitalGames,
-      {
-        id: digitalGames.length + 1,
-        name: digitalData.gameName,
-        assetDate: digitalData.gameAssetDate,
-        pricePerMin: digitalData.gamePricePerMin,
-      },
-    ]);
-    setShowDigitalPopup(false);
-    setDigitalData({
-      uploadedImage: false,
-      gameName: '',
-      gameAssetDate: '',
-      gamePricePerMin: '',
-    });
-    Alert.alert('Success', 'Game added!');
-  };
-
-  // Menu Handlers
-  const handleAddMenu = () => setShowMenuForm(true);
-
-  const handleMenuImageUpload = () => {
-    setMenuData({ ...menuData, uploadedImage: true });
-    Alert.alert('Success', 'Menu image uploaded!');
-  };
-
-  const handleMenuContinue = () => {
-    if (
-      !menuData.category ||
-      !menuData.itemName ||
-      !menuData.description ||
-      !menuData.price
-    ) {
-      Alert.alert('Error', 'Please fill all fields');
-      return;
+  }
+  async function addMenuAPI(form) {
+    // form should be your menuForm state: { category, name, description, price, supplier }
+    const token = await getAuthToken();
+    try {
+      const response = await fetch(`${API_URL}/api/menu`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(form),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to add menu');
+      }
+      return data;
+    } catch (err) {
+      throw err;
     }
-    setShowMenuForm(false);
-    setShowMenuPopup(true);
-  };
+  }
 
-  const handleMenuConfirm = () => {
-    setMenuItems([
-      ...menuItems,
-      {
-        id: menuItems.length + 1,
-        name: menuData.itemName,
-        category: menuData.category,
-        description: menuData.description,
-        price: menuData.price,
-        supplier: menuData.supplier,
-      },
-    ]);
-    setShowMenuPopup(false);
-    setMenuData({
-      uploadedImage: false,
-      category: '',
-      itemName: '',
-      description: '',
-      price: '',
-      supplier: '',
-    });
-    Alert.alert('Success', 'Menu successfully added!');
-  };
-
-  // ===== RENDER FUNCTIONS (NO HOOKS) =====
-  const TableGrid = () => (
-    <ScrollView style={styles.gridContainer}>
-      {loading ? (
-        <ActivityIndicator
-          size="large"
-          color="#FF8C42"
-          style={{ marginTop: 50 }}
-        />
-      ) : (
-        <>
-          <FlatList
-            data={tables}
-            numColumns={2}
-            renderItem={({ item }) => (
+  // --- Add Game Modal flow ---
+  const AddGameFlow = (
+    <>
+      <Modal visible={addGameModal} transparent animationType="slide">
+        <View style={styles.modalBg}>
+          <View style={styles.formCard}>
+            <TouchableOpacity style={styles.uploadImageBox}>
+              <Text style={styles.uploadImageText}>Upload table image</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={styles.input}
+              placeholder="Game name"
+              value={gameForm.name}
+              onChangeText={v => setGameForm(f => ({ ...f, name: v }))}
+            />
+            <View style={styles.formBtnRow}>
               <TouchableOpacity
-                style={styles.card}
-                onLongPress={() => handleDeleteTable(item.id)}
+                style={styles.backBtn}
+                onPress={() => setAddGameModal(false)}
               >
-                <View style={styles.cardContent}>
-                  <View style={styles.xLine} />
-                  <View
-                    style={[styles.xLine, { transform: [{ rotate: '90deg' }] }]}
-                  />
-                  <Text
-                    style={{
-                      color: '#FF8C42',
-                      fontWeight: 'bold',
-                      marginTop: 10,
-                    }}
-                  >
-                    {item.game_name}
-                  </Text>
-                </View>
+                <Text style={styles.backBtnText}>Back</Text>
               </TouchableOpacity>
-            )}
-            keyExtractor={item => item.id.toString()}
-            scrollEnabled={false}
-            columnWrapperStyle={styles.gridRow}
-          />
-          <TouchableOpacity style={styles.addBtn} onPress={handleAddTable}>
-            <Text style={styles.addBtnText}>Add New Table</Text>
-          </TouchableOpacity>
-        </>
-      )}
-    </ScrollView>
-  );
-
-  const DigitalGamesGrid = () => (
-    <ScrollView style={styles.gridContainer}>
-      <FlatList
-        data={digitalGames}
-        numColumns={2}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.cardContent}>
-              <Icon name="game-controller" size={40} color="#FF8C42" />
+              <TouchableOpacity
+                style={styles.continueBtn}
+                onPress={async () => {
+                  await addGameAPI(gameForm);
+                  setAddGameModal(false);
+                  setAddGameConfirm(true);
+                }}
+              >
+                <Text style={styles.continueBtnText}>Continue</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        )}
-        keyExtractor={item => item.id.toString()}
-        scrollEnabled={false}
-        columnWrapperStyle={styles.gridRow}
-      />
-      <TouchableOpacity style={styles.addBtn} onPress={handleAddDigitalGame}>
-        <Text style={styles.addBtnText}>Add New Digital Game</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        </View>
+      </Modal>
+      <Modal visible={addGameConfirm} transparent animationType="fade">
+        <View style={styles.modalBg}>
+          <View style={styles.popupCard}>
+            <Text style={styles.popupTitle}>Table details</Text>
+            <Image
+              style={{
+                width: 80,
+                height: 40,
+                borderRadius: 10,
+                alignSelf: 'center',
+              }}
+              source={{
+                uri: 'https://img.icons8.com/fluency/96/pool-table.png',
+              }}
+            />
+            <Text style={styles.detailRow}>Type of table: {gameForm.name}</Text>
+            <TouchableOpacity
+              style={styles.confirmBtn}
+              onPress={() => {
+                setAddGameConfirm(false);
+                setGameSuccess(true);
+              }}
+            >
+              <Text style={styles.confirmBtnText}>Confirm details</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={gameSuccess} transparent animationType="fade">
+        <View style={styles.modalBg}>
+          <View style={styles.popupCard}>
+            <Text style={styles.successText}>Table successfully added!</Text>
+            <TouchableOpacity onPress={() => setGameSuccess(false)}>
+              <Text
+                style={{ marginTop: 18, color: '#FF8C42', fontWeight: 'bold' }}
+              >
+                Close
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 
-  const MenuItemsView = () => (
-    <View style={{ flex: 1 }}>
-      <View style={styles.categoryTabs}>
-        {['Prepared food', 'Packed food', 'Cigarette'].map(cat => (
-          <TouchableOpacity
-            key={cat}
-            style={[
-              styles.catTab,
-              selectedMenuCategory === cat && styles.catTabActive,
-            ]}
-            onPress={() => setSelectedMenuCategory(cat)}
-          >
-            <Text
-              style={[
-                styles.catTabText,
-                selectedMenuCategory === cat && styles.catTabTextActive,
-              ]}
+  // --- Add Table Modal flow ---
+  const AddTableFlow = (
+    <>
+      <Modal visible={addTableModal} transparent animationType="slide">
+        <View style={styles.modalBg}>
+          <View style={styles.formCard}>
+            <TextInput
+              style={styles.input}
+              placeholder="Table name"
+              value={tableForm.name}
+              onChangeText={v => setTableForm(f => ({ ...f, name: v }))}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Dimension"
+              value={tableForm.dimension}
+              onChangeText={v => setTableForm(f => ({ ...f, dimension: v }))}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Asset onboarding date"
+              value={tableForm.onboardDate}
+              onChangeText={v => setTableForm(f => ({ ...f, onboardDate: v }))}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Type"
+              value={tableForm.type}
+              onChangeText={v => setTableForm(f => ({ ...f, type: v }))}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Price per min"
+              value={tableForm.pricePerMin}
+              onChangeText={v => setTableForm(f => ({ ...f, pricePerMin: v }))}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Frame charge"
+              value={tableForm.frameCharge}
+              onChangeText={v => setTableForm(f => ({ ...f, frameCharge: v }))}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Game ID"
+              value={selectedGameId ? String(selectedGameId) : ''}
+              editable={false}
+            />
+            <View style={styles.formBtnRow}>
+              <TouchableOpacity
+                style={styles.backBtn}
+                onPress={() => setAddTableModal(false)}
+              >
+                <Text style={styles.backBtnText}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.continueBtn}
+                onPress={async () => {
+                  await addTableAPI({ ...tableForm, game_id: selectedGameId });
+                  setAddTableModal(false);
+                  setAddTableConfirm(true);
+                }}
+              >
+                <Text style={styles.continueBtnText}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={addTableConfirm} transparent animationType="fade">
+        <View style={styles.modalBg}>
+          <View style={styles.popupCard}>
+            <Text style={styles.popupTitle}>Table details</Text>
+            <Text style={styles.detailRow}>Type of game: {tableForm.type}</Text>
+            <TouchableOpacity
+              style={styles.confirmBtn}
+              onPress={() => {
+                setAddTableConfirm(false);
+                setTableSuccess(true);
+              }}
             >
-              {cat}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <ScrollView style={styles.menuList}>
-        {menuItems
-          .filter(item => item.category === selectedMenuCategory)
-          .map(item => (
+              <Text style={styles.confirmBtnText}>Confirm details</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={tableSuccess} transparent animationType="fade">
+        <View style={styles.modalBg}>
+          <View style={styles.popupCard}>
+            <Text style={styles.successText}>Game successfully added!</Text>
+            <TouchableOpacity onPress={() => setTableSuccess(false)}>
+              <Text
+                style={{ marginTop: 18, color: '#FF8C42', fontWeight: 'bold' }}
+              >
+                Close
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+
+  // --- Add Menu Modal flow ---
+  const AddMenuFlow = (
+    <>
+      <Modal visible={addMenuModal} transparent animationType="slide">
+        <View style={styles.modalBg}>
+          <View style={styles.formCard}>
+            <TextInput
+              style={styles.input}
+              placeholder="Category"
+              value={menuForm.category}
+              onChangeText={v => setMenuForm(f => ({ ...f, category: v }))}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Item name"
+              value={menuForm.name}
+              onChangeText={v => setMenuForm(f => ({ ...f, name: v }))}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Description"
+              value={menuForm.description}
+              onChangeText={v => setMenuForm(f => ({ ...f, description: v }))}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Price"
+              value={menuForm.price}
+              onChangeText={v => setMenuForm(f => ({ ...f, price: v }))}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Supplier mobile"
+              value={menuForm.supplier}
+              onChangeText={v => setMenuForm(f => ({ ...f, supplier: v }))}
+            />
+            <View style={styles.formBtnRow}>
+              <TouchableOpacity
+                style={styles.backBtn}
+                onPress={() => setAddMenuModal(false)}
+              >
+                <Text style={styles.backBtnText}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.continueBtn}
+                onPress={async () => {
+                  await addMenuAPI(menuForm);
+                  setAddMenuModal(false);
+                  setAddMenuConfirm(true);
+                }}
+              >
+                <Text style={styles.continueBtnText}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={addMenuConfirm} transparent animationType="fade">
+        <View style={styles.modalBg}>
+          <View style={styles.popupCard}>
+            <Text style={styles.popupTitle}>Menu details</Text>
+            <Text style={styles.detailRow}>Type: {menuForm.category}</Text>
+            <TouchableOpacity
+              style={styles.confirmBtn}
+              onPress={() => {
+                setAddMenuConfirm(false);
+                setMenuSuccess(true);
+              }}
+            >
+              <Text style={styles.confirmBtnText}>Confirm details</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={menuSuccess} transparent animationType="fade">
+        <View style={styles.modalBg}>
+          <View style={styles.popupCard}>
+            <Text style={styles.successText}>Menu successfully added!</Text>
+            <TouchableOpacity onPress={() => setMenuSuccess(false)}>
+              <Text
+                style={{ marginTop: 18, color: '#FF8C42', fontWeight: 'bold' }}
+              >
+                Close
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+
+  // --- Main content per tab ---
+  let Content;
+  if (loading) {
+    Content = (
+      <ActivityIndicator
+        size="large"
+        color="#FF8C42"
+        style={{ marginTop: 50 }}
+      />
+    );
+  } else if (activeTab === 'SET DASHBOARD') {
+    Content = (
+      <>
+        <View style={styles.dashboardSection}>
+          {Array.isArray(games) &&
+            games.map((g, i) => (
+              <View style={styles.dashboardRow} key={g.id || i}>
+                <Text style={styles.dashboardIndex}>{i + 1}.</Text>
+                <Text style={styles.dashboardName}>
+                  {g.gamename || g.game_name || 'Unknown'}
+                </Text>
+              </View>
+            ))}
+        </View>
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={() => setAddGameModal(true)}
+        >
+          <Text style={styles.addBtnText}>Add New game</Text>
+        </TouchableOpacity>
+      </>
+    );
+  } else if (activeTab === 'MANAGE TABLE GAMES') {
+    Content = (
+      <>
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'center',
+            marginVertical: 10,
+          }}
+        >
+          {games.map(g => (
+            <TouchableOpacity
+              key={g.id}
+              style={{
+                marginHorizontal: 12,
+                borderBottomWidth: selectedGameId === g.id ? 2 : 0,
+                borderColor: '#FF8C42',
+              }}
+              onPress={() => setSelectedGameId(g.id)}
+            >
+              <Text
+                style={{
+                  color: selectedGameId === g.id ? '#FF8C42' : '#333',
+                  fontWeight: 'bold',
+                  fontSize: 15,
+                }}
+              >
+                {g.gamename || g.game_name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.gridSection}>
+          <FlatList
+            data={
+              Array.isArray(tables)
+                ? tables.filter(
+                    t =>
+                      String(t.gameid || t.game_id) === String(selectedGameId),
+                  )
+                : []
+            }
+            numColumns={3}
+            keyExtractor={item =>
+              item.id ? String(item.id) : Math.random().toString()
+            }
+            style={{ marginTop: 24 }}
+            renderItem={({ item }) => (
+              <View style={styles.tableCard}>
+                <Text style={styles.tableCardText}>
+                  {item.name || item.game_name || item.id}
+                </Text>
+              </View>
+            )}
+            columnWrapperStyle={styles.gridRow}
+            scrollEnabled={false}
+          />
+        </View>
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={() => setAddTableModal(true)}
+        >
+          <Text style={styles.addBtnText}>Add New table</Text>
+        </TouchableOpacity>
+      </>
+    );
+  } else {
+    Content = (
+      <>
+        <View style={styles.categoryTabs}>
+          {['prepared', 'packed', 'cigarette'].map(cat => (
+            <TouchableOpacity
+              key={cat}
+              style={[
+                styles.catTab,
+                selectedMenuCategory === cat && styles.catTabActive,
+              ]}
+              onPress={() => setSelectedMenuCategory(cat)}
+            >
+              <Text
+                style={[
+                  styles.catTabText,
+                  selectedMenuCategory === cat && styles.catTabTextActive,
+                ]}
+              >
+                {cat}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <ScrollView style={styles.menuList}>
+          {(Array.isArray(menus)
+            ? menus.filter(item => item.category === selectedMenuCategory)
+            : []
+          ).map(item => (
             <View key={item.id} style={styles.menuCard}>
               <View style={styles.menuIcon}>
-                <Icon name="fast-food" size={24} color="#FF8C42" />
+                <Icon name="fast-food" size={26} color="#FF8C42" />
               </View>
               <View style={styles.menuInfo}>
                 <Text style={styles.menuName}>{item.name}</Text>
-                <Text style={styles.menuCategory}>{item.category}</Text>
+                <Text style={styles.menuDesc}>{item.description}</Text>
                 <Text style={styles.menuPrice}>{item.price}</Text>
               </View>
             </View>
           ))}
-      </ScrollView>
-      <View style={styles.addMenuBtnContainer}>
-        <TouchableOpacity style={styles.addBtn} onPress={handleAddMenu}>
+        </ScrollView>
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={() => setAddMenuModal(true)}
+        >
           <Text style={styles.addBtnText}>Add New menu</Text>
         </TouchableOpacity>
-      </View>
-    </View>
-  );
+      </>
+    );
+  }
 
-  const getContent = () => {
-    if (activeTab === 'MANAGE TABLE GAMES') return <TableGrid />;
-    if (activeTab === 'MANAGE DIGITAL GAME') return <DigitalGamesGrid />;
-    return <MenuItemsView />;
-  };
-
-  // ===== MAIN RENDER =====
+  // --- Main render ---
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="chevron-back" size={24} color="#333" />
+        <TouchableOpacity
+          onPress={() => navigation.goBack && navigation.goBack()}
+        >
+          <Icon name="chevron-back" size={26} color="#333" />
         </TouchableOpacity>
         <Text style={styles.title}>Set up menu</Text>
-        <View style={{ width: 24 }} />
+        <View style={{ width: 26 }} />
       </View>
-
-      {/* Tabs */}
       <View style={styles.tabs}>
-        {['MANAGE TABLE GAMES', 'MANAGE DIGITAL GAME', 'MANAGE MENU'].map(
-          tab => (
-            <TouchableOpacity
-              key={tab}
-              style={styles.tab}
-              onPress={() => setActiveTab(tab)}
+        {['SET DASHBOARD', 'MANAGE TABLE GAMES', 'MANAGE MENU'].map(tab => (
+          <TouchableOpacity
+            key={tab}
+            style={styles.tabBtn}
+            onPress={() => setActiveTab(tab)}
+          >
+            <Text
+              style={activeTab === tab ? styles.activeTabText : styles.tabText}
             >
-              <Text
-                style={
-                  activeTab === tab ? styles.activeTabText : styles.tabText
-                }
-              >
-                {tab}
-              </Text>
-              {activeTab === tab && <View style={styles.tabLine} />}
-            </TouchableOpacity>
-          ),
-        )}
+              {tab.replace('MANAGE ', '')}
+            </Text>
+            {activeTab === tab && <View style={styles.tabLine} />}
+          </TouchableOpacity>
+        ))}
       </View>
-
-      {/* Content */}
-      {getContent()}
-
-      {/* TABLE FORM MODAL */}
-      <Modal visible={showTableForm} animationType="slide">
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => setShowTableForm(false)}>
-              <Icon name="chevron-back" size={24} color="#333" />
-            </TouchableOpacity>
-            <Text style={styles.title}>Set up menu</Text>
-            <View style={{ width: 24 }} />
-          </View>
-
-          <View style={styles.tabs}>
-            <View style={styles.tab}>
-              <Text style={styles.activeTabText}>MANAGE TABLE GAMES</Text>
-              <View style={styles.tabLine} />
-            </View>
-            <View style={styles.tab}>
-              <Text style={styles.tabText}>MANAGE DIGITAL GAME</Text>
-            </View>
-            <View style={styles.tab}>
-              <Text style={styles.tabText}>MANAGE MENU</Text>
-            </View>
-          </View>
-
-          <ScrollView style={styles.form}>
-            <TouchableOpacity
-              style={styles.upload}
-              onPress={handleTableImageUpload}
-            >
-              <View style={styles.uploadContent}>
-                <Icon
-                  name={
-                    tableData.uploadedImage
-                      ? 'checkmark-circle'
-                      : 'cloud-upload'
-                  }
-                  size={32}
-                  color={tableData.uploadedImage ? '#4CAF50' : '#FF8C42'}
-                />
-                <Text
-                  style={
-                    tableData.uploadedImage
-                      ? styles.uploadSuccess
-                      : styles.uploadText
-                  }
-                >
-                  {tableData.uploadedImage
-                    ? 'Image Uploaded'
-                    : 'Upload table image'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            <Text style={styles.label}>Game name</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter game name (e.g., Snooker Table 1)"
-              value={tableData.game_name}
-              onChangeText={text =>
-                setTableData({ ...tableData, game_name: text })
-              }
-              placeholderTextColor="#CCC"
-            />
-
-            <Text style={styles.label}>Dimension of table</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter dimensions"
-              value={tableData.dimensions}
-              onChangeText={text =>
-                setTableData({ ...tableData, dimensions: text })
-              }
-              placeholderTextColor="#CCC"
-            />
-
-            <Text style={styles.label}>Asset onboarding date</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="DD/MM/YYYY"
-              value={tableData.assetDate}
-              onChangeText={text =>
-                setTableData({ ...tableData, assetDate: text })
-              }
-              placeholderTextColor="#CCC"
-            />
-
-            <Text style={styles.label}>Set price of table per min</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter price"
-              value={tableData.pricePerMin}
-              onChangeText={text =>
-                setTableData({ ...tableData, pricePerMin: text })
-              }
-              placeholderTextColor="#CCC"
-              keyboardType="numeric"
-            />
-          </ScrollView>
-
-          <View style={styles.buttons}>
-            <TouchableOpacity
-              style={styles.backBtn}
-              onPress={() => setShowTableForm(false)}
-            >
-              <Text style={styles.backBtnText}>Back</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.continueBtn}
-              onPress={handleTableContinue}
-            >
-              <Text style={styles.continueBtnText}>Continue</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* TABLE CONFIRMATION POPUP */}
-      <Modal
-        visible={showTablePopup}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowTablePopup(false)}
-      >
-        <View style={styles.popup}>
-          <View style={styles.popupCard}>
-            <View style={styles.popupHeader}>
-              <Text style={styles.popupTitle}>Table details</Text>
-              <TouchableOpacity onPress={() => setShowTablePopup(false)}>
-                <Icon name="close" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.preview}>
-              <View style={styles.snookerTable}>
-                <View style={styles.snookerBorder} />
-              </View>
-            </View>
-
-            <View style={styles.details}>
-              <DetailRow label="Game Name" value={tableData.game_name} />
-              <DetailRow label="Dimensions" value={tableData.dimensions} />
-              <DetailRow label="Asset Date" value={tableData.assetDate} />
-              <DetailRow
-                label="Price/min"
-                value={`₹${tableData.pricePerMin}`}
-              />
-            </View>
-
-            <TouchableOpacity
-              style={styles.confirmBtn}
-              onPress={handleTableConfirm}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <Text style={styles.confirmBtnText}>Confirm details</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ... Rest of your modals (Digital Game Form, Menu Form, etc.) ... */}
+      {Content}
+      {AddGameFlow}
+      {AddTableFlow}
+      {AddMenuFlow}
     </View>
   );
 }
 
-// Detail row component
-const DetailRow = ({ label, value }) => (
-  <View style={styles.detail}>
-    <Text style={styles.detailLabel}>{label}</Text>
-    <Text style={styles.detailValue}>{value}</Text>
-  </View>
-);
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  container: { flex: 1, backgroundColor: '#FAFAFA' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#fff',
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    backgroundColor: '#FFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#EEE',
   },
   title: { fontSize: 18, fontWeight: 'bold', color: '#333' },
   tabs: {
@@ -710,211 +679,202 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
   },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 14,
-    position: 'relative',
-  },
-  tabText: { fontSize: 11, color: '#999', fontWeight: '600' },
-  activeTabText: { fontSize: 11, color: '#FF8C42', fontWeight: '600' },
+  tabBtn: { flex: 1, alignItems: 'center', paddingVertical: 15 },
+  tabText: { fontSize: 12, color: '#AAA', fontWeight: '700' },
+  activeTabText: { fontSize: 12, color: '#FF8C42', fontWeight: '700' },
   tabLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 3,
+    marginTop: 6,
+    height: 3.5,
+    borderRadius: 2,
     backgroundColor: '#FF8C42',
+    width: '60%',
+    alignSelf: 'center',
   },
-  gridContainer: { flex: 1, padding: 28 },
-  gridRow: { justifyContent: 'space-between', marginBottom: 24 },
-  card: {
-    width: (width - 96) / 2,
+  gridSection: { flex: 1, backgroundColor: '#FAFAFA' },
+  tableCard: {
+    width: width / 3.5,
     aspectRatio: 1,
-    borderWidth: 2,
-    borderColor: '#FF8C42',
-    borderRadius: 8,
+    margin: 10,
+    borderRadius: 18,
+    backgroundColor: '#FFE5C4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 1,
+  },
+  tableCardText: { fontSize: 21, fontWeight: 'bold', color: '#FF8C42' },
+  gridRow: { justifyContent: 'center' },
+  dashboardSection: {
+    flex: 1,
+    marginTop: 18,
     backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 6,
+    borderRadius: 10,
+    marginHorizontal: 10,
   },
-  cardContent: {
-    width: '90%',
-    height: '80%',
+  dashboardRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    padding: 14,
+    borderBottomWidth: 1,
+    borderColor: '#EEE',
   },
-  xLine: {
-    position: 'absolute',
-    width: 2,
-    height: '141%',
+  dashboardIndex: {
+    fontWeight: 'bold',
+    color: '#333',
+    marginRight: 18,
+    fontSize: 16,
+  },
+  dashboardName: { fontWeight: 'bold', color: '#09790F', fontSize: 16 },
+  addBtn: {
+    marginTop: 18,
     backgroundColor: '#FF8C42',
+    borderRadius: 25,
+    paddingVertical: 15,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'stretch',
+    marginHorizontal: 18,
+    elevation: 2,
   },
+  addBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   categoryTabs: {
     flexDirection: 'row',
+    paddingVertical: 8,
     backgroundColor: '#fff',
-    padding: 8,
-    gap: 8,
+    justifyContent: 'space-evenly',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    elevation: 1,
+    marginBottom: 7,
   },
   catTab: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#F0F0F0',
+    paddingVertical: 9,
+    borderRadius: 22,
+    marginHorizontal: 8,
     alignItems: 'center',
+    backgroundColor: '#F3F2F0',
   },
   catTabActive: { backgroundColor: '#FF8C42' },
-  catTabText: { fontSize: 12, color: '#666', fontWeight: '600' },
+  catTabText: { color: '#888', fontWeight: '700', fontSize: 12.8 },
   catTabTextActive: { color: '#fff' },
-  menuList: { flex: 1, padding: 16 },
+  menuList: { padding: 7 },
   menuCard: {
     flexDirection: 'row',
     backgroundColor: '#fff',
     borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF8C42',
+    marginBottom: 11,
+    alignItems: 'center',
+    elevation: 1,
+    padding: 7,
   },
   menuIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
+    width: 55,
+    height: 55,
+    borderRadius: 10,
     backgroundColor: '#FFF3E0',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 8,
   },
   menuInfo: { flex: 1 },
-  menuName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
-  },
-  menuCategory: { fontSize: 12, color: '#888', marginBottom: 4 },
-  menuPrice: { fontSize: 13, fontWeight: 'bold', color: '#FF8C42' },
-  addMenuBtnContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-  },
-  addBtn: {
-    marginTop: 32,
-    borderRadius: 25,
-    backgroundColor: '#FF8C42',
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  addBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
-  form: { flex: 1, padding: 16 },
-  upload: {
-    height: 100,
-    borderRadius: 12,
-    backgroundColor: '#FFF3E0',
-    borderWidth: 2,
-    borderColor: '#FFE0B2',
+  menuName: { fontWeight: 'bold', fontSize: 15, color: '#333' },
+  menuDesc: { fontSize: 12, color: '#666', marginVertical: 2 },
+  menuPrice: { fontWeight: 'bold', color: '#FF8C42', fontSize: 15 },
+  modalBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
   },
-  uploadActive: { backgroundColor: '#E8F5E9', borderColor: '#C8E6C9' },
-  uploadContent: { alignItems: 'center' },
-  uploadText: { fontSize: 13, color: '#FF8C42', fontWeight: '600' },
-  uploadSuccess: {
-    fontSize: 13,
-    color: '#4CAF50',
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  label: { fontSize: 14, color: '#FF8C42', fontWeight: '600', marginBottom: 8 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 16,
-    fontSize: 14,
+  formCard: {
+    width: '85%',
     backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 18,
+  },
+  popupCard: {
+    width: '80%',
+    alignSelf: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 22,
+    alignItems: 'center',
+  },
+  popupTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
     color: '#333',
   },
-  buttons: {
+  detailRow: { fontSize: 14, color: '#666', marginBottom: 2 },
+  confirmBtn: {
+    marginTop: 18,
+    backgroundColor: '#FF8C42',
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    alignItems: 'center',
+  },
+  confirmBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  formBtnRow: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-    gap: 12,
+    justifyContent: 'space-between',
+    marginTop: 18,
+  },
+  continueBtn: {
+    flex: 1,
+    backgroundColor: '#FF8C42',
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 4,
+  },
+  continueBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 15,
+    paddingVertical: 10,
   },
   backBtn: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 25,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#F0F0F0',
+    borderRadius: 18,
     alignItems: 'center',
-  },
-  backBtnText: { color: '#333', fontSize: 14, fontWeight: 'bold' },
-  continueBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 25,
-    backgroundColor: '#FF8C42',
-    alignItems: 'center',
-  },
-  continueBtnText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
-  popup: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
+    marginRight: 4,
   },
-  popupCard: {
-    width: '90%',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    maxHeight: '80%',
+  backBtnText: {
+    color: '#333',
+    fontWeight: 'bold',
+    fontSize: 15,
+    paddingVertical: 10,
   },
-  popupHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  popupTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-  preview: { alignItems: 'center', marginBottom: 24 },
-  snookerTable: {
-    width: 180,
-    height: 100,
-    backgroundColor: '#4CAF50',
-    borderRadius: 8,
-    borderWidth: 8,
-    borderColor: '#8B4513',
-  },
-  snookerBorder: {
-    position: 'absolute',
-    top: 4,
-    left: 4,
-    right: 4,
-    bottom: 4,
+  input: {
+    marginVertical: 7,
+    borderColor: '#EEE',
     borderWidth: 1,
-    borderColor: '#2E7D32',
-    borderRadius: 2,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+    fontSize: 14,
+    color: '#333',
   },
-  details: { marginBottom: 24 },
-  detail: { marginBottom: 12 },
-  detailLabel: { fontSize: 13, color: '#666', marginBottom: 4 },
-  detailValue: { fontSize: 14, color: '#333', fontWeight: '600' },
-  confirmBtn: {
-    backgroundColor: '#FF8C42',
-    paddingVertical: 14,
-    borderRadius: 25,
+  uploadImageBox: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#bbb',
+    padding: 18,
     alignItems: 'center',
+    borderRadius: 8,
+    marginBottom: 10,
   },
-  confirmBtnText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+  uploadImageText: { color: '#222', fontWeight: 'bold', fontSize: 13 },
+  successText: {
+    color: '#FF8C42',
+    fontWeight: 'bold',
+    fontSize: 17,
+    textAlign: 'center',
+  },
 });
