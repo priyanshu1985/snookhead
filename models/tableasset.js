@@ -15,10 +15,10 @@ module.exports = (sequelize, DataTypes) => {
       frameCharge: { type: DataTypes.DECIMAL(10, 2) },
       game_id: {
         type: DataTypes.INTEGER,
-        allowNull: false, // or true, if allowed to be empty
+        allowNull: false, // Make required to prevent assignment to wrong games
         references: {
-          model: "games", // Name of the referenced table
-          key: "id", // Name of the column (must exist in 'games')
+          model: "games", // Correct table name (should be 'games')
+          key: "game_id", // Name of the column (must exist in 'games')
         },
       },
     },
