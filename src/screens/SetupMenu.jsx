@@ -15,7 +15,6 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config'; // or your config location
-
 const { width } = Dimensions.get('window');
 
 async function getAuthToken() {
@@ -134,9 +133,11 @@ export default function SetupMenu({ navigation }) {
 
   useEffect(() => {
     if (games.length > 0 && !selectedGameId) {
-      setSelectedGameId(games[0].id);
+      const gameId = games[0].game_id || games[0].id;
+      console.log('Auto-selecting first game with ID:', gameId);
+      setSelectedGameId(gameId);
     }
-  }, [games]);
+  }, [games, selectedGameId]);
   // ----- Add APIs -----
   async function addGameAPI(form) {
     setLoading(true);
@@ -158,6 +159,20 @@ export default function SetupMenu({ navigation }) {
   async function addTableAPI(tableForm) {
     setLoading(true);
     const token = await getAuthToken();
+
+    // Validate game_id before sending
+    if (!tableForm.game_id) {
+      alert('Error: No game selected. Please select a game first.');
+      setLoading(false);
+      return;
+    }
+
+    console.log('Adding table with data:', {
+      ...tableForm,
+      selectedGameId_debug: selectedGameId,
+      game_id_being_sent: tableForm.game_id,
+    });
+
     try {
       const response = await fetch(`${API_URL}/api/tables`, {
         method: 'POST',
@@ -168,10 +183,14 @@ export default function SetupMenu({ navigation }) {
         body: JSON.stringify(tableForm),
       });
       const data = await response.json();
+      console.log('Backend response:', data);
+
       if (!response.ok) {
+        console.error('Backend error:', data);
         alert(data.error || 'Failed to add table');
       }
     } catch (err) {
+      console.error('Network error:', err);
       alert(err.message || 'Network/error');
     } finally {
       setLoading(false);
@@ -338,7 +357,17 @@ export default function SetupMenu({ navigation }) {
               <TouchableOpacity
                 style={styles.continueBtn}
                 onPress={async () => {
-                  await addTableAPI({ ...tableForm, game_id: selectedGameId });
+                  if (!selectedGameId) {
+                    alert(
+                      'Error: No game selected. Please go back and select a game.',
+                    );
+                    return;
+                  }
+
+                  const tableData = { ...tableForm, game_id: selectedGameId };
+                  console.log('Submitting table with final data:', tableData);
+
+                  await addTableAPI(tableData);
                   setAddTableModal(false);
                   setAddTableConfirm(true);
                 }}
@@ -490,7 +519,7 @@ export default function SetupMenu({ navigation }) {
         <View style={styles.dashboardSection}>
           {Array.isArray(games) &&
             games.map((g, i) => (
-              <View style={styles.dashboardRow} key={g.id || i}>
+              <View style={styles.dashboardRow} key={g.game_id || g.id || i}>
                 <Text style={styles.dashboardIndex}>{i + 1}.</Text>
                 <Text style={styles.dashboardName}>
                   {g.gamename || g.game_name || 'Unknown'}
@@ -509,43 +538,54 @@ export default function SetupMenu({ navigation }) {
   } else if (activeTab === 'MANAGE TABLE GAMES') {
     Content = (
       <>
-        <View
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'center',
-            marginVertical: 10,
-          }}
-        >
-          {games.map(g => (
-            <TouchableOpacity
-              key={g.id}
-              style={{
-                marginHorizontal: 12,
-                borderBottomWidth: selectedGameId === g.id ? 2 : 0,
-                borderColor: '#FF8C42',
-              }}
-              onPress={() => setSelectedGameId(g.id)}
-            >
-              <Text
-                style={{
-                  color: selectedGameId === g.id ? '#FF8C42' : '#333',
-                  fontWeight: 'bold',
-                  fontSize: 15,
+        {/* Clean Horizontal Game Header */}
+        <View style={styles.gameHeaderContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.gameHeaderScroll}
+          >
+            {games.map(g => (
+              <TouchableOpacity
+                key={g.game_id || g.id}
+                style={[
+                  styles.gameHeaderTab,
+                  selectedGameId === (g.game_id || g.id) &&
+                    styles.gameHeaderTabActive,
+                ]}
+                onPress={() => {
+                  const gameId = g.game_id || g.id;
+                  console.log(
+                    'User selected game:',
+                    g.gamename || g.game_name,
+                    'with ID:',
+                    gameId,
+                  );
+                  setSelectedGameId(gameId);
                 }}
               >
-                {g.gamename || g.game_name}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text
+                  style={[
+                    styles.gameHeaderText,
+                    selectedGameId === (g.game_id || g.id) &&
+                      styles.gameHeaderTextActive,
+                  ]}
+                >
+                  {g.gamename || g.game_name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
-        <View style={styles.gridSection}>
+        {/* Tables Grid - Right Under Header */}
+        <View style={styles.tablesContainer}>
           <FlatList
             data={
               Array.isArray(tables)
                 ? tables.filter(
                     t =>
-                      String(t.gameid || t.game_id) === String(selectedGameId),
+                      String(t.game_id || t.gameid) === String(selectedGameId),
                   )
                 : []
             }
@@ -553,7 +593,7 @@ export default function SetupMenu({ navigation }) {
             keyExtractor={item =>
               item.id ? String(item.id) : Math.random().toString()
             }
-            style={{ marginTop: 24 }}
+            style={styles.tablesList}
             renderItem={({ item }) => (
               <View style={styles.tableCard}>
                 <Text style={styles.tableCardText}>
@@ -563,11 +603,19 @@ export default function SetupMenu({ navigation }) {
             )}
             columnWrapperStyle={styles.gridRow}
             scrollEnabled={false}
+            contentContainerStyle={styles.tablesGrid}
           />
         </View>
         <TouchableOpacity
           style={styles.addBtn}
-          onPress={() => setAddTableModal(true)}
+          onPress={() => {
+            if (!selectedGameId) {
+              alert('Please select a game first before adding a table.');
+              return;
+            }
+            console.log('Opening table modal for game ID:', selectedGameId);
+            setAddTableModal(true);
+          }}
         >
           <Text style={styles.addBtnText}>Add New table</Text>
         </TouchableOpacity>
@@ -601,8 +649,8 @@ export default function SetupMenu({ navigation }) {
           {(Array.isArray(menus)
             ? menus.filter(item => item.category === selectedMenuCategory)
             : []
-          ).map(item => (
-            <View key={item.id} style={styles.menuCard}>
+          ).map((item, idx) => (
+            <View key={item.id || idx} style={styles.menuCard}>
               <View style={styles.menuIcon}>
                 <Icon name="fast-food" size={26} color="#FF8C42" />
               </View>
@@ -690,7 +738,7 @@ const styles = StyleSheet.create({
     width: '60%',
     alignSelf: 'center',
   },
-  gridSection: { flex: 1, backgroundColor: '#FAFAFA' },
+  gridSection: { flex: 1, backgroundColor: '#FAFAFA', marginTop: 0 },
   tableCard: {
     width: width / 3.5,
     aspectRatio: 1,
