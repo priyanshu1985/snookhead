@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,17 +6,20 @@ import {
   TouchableOpacity,
   FlatList,
   SafeAreaView,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import PaymentModal from '../components/PaymentModal';
 
 export default function PaymentGateway({ route, navigation }) {
   const { cart = [], personName = '' } = route.params || {};
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const orderTotal = cart.reduce(
     (sum, ci) => sum + (Number(ci.item.price) || 0) * ci.qty,
     0,
   );
-  const orderSaving = 0; // plug in any discount logic later
+  const orderSaving = 0;
   const grandTotal = orderTotal - orderSaving;
 
   const today = new Date();
@@ -24,13 +27,61 @@ export default function PaymentGateway({ route, navigation }) {
     today.getMonth() + 1,
   ).padStart(2, '0')}/${today.getFullYear()}`;
 
-  const tableLabel = 'T2 S0176'; // you can pass table from OrdersScreen via params if needed
+  const tableLabel = 'T2 S0176';
   const billNo = 'Bill 1';
 
   const handleProceedToPay = () => {
-    // TODO: integrate real payment or mark as paid in backend
-    // For now just go back
-    navigation.goBack();
+    console.log('Proceed to Pay clicked!');
+    console.log('Current showPaymentModal state:', showPaymentModal);
+    setShowPaymentModal(true);
+    console.log('Set showPaymentModal to true');
+  };
+
+  const handlePaymentComplete = async paymentData => {
+    // TODO: Send payment data to backend
+    console.log('Payment Complete:', paymentData);
+
+    if (paymentData.method === 'online') {
+      Alert.alert(
+        'Success',
+        `Online payment of ₹${paymentData.amount} processed!`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Navigate back or to orders
+              navigation.navigate('Orders');
+            },
+          },
+        ],
+      );
+    } else if (paymentData.method === 'offline') {
+      Alert.alert(
+        'Success',
+        `Offline payment of ₹${paymentData.amount} recorded!`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              navigation.navigate('OrdersScreen');
+            },
+          },
+        ],
+      );
+    } else if (paymentData.method === 'hybrid') {
+      Alert.alert(
+        'Success',
+        `Hybrid payment: Cash ₹${paymentData.cashAmount} + Online ₹${paymentData.onlineAmount} processed!`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              navigation.navigate('OrdersScreen');
+            },
+          },
+        ],
+      );
+    }
   };
 
   const renderItem = ({ item }) => {
@@ -68,78 +119,96 @@ export default function PaymentGateway({ route, navigation }) {
         <Text style={styles.billNo}>{billNo}</Text>
       </View>
 
-      {/* Card with name, date, items */}
-      <View style={styles.card}>
+      {/* Main Bill Card */}
+      <View style={styles.billCard}>
+        {/* Name and Date Header */}
         <View style={styles.cardHeader}>
           <Text style={styles.cardName}>{personName || 'Guest'}</Text>
           <Text style={styles.cardDate}>{dateStr}</Text>
         </View>
 
+        {/* Items List */}
         <FlatList
           data={cart}
           keyExtractor={ci => String(ci.item.id || ci.item.name)}
           renderItem={renderItem}
           ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+          scrollEnabled={false}
+          style={styles.itemsList}
         />
+
+        {/* Divider Line */}
+        <View style={styles.billDivider} />
+
+        {/* Bill Details */}
+        <View style={styles.billDetails}>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Mobile No. :</Text>
+            <Text style={styles.detailValue}>+91 9999999999</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Wallet Amount :</Text>
+            <Text style={styles.detailValue}>₹ 0.00</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Total Amount :</Text>
+            <Text style={[styles.detailValue, styles.totalAmount]}>
+              ₹ {grandTotal} /-
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Status :</Text>
+            <Text style={styles.unpaidStatus}>Unpaid</Text>
+          </View>
+        </View>
+
+        {/* Order Payment Details Section */}
+        <View style={styles.paymentDetailsInCard}>
+          <Text style={styles.paymentDetailsTitle}>ORDER PAYMENT DETAILS</Text>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Order Amount</Text>
+            <Text style={styles.detailValue}>+{orderTotal}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Order Saving</Text>
+            <Text style={styles.detailValue}>-{orderSaving}</Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Total :</Text>
+            <Text style={styles.totalValue}>₹ {grandTotal}</Text>
+          </View>
+        </View>
       </View>
 
-      {/* Details section */}
-      <View style={styles.detailsSection}>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Mobile No. :</Text>
-          <Text style={styles.detailValue}>+91 9999999999</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Wallet Amount :</Text>
-          <Text style={styles.detailValue}>₹ 0.00</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Total Amount :</Text>
-          <Text style={[styles.detailValue, styles.detailBold]}>
-            ₹ {grandTotal.toLocaleString('en-IN')}
-          </Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Status :</Text>
-          <Text style={[styles.detailValue, { color: '#FF3B30' }]}>Unpaid</Text>
-        </View>
-      </View>
-
-      {/* Order payment details */}
-      <View style={styles.paymentDetailsSection}>
-        <Text style={styles.paymentDetailsTitle}>ORDER PAYMENT DETAILS</Text>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Order Amount</Text>
-          <Text style={styles.detailValue}>+ {orderTotal}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Order Saving</Text>
-          <Text style={styles.detailValue}>- {orderSaving}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Text style={[styles.detailLabel, styles.detailBold]}>Total :</Text>
-          <Text style={[styles.detailValue, styles.detailBold]}>
-            ₹ {grandTotal}
-          </Text>
-        </View>
-      </View>
-
-      {/* Bottom bar */}
-      <View style={styles.bottomBarNote}>
-        <Text style={styles.bottomBarNoteText}>
-          🎉 Cheers! You Saved ₹ {orderSaving}.
+      {/* Bottom Success Message */}
+      <View style={styles.successMessage}>
+        <Text style={styles.successText}>
+          🎉 Cheers! You Saved ₹ {orderSaving}
         </Text>
       </View>
 
-      <View style={styles.bottomBar}>
-        <View>
-          <Text style={styles.bottomAmountLabel}>₹ {grandTotal}</Text>
-          <Text style={styles.bottomAmountSub}>View details</Text>
+      {/* Bottom Payment Bar */}
+      <View style={styles.bottomPaymentBar}>
+        <View style={styles.amountSection}>
+          <Text style={styles.finalAmount}>₹ {grandTotal}.00</Text>
+          <Text style={styles.viewDetails}>View details</Text>
         </View>
-        <TouchableOpacity style={styles.payButton} onPress={handleProceedToPay}>
-          <Text style={styles.payButtonText}>Proceed To Pay</Text>
+        <TouchableOpacity
+          style={styles.proceedButton}
+          onPress={handleProceedToPay}
+        >
+          <Text style={styles.proceedButtonText}>Proceed To Pay</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Payment Modal */}
+      <PaymentModal
+        visible={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        grandTotal={grandTotal}
+        personName={personName}
+        onPaymentComplete={handlePaymentComplete}
+      />
     </SafeAreaView>
   );
 }
@@ -167,94 +236,144 @@ const styles = StyleSheet.create({
   tableCode: { fontSize: 14, fontWeight: '700', color: '#FF8C42' },
   billNo: { fontSize: 13, color: '#777', marginLeft: 4 },
 
-  card: {
-    margin: 16,
+  billCard: {
+    margin: 25,
     backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 12,
-    elevation: 1,
+    borderRadius: 12,
+    padding: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E8F4FD',
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 16,
   },
-  cardName: { fontSize: 14, fontWeight: '600', color: '#333' },
-  cardDate: { fontSize: 13, color: '#777' },
+  cardName: { fontSize: 16, fontWeight: '600', color: '#333' },
+  cardDate: { fontSize: 14, color: '#666' },
 
+  itemsList: {
+    marginBottom: 16,
+  },
   itemRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 8,
   },
   itemLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   itemIcon: {
-    width: 40,
-    height: 30,
-    borderRadius: 6,
+    width: 45,
+    height: 35,
+    borderRadius: 8,
     backgroundColor: '#FFF3E0',
-    marginRight: 10,
+    marginRight: 12,
   },
-  itemName: { fontSize: 14, fontWeight: '600', color: '#333' },
-  itemMeta: { fontSize: 12, color: '#777', marginTop: 2 },
-  itemPrice: { fontSize: 14, fontWeight: '600', color: '#333' },
-  itemSeparator: { height: 1, backgroundColor: '#F0F0F0', marginVertical: 4 },
+  itemName: { fontSize: 15, fontWeight: '600', color: '#333' },
+  itemMeta: { fontSize: 13, color: '#777', marginTop: 2 },
+  itemPrice: { fontSize: 15, fontWeight: '700', color: '#333' },
+  itemSeparator: { height: 1, backgroundColor: '#F0F0F0', marginVertical: 6 },
 
-  detailsSection: {
-    marginHorizontal: 16,
-    marginTop: 4,
-    padding: 12,
-    backgroundColor: '#fff',
-    borderRadius: 10,
+  billDivider: {
+    height: 1,
+    backgroundColor: '#E0E0E0',
+    marginVertical: 16,
   },
+
+  billDetails: {
+    marginBottom: 16,
+  },
+
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  detailLabel: { fontSize: 13, color: '#777' },
-  detailValue: { fontSize: 13, color: '#333' },
-  detailBold: { fontWeight: '700' },
-
-  paymentDetailsSection: {
-    marginHorizontal: 16,
-    marginTop: 10,
-    padding: 12,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-  },
-  paymentDetailsTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#333',
     marginBottom: 8,
   },
+  detailLabel: { fontSize: 14, color: '#666' },
+  detailValue: { fontSize: 14, color: '#333' },
+  totalAmount: { fontSize: 14, fontWeight: '700', color: '#333' },
+  unpaidStatus: { fontSize: 14, color: '#FF6B35', fontWeight: '600' },
 
-  bottomBarNote: {
-    marginHorizontal: 0,
-    marginTop: 12,
-    paddingVertical: 8,
-    backgroundColor: '#FFEFD5',
-    alignItems: 'center',
+  paymentDetailsInCard: {
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
   },
-  bottomBarNoteText: { fontSize: 12, color: '#FF8C42' },
+  paymentDetailsTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  totalLabel: { fontSize: 16, fontWeight: '700', color: '#333' },
+  totalValue: { fontSize: 16, fontWeight: '700', color: '#333' },
 
-  bottomBar: {
+  successMessage: {
+    backgroundColor: '#FFF3E0',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginTop: 165,
+  },
+  successText: {
+    fontSize: 13,
+    color: '#FF8C42',
+    fontWeight: '500',
+  },
+
+  bottomPaymentBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 16,
     backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
   },
-  bottomAmountLabel: { fontSize: 16, fontWeight: '700', color: '#333' },
-  bottomAmountSub: { fontSize: 11, color: '#999' },
-  payButton: {
+  amountSection: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  finalAmount: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 2,
+  },
+  viewDetails: {
+    fontSize: 12,
+    color: '#666',
+    textDecorationLine: 'underline',
+  },
+  proceedButton: {
     backgroundColor: '#FF8C42',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 22,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 25,
+    elevation: 2,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
-  payButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  proceedButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
 });
