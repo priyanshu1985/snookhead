@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 export default function Header({ navigation }) {
@@ -7,10 +7,12 @@ export default function Header({ navigation }) {
     <View style={styles.container}>
       {/* Logo */}
       <View style={styles.logoContainer}>
-        <Icon name="fish" size={24} color="#1E3A5F" />
+        <Image
+          source={require('../Assets/logo.jpg')} // Replace with your image path
+          style={styles.logoImage}
+        />
         <Text style={styles.logoText}>SNOKEHEAD</Text>
       </View>
-
       {/* Right side icons */}
       <View style={styles.rightIcons}>
         {/* Notification Bell */}
@@ -44,6 +46,11 @@ const styles = StyleSheet.create({
   logoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  logoImage: {
+    width: 28,
+    height: 28,
+    resizeMode: 'contain',
   },
   logoText: {
     fontSize: 18,
