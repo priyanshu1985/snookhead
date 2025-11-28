@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,53 +7,23 @@ import {
   TextInput,
   FlatList,
   Image,
-  SafeAreaView,
   ScrollView,
   Modal,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CommonActions, useNavigation } from '@react-navigation/native';
+import { API_URL } from '../config';
 
-// Sample food data
-const foodCategories = [
-  { key: 'food', label: 'food', icon: '🍜' },
-  { key: 'Pack Food', label: 'Pack Food', icon: '📦' },
-  { key: 'beverages', label: 'beverages', icon: '🥤' },
-];
+const DEFAULT_CATEGORIES = ['prepared', 'packed', 'cigarette'];
 
-const foodItems = [
-  {
-    id: '1',
-    name: 'Noodles',
-    price: 330,
-    image:
-      'https://img.freepik.com/free-photo/delicious-asian-noodles-with-vegetables-table_23-2148670481.jpg',
-    category: 'food',
-  },
-  {
-    id: '2',
-    name: 'Nachos',
-    price: 310,
-    image:
-      'https://img.freepik.com/free-photo/nachos-with-cheese-mexican-food_144627-14608.jpg',
-    category: 'food',
-  },
-  {
-    id: '3',
-    name: 'Pasta',
-    price: 330,
-    image:
-      'https://img.freepik.com/free-photo/penne-pasta-tomato-sauce-with-chicken-tomatoes-wooden-table_2829-19744.jpg',
-    category: 'Pack Food',
-  },
-  {
-    id: '4',
-    name: 'Wrap',
-    price: 330,
-    image:
-      'https://img.freepik.com/free-photo/shawarma-wrap-with-vegetables_140725-6457.jpg',
-    category: 'beverages',
-  },
-];
+async function getAuthToken() {
+  try {
+    return await AsyncStorage.getItem('authToken');
+  } catch {
+    return null;
+  }
+}
 
 const activeOrdersData = [
   { id: '1', name: 'Rohit Sharma', waitTime: '10 min' },
@@ -63,37 +33,119 @@ const activeOrdersData = [
 ];
 
 export default function OrdersScreen({ navigation }) {
-  // ===== ALL HOOKS MUST BE AT THE TOP =====
+  // ===== HOOKS =====
+  const rootNavigation = useNavigation();
   const [activeTab, setActiveTab] = useState('FOOD');
-  const [selectedCategory, setSelectedCategory] = useState('food');
+  const [selectedCategory, setSelectedCategory] = useState('prepared');
   const [searchQuery, setSearchQuery] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [selectedFood, setSelectedFood] = useState(null);
+  const [cartItems, setCartItems] = useState([]); // [{item, qty}]
+  const [personName, setPersonName] = useState(''); // NEW
 
-  // ===== HANDLERS =====
-  const filteredFoodItems = foodItems.filter(
+  const [menuItems, setMenuItems] = useState([]);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+
+  // ===== FETCH MENU FROM BACKEND =====
+  useEffect(() => {
+    const fetchMenu = async () => {
+      const token = await getAuthToken();
+      try {
+        const res = await fetch(`${API_URL}/api/menu`, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const result = await res.json();
+        const items = Array.isArray(result)
+          ? result
+          : result.menus || result.items || result.data || [];
+        setMenuItems(items);
+
+        // derive categories from menu data
+        const uniqueCats = Array.from(
+          new Set(
+            items.map(m => (m.category || '').toLowerCase()).filter(Boolean),
+          ),
+        );
+        if (uniqueCats.length) {
+          setCategories(uniqueCats);
+          setSelectedCategory(uniqueCats[0]);
+        }
+      } catch {
+        setMenuItems([]);
+      }
+    };
+
+    fetchMenu();
+  }, []);
+
+  // ===== FILTERED LIST =====
+  const filteredFoodItems = menuItems.filter(
     item =>
-      item.category === selectedCategory &&
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()),
+      (item.category || '').toLowerCase() === selectedCategory.toLowerCase() &&
+      (item.name || '').toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
+  // ===== HANDLERS =====
   const handleAddFood = food => {
-    setSelectedFood(food);
+    setCartItems(prev => {
+      const arr = Array.isArray(prev) ? prev : [];
+      const idx = arr.findIndex(ci => ci.item.id === food.id);
+      if (idx !== -1) {
+        const clone = [...arr];
+        clone[idx] = { ...clone[idx], qty: clone[idx].qty + 1 };
+        return clone;
+      }
+      return [...arr, { item: food, qty: 1 }];
+    });
     setShowConfirmModal(true);
   };
 
   const handleConfirmFood = () => {
+    console.log('handleConfirmFood called');
+    console.log('Cart items:', cartItems);
+    console.log('Person name:', personName);
+    console.log('Navigation object:', navigation);
+    console.log('Root navigation object:', rootNavigation);
+
     setShowConfirmModal(false);
-    navigation?.navigate('PaymentGateway', { food: selectedFood });
+
+    try {
+      console.log('Attempting to navigate to PaymentGateway...');
+      // Direct navigation - PaymentGateway is now in the same Tab Navigator
+      navigation.navigate('PaymentGateway', {
+        cart: cartItems,
+        personName,
+      });
+      console.log('Navigation called successfully');
+    } catch (error) {
+      console.log('Navigation error:', error);
+      alert('Navigation failed: ' + error.message);
+    }
+    setPersonName('');
   };
 
   const handleAddOtherItem = () => {
+    // keep modal open so user can see current cart, or close if you prefer
     setShowConfirmModal(false);
   };
 
+  const handleRemoveFromCart = id => {
+    setCartItems(prev =>
+      Array.isArray(prev) ? prev.filter(ci => ci.item.id !== id) : [],
+    );
+  };
+
+  const safeCart = Array.isArray(cartItems) ? cartItems : [];
+  const cartTotal = safeCart.reduce(
+    (sum, ci) => sum + (Number(ci.item.price) || 0) * ci.qty,
+    0,
+  );
+
   // ===== RENDER =====
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation?.goBack()}>
@@ -103,22 +155,18 @@ export default function OrdersScreen({ navigation }) {
         <View style={{ width: 24 }} />
       </View>
 
-      {/* Search and Date Row */}
+      {/* Search + Date Row */}
       <View style={styles.searchRow}>
         <View style={styles.searchContainer}>
-          <Icon name="search" size={20} color="#999" />
+          <Icon name="search" size={18} color="#999" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search"
+            placeholder="Search food"
             placeholderTextColor="#999"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
-          <TouchableOpacity>
-            <Icon name="mic" size={20} color="#FF8C42" />
-          </TouchableOpacity>
         </View>
-
         <TouchableOpacity style={styles.dateButton}>
           <Icon name="calendar-outline" size={18} color="#999" />
           <Text style={styles.dateButtonText}>Select Date</Text>
@@ -158,58 +206,68 @@ export default function OrdersScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
+      {/* CONTENT */}
       {activeTab === 'FOOD' ? (
         <>
-          {/* Categories */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoriesContainer}
-          >
-            {foodCategories.map(category => (
-              <TouchableOpacity
-                key={category.key}
-                style={[
-                  styles.categoryPill,
-                  selectedCategory === category.key &&
-                    styles.categoryPillActive,
-                ]}
-                onPress={() => setSelectedCategory(category.key)}
-              >
-                <Text style={styles.categoryIcon}>{category.icon}</Text>
-                <Text
+          {/* Categories from backend menu */}
+          <View style={styles.categoriesSection}>
+            <View style={styles.categoriesGrid}>
+              {categories.map(cat => (
+                <TouchableOpacity
+                  key={cat}
                   style={[
-                    styles.categoryText,
-                    selectedCategory === category.key &&
-                      styles.categoryTextActive,
+                    styles.categoryButton,
+                    selectedCategory === cat && styles.categoryButtonActive,
                   ]}
+                  onPress={() => setSelectedCategory(cat)}
                 >
-                  {category.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+                  <Text
+                    style={[
+                      styles.categoryButtonText,
+                      selectedCategory === cat &&
+                        styles.categoryButtonTextActive,
+                    ]}
+                  >
+                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
 
-          {/* Food Grid */}
+          {/* Food Grid from menuItems */}
           <FlatList
             data={filteredFoodItems}
-            keyExtractor={item => item.id}
+            keyExtractor={item =>
+              item.id ? String(item.id) : String(item.name)
+            }
             numColumns={2}
             columnWrapperStyle={styles.foodRow}
             contentContainerStyle={styles.foodListContent}
             renderItem={({ item }) => (
-              <View style={styles.foodCard}>
-                <Image source={{ uri: item.image }} style={styles.foodImage} />
+              <TouchableOpacity
+                style={styles.foodCard}
+                onPress={() => handleAddFood(item)}
+              >
+                {item.image ? (
+                  <Image
+                    source={{ uri: item.image }}
+                    style={styles.foodImage}
+                  />
+                ) : (
+                  <View
+                    style={[styles.foodImage, { backgroundColor: '#FFF8F0' }]}
+                  />
+                )}
                 <Text style={styles.foodName}>{item.name}</Text>
                 <Text style={styles.foodPrice}>₹ {item.price}</Text>
                 <TouchableOpacity
                   style={styles.addButton}
                   onPress={() => handleAddFood(item)}
                 >
-                  <Icon name="add" size={20} color="#FF8C42" />
+                  <Icon name="add" size={18} color="#FF8C42" />
                 </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             )}
           />
         </>
@@ -227,7 +285,7 @@ export default function OrdersScreen({ navigation }) {
         </View>
       )}
 
-      {/* Modal */}
+      {/* Confirm Modal */}
       <Modal
         visible={showConfirmModal}
         transparent
@@ -236,19 +294,93 @@ export default function OrdersScreen({ navigation }) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Food Added</Text>
-            <Text style={styles.modalSubtitle}>
-              {selectedFood?.name} - ₹{selectedFood?.price}
+            <Text style={styles.modalTitle}>Cart</Text>
+
+            {cartItems.length === 0 ? (
+              <Text style={styles.modalSubtitle}>No items added yet.</Text>
+            ) : (
+              <>
+                {cartItems.map(ci => (
+                  <View
+                    key={ci.item.id}
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 8,
+                      width: '100%',
+                    }}
+                  >
+                    <Text style={{ flex: 1, fontSize: 14, color: '#333' }}>
+                      {ci.item.name} x {ci.qty}
+                    </Text>
+                    <Text
+                      style={{ fontSize: 14, color: '#666', marginRight: 8 }}
+                    >
+                      ₹ {(Number(ci.item.price) || 0) * ci.qty}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => handleRemoveFromCart(ci.item.id)}
+                    >
+                      <Icon name="trash-outline" size={18} color="#FF4D4F" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                <Text
+                  style={{
+                    alignSelf: 'flex-end',
+                    fontSize: 15,
+                    fontWeight: 'bold',
+                    marginTop: 8,
+                    marginBottom: 16,
+                    color: '#333',
+                  }}
+                >
+                  Total: ₹ {cartTotal}
+                </Text>
+              </>
+            )}
+            <Text
+              style={{
+                alignSelf: 'flex-start',
+                marginTop: 8,
+                marginBottom: 4,
+                fontSize: 13,
+                color: '#555',
+              }}
+            >
+              Name for this order
             </Text>
+            <TextInput
+              style={{
+                width: '100%',
+                borderWidth: 1,
+                borderColor: '#E0E0E0',
+                borderRadius: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                marginBottom: 16,
+                fontSize: 14,
+                color: '#333',
+                backgroundColor: '#FAFAFA',
+              }}
+              placeholder="Enter person's name"
+              placeholderTextColor="#999"
+              value={personName}
+              onChangeText={setPersonName}
+            />
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
-                style={styles.modalButtonPrimary}
+                style={[
+                  styles.modalButtonPrimary,
+                  cartItems.length === 0 && { opacity: 0.5 },
+                ]}
+                disabled={cartItems.length === 0}
                 onPress={handleConfirmFood}
               >
                 <Text style={styles.modalButtonPrimaryText}>Confirm Food</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={styles.modalButtonSecondary}
                 onPress={handleAddOtherItem}
@@ -261,12 +393,13 @@ export default function OrdersScreen({ navigation }) {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -276,6 +409,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   headerTitle: { fontSize: 18, fontWeight: '600', color: '#333' },
+
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -305,6 +439,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   dateButtonText: { fontSize: 12, color: '#999' },
+
   tabsContainer: {
     flexDirection: 'row',
     backgroundColor: '#fff',
@@ -321,31 +456,45 @@ const styles = StyleSheet.create({
   activeTabStyle: { borderBottomColor: '#FF8C42' },
   tabText: { fontSize: 14, fontWeight: '600', color: '#999' },
   activeTabText: { color: '#FF8C42' },
-  categoriesContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 4, // ✅ Reduced from 12 to 4
-    gap: 10,
+
+  // NEW CATEGORY STYLES (replace the old ones)
+  categoriesSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
-  categoryPill: {
+  categoriesGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#FF8C42',
-    backgroundColor: '#FFF8F0',
-    gap: 6,
+    gap: 10,
+    justifyContent: 'center',
   },
-  categoryPillActive: { backgroundColor: '#FF8C42' },
-  categoryIcon: { fontSize: 14 },
-  categoryText: { fontSize: 12, fontWeight: '600', color: '#FF8C42' },
-  categoryTextActive: { color: '#fff' },
+  categoryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#FF8C42',
+    backgroundColor: '#FAFAFA',
+    minWidth: 90,
+    alignItems: 'center',
+  },
+  categoryButtonActive: {
+    backgroundColor: '#FF8C42',
+    borderColor: '#FF8C42',
+  },
+  categoryButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FF8C42',
+  },
+  categoryButtonTextActive: {
+    color: '#fff',
+  },
   foodListContent: {
     padding: 16,
-    paddingTop: 8, // ✅ Reduced top padding
+    paddingTop: 8,
   },
   foodRow: { justifyContent: 'space-between', marginBottom: 16 },
   foodCard: {
@@ -361,8 +510,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
-  foodImage: { width: 100, height: 80, borderRadius: 8, marginBottom: 8 },
-  foodName: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 4 },
+  foodImage: {
+    width: 100,
+    height: 80,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  foodName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
   foodPrice: { fontSize: 13, color: '#666', marginBottom: 8 },
   addButton: {
     width: 32,
@@ -374,7 +533,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  activeOrdersContainer: { flex: 1, backgroundColor: '#fff', paddingTop: 8 },
+
+  activeOrdersContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+    paddingTop: 8,
+  },
   orderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -386,6 +550,7 @@ const styles = StyleSheet.create({
   orderIndex: { fontSize: 15, color: '#999', width: 30 },
   orderName: { flex: 1, fontSize: 15, fontWeight: '600', color: '#4CAF50' },
   orderWaitTime: { fontSize: 13, fontWeight: '600', color: '#FF8C42' },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -414,17 +579,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
-  modalButtonPrimaryText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  modalButtonPrimaryText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   modalButtonSecondary: {
     backgroundColor: '#F5F5F5',
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#FF8C42',
   },
   modalButtonSecondaryText: {
-    color: '#FF8C42',
+    color: '#333',
     fontSize: 16,
     fontWeight: '600',
   },

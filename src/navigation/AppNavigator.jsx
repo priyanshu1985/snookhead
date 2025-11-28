@@ -23,8 +23,8 @@ import InventoryTracking from '../screens/InventoryTracking';
 import UpgradeSubscription from '../screens/UpgradeSubscription';
 import ReportBugs from '../screens/ReportBugs';
 import PrivacyPolicy from '../screens/PrivacyPolicy';
-
 import TableBookingScreen from '../screens/TableBookingScreen';
+import PaymentGateway from '../screens/PaymentGateway';
 
 const Tab = createBottomTabNavigator(); // Creates bottom tabs
 const Stack = createNativeStackNavigator(); // Creates stack navigation
@@ -92,6 +92,13 @@ function BottomTabs() {
           tabBarIcon: ({ color, size }) => (
             <Icon name="document-text-outline" size={size} color={color} />
           ),
+        }}
+      />
+      <Tab.Screen
+        name="PaymentGateway"
+        component={PaymentGateway}
+        options={{
+          tabBarButton: () => null, // Hide from tab bar
         }}
       />
     </Tab.Navigator>
