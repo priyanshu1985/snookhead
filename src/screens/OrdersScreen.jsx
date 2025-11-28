@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,11 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CommonActions, useNavigation } from '@react-navigation/native';
+import {
+  CommonActions,
+  useNavigation,
+  useFocusEffect,
+} from '@react-navigation/native';
 import { API_URL } from '../config';
 
 const DEFAULT_CATEGORIES = ['prepared', 'packed', 'cigarette'];
@@ -50,6 +54,7 @@ export default function OrdersScreen({ navigation }) {
     const fetchMenu = async () => {
       const token = await getAuthToken();
       try {
+        console.log('Fetching menu items from:', `${API_URL}/api/menu`);
         const res = await fetch(`${API_URL}/api/menu`, {
           headers: {
             'Content-Type': 'application/json',
@@ -57,9 +62,13 @@ export default function OrdersScreen({ navigation }) {
           },
         });
         const result = await res.json();
+        console.log('Menu API response:', result);
+
         const items = Array.isArray(result)
           ? result
           : result.menus || result.items || result.data || [];
+
+        console.log('Processed menu items:', items);
         setMenuItems(items);
 
         // derive categories from menu data
@@ -72,13 +81,60 @@ export default function OrdersScreen({ navigation }) {
           setCategories(uniqueCats);
           setSelectedCategory(uniqueCats[0]);
         }
-      } catch {
+        console.log('Available categories:', uniqueCats);
+      } catch (error) {
+        console.error('Error fetching menu:', error);
         setMenuItems([]);
       }
     };
 
     fetchMenu();
   }, []);
+
+  // Refetch menu items when screen comes into focus (to get newly added items)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('OrdersScreen focused, refetching menu items...');
+      const fetchMenu = async () => {
+        const token = await getAuthToken();
+        try {
+          console.log('Fetching menu items from:', `${API_URL}/api/menu`);
+          const res = await fetch(`${API_URL}/api/menu`, {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          const result = await res.json();
+          console.log('Menu API response:', result);
+
+          const items = Array.isArray(result)
+            ? result
+            : result.menus || result.items || result.data || [];
+
+          console.log('Processed menu items:', items);
+          setMenuItems(items);
+
+          // derive categories from menu data
+          const uniqueCats = Array.from(
+            new Set(
+              items.map(m => (m.category || '').toLowerCase()).filter(Boolean),
+            ),
+          );
+          if (uniqueCats.length) {
+            setCategories(uniqueCats);
+            setSelectedCategory(uniqueCats[0]);
+          }
+          console.log('Available categories:', uniqueCats);
+        } catch (error) {
+          console.error('Error fetching menu:', error);
+          setMenuItems([]);
+        }
+      };
+
+      fetchMenu();
+    }, []),
+  );
 
   // ===== FILTERED LIST =====
   const filteredFoodItems = menuItems.filter(

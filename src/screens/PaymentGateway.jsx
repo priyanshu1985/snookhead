@@ -10,6 +10,16 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import PaymentModal from '../components/PaymentModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../config';
+
+async function getAuthToken() {
+  try {
+    return await AsyncStorage.getItem('authToken');
+  } catch {
+    return null;
+  }
+}
 
 export default function PaymentGateway({ route, navigation }) {
   const { cart = [], personName = '' } = route.params || {};
@@ -38,49 +48,73 @@ export default function PaymentGateway({ route, navigation }) {
   };
 
   const handlePaymentComplete = async paymentData => {
-    // TODO: Send payment data to backend
-    console.log('Payment Complete:', paymentData);
+    try {
+      const token = await getAuthToken();
 
-    if (paymentData.method === 'online') {
-      Alert.alert(
-        'Success',
-        `Online payment of ₹${paymentData.amount} processed!`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Navigate back or to orders
-              navigation.navigate('Orders');
-            },
-          },
-        ],
-      );
-    } else if (paymentData.method === 'offline') {
-      Alert.alert(
-        'Success',
-        `Offline payment of ₹${paymentData.amount} recorded!`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              navigation.navigate('OrdersScreen');
-            },
-          },
-        ],
-      );
-    } else if (paymentData.method === 'hybrid') {
-      Alert.alert(
-        'Success',
-        `Hybrid payment: Cash ₹${paymentData.cashAmount} + Online ₹${paymentData.onlineAmount} processed!`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              navigation.navigate('OrdersScreen');
-            },
-          },
-        ],
-      );
+      // Build payload for backend
+      const body = {
+        personName: personName || 'Guest',
+        paymentMethod: paymentData.method, // 'online' | 'offline' | 'hybrid'
+        orderTotal: grandTotal,
+        cashAmount:
+          paymentData.method === 'offline' || paymentData.method === 'hybrid'
+            ? Number(paymentData.cashAmount || paymentData.amount || 0)
+            : 0,
+        onlineAmount:
+          paymentData.method === 'online'
+            ? Number(paymentData.amount || grandTotal)
+            : paymentData.method === 'hybrid'
+            ? Number(
+                paymentData.onlineAmount ||
+                  grandTotal - (paymentData.cashAmount || 0),
+              )
+            : 0,
+        cart, // same structure you already have: [{ item, qty }]
+        date: dateStr,
+      };
+
+      const response = await fetch(`${API_URL}/api/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.log('Order error:', result);
+        Alert.alert('Error', result.error || 'Failed to place order');
+        return;
+      }
+
+      // Success UI based on method (same messages you used)
+      if (paymentData.method === 'online') {
+        Alert.alert(
+          'Success',
+          `Online payment of ₹${body.onlineAmount} processed!`,
+          [{ text: 'OK', onPress: () => navigation.navigate('Orders') }],
+        );
+      } else if (paymentData.method === 'offline') {
+        Alert.alert(
+          'Success',
+          `Offline payment of ₹${body.cashAmount} recorded!`,
+          [{ text: 'OK', onPress: () => navigation.navigate('Orders') }],
+        );
+      } else if (paymentData.method === 'hybrid') {
+        Alert.alert(
+          'Success',
+          `Hybrid payment: Cash ₹${body.cashAmount} + Online ₹${body.onlineAmount} processed!`,
+          [{ text: 'OK', onPress: () => navigation.navigate('Orders') }],
+        );
+      }
+
+      setShowPaymentModal(false);
+    } catch (err) {
+      console.log('Payment/order error:', err);
+      Alert.alert('Error', err.message || 'Something went wrong');
     }
   };
 
