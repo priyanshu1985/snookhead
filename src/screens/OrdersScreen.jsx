@@ -18,6 +18,7 @@ import {
   useFocusEffect,
 } from '@react-navigation/native';
 import { API_URL } from '../config';
+import ActiveOrders from '../components/ActiveOrders';
 
 const DEFAULT_CATEGORIES = ['prepared', 'packed', 'cigarette'];
 
@@ -29,13 +30,6 @@ async function getAuthToken() {
   }
 }
 
-const activeOrdersData = [
-  { id: '1', name: 'Rohit Sharma', waitTime: '10 min' },
-  { id: '2', name: 'Virat', waitTime: '5 min' },
-  { id: '3', name: 'Riyaa', waitTime: '13 min' },
-  { id: '4', name: 'Mahi', waitTime: '2 min' },
-];
-
 export default function OrdersScreen({ navigation }) {
   // ===== HOOKS =====
   const rootNavigation = useNavigation();
@@ -45,9 +39,12 @@ export default function OrdersScreen({ navigation }) {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [cartItems, setCartItems] = useState([]); // [{item, qty}]
   const [personName, setPersonName] = useState(''); // NEW
+  const [activeOrders, setActiveOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
 
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+  const [activeOrdersKey, setActiveOrdersKey] = useState(0); // Force refresh of ActiveOrders
 
   // ===== FETCH MENU FROM BACKEND =====
   useEffect(() => {
@@ -158,28 +155,81 @@ export default function OrdersScreen({ navigation }) {
     setShowConfirmModal(true);
   };
 
-  const handleConfirmFood = () => {
+  const handleConfirmFood = async () => {
     console.log('handleConfirmFood called');
     console.log('Cart items:', cartItems);
     console.log('Person name:', personName);
-    console.log('Navigation object:', navigation);
-    console.log('Root navigation object:', rootNavigation);
 
-    setShowConfirmModal(false);
+    if (!personName.trim()) {
+      alert('Please enter a name for this order');
+      return;
+    }
+
+    if (cartItems.length === 0) {
+      alert('Please add items to cart');
+      return;
+    }
 
     try {
-      console.log('Attempting to navigate to PaymentGateway...');
-      // Direct navigation - PaymentGateway is now in the same Tab Navigator
+      // Create order in backend
+      const token = await getAuthToken();
+      if (!token) {
+        alert('Please login first');
+        return;
+      }
+
+      const orderTotal = cartItems.reduce(
+        (sum, ci) => sum + (Number(ci.item.price) || 0) * ci.qty,
+        0,
+      );
+
+      const orderData = {
+        personName: personName.trim(),
+        orderTotal,
+        paymentMethod: 'offline', // Default payment method (will be updated in PaymentGateway)
+        cashAmount: orderTotal, // Set initial amount
+        onlineAmount: 0,
+        cart: cartItems,
+      };
+
+      console.log('Creating order:', orderData);
+
+      const response = await fetch(`${API_URL}/api/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(orderData),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create order');
+      }
+
+      console.log('Order created successfully:', result);
+
+      // Refresh active orders to show the new order
+      setActiveOrdersKey(prev => prev + 1);
+
+      setShowConfirmModal(false);
+
+      // Navigate to PaymentGateway with order ID
       navigation.navigate('PaymentGateway', {
         cart: cartItems,
-        personName,
+        personName: personName.trim(),
+        orderId: result.order?.id,
       });
-      console.log('Navigation called successfully');
+
+      // Clear cart and form
+      setCartItems([]);
+      setPersonName('');
     } catch (error) {
-      console.log('Navigation error:', error);
-      alert('Navigation failed: ' + error.message);
+      console.error('Order creation error:', error);
+      alert('Failed to create order: ' + error.message);
     }
-    setPersonName('');
   };
 
   const handleAddOtherItem = () => {
@@ -328,17 +378,7 @@ export default function OrdersScreen({ navigation }) {
           />
         </>
       ) : (
-        <View style={styles.activeOrdersContainer}>
-          {activeOrdersData.map((order, index) => (
-            <View key={order.id} style={styles.orderRow}>
-              <Text style={styles.orderIndex}>{index + 1}.</Text>
-              <Text style={styles.orderName}>{order.name}</Text>
-              <Text style={styles.orderWaitTime}>
-                Wait for {order.waitTime}!
-              </Text>
-            </View>
-          ))}
-        </View>
+        <ActiveOrders refreshKey={activeOrdersKey} />
       )}
 
       {/* Confirm Modal */}
@@ -589,23 +629,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  activeOrdersContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-    paddingTop: 8,
-  },
-  orderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  orderIndex: { fontSize: 15, color: '#999', width: 30 },
-  orderName: { flex: 1, fontSize: 15, fontWeight: '600', color: '#4CAF50' },
-  orderWaitTime: { fontSize: 13, fontWeight: '600', color: '#FF8C42' },
 
   modalOverlay: {
     flex: 1,
