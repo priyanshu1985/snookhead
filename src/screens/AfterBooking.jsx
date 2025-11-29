@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   FlatList,
+  Modal,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -42,6 +43,11 @@ export default function AfterBooking({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const [billItems, setBillItems] = useState([]);
   const [totalBill, setTotalBill] = useState(0);
+  const [tableCharges, setTableCharges] = useState(0);
+  const [menuCharges, setMenuCharges] = useState(0);
+  const [showBillPreview, setShowBillPreview] = useState(false);
+  const [isCalculatingBill, setIsCalculatingBill] = useState(false);
+  const [billData, setBillData] = useState(null);
 
   // Update timer every second
   useEffect(() => {
@@ -57,19 +63,74 @@ export default function AfterBooking({ route, navigation }) {
     return () => clearInterval(interval);
   }, [sessionData]);
 
+  // Calculate pricing in real-time
+  useEffect(() => {
+    calculatePricing();
+  }, [timeSpent, billItems, table]);
+
   // Fetch menu items on component mount
   useEffect(() => {
     fetchMenuItems();
   }, []);
 
-  // Update total bill when bill items change
-  useEffect(() => {
-    const total = billItems.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0,
-    );
-    setTotalBill(total);
-  }, [billItems]);
+  // Calculate comprehensive pricing
+  const calculatePricing = async () => {
+    try {
+      // Calculate table charges
+      let calculatedTableCharges = 0;
+      if (table && timeSpent > 0) {
+        let pricePerMin = parseFloat(
+          table.pricePerMin || table.price_per_min || 10,
+        );
+        const frameCharge = parseFloat(table.frameCharge || 0);
+
+        // Debug logging
+        console.log('Frontend pricing debug:', {
+          timeSpent,
+          original_pricePerMin: pricePerMin,
+          frameCharge,
+        });
+
+        // If the price seems too high (>100), assume it's per hour and convert to per minute
+        if (pricePerMin > 100) {
+          pricePerMin = pricePerMin / 60;
+          console.log('Converted hourly rate to per minute:', pricePerMin);
+        }
+
+        if (timeOption === 'Select Frame' && frameCount > 0) {
+          const pricePerFrame = parseFloat(table.pricePerFrame || 100);
+          calculatedTableCharges = frameCount * pricePerFrame + frameCharge;
+        } else {
+          calculatedTableCharges = timeSpent * pricePerMin + frameCharge;
+        }
+
+        console.log('Calculated table charges:', calculatedTableCharges);
+      }
+
+      // Calculate menu charges
+      const calculatedMenuCharges = billItems.reduce((sum, item) => {
+        const itemPrice = parseFloat(item.price || 0);
+        const itemQuantity = item.quantity || 1;
+        const itemTotal = itemPrice * itemQuantity;
+        console.log(
+          `Menu item: ${item.name}, Price: ${itemPrice}, Quantity: ${itemQuantity}, Total: ${itemTotal}`,
+        );
+        return sum + itemTotal;
+      }, 0);
+
+      console.log('Final calculations:', {
+        tableCharges: calculatedTableCharges,
+        menuCharges: calculatedMenuCharges,
+        totalBill: calculatedTableCharges + calculatedMenuCharges,
+      });
+
+      setTableCharges(calculatedTableCharges);
+      setMenuCharges(calculatedMenuCharges);
+      setTotalBill(calculatedTableCharges + calculatedMenuCharges);
+    } catch (error) {
+      console.error('Error calculating pricing:', error);
+    }
+  };
 
   // Fetch menu items from backend
   const fetchMenuItems = async () => {
@@ -183,57 +244,120 @@ export default function AfterBooking({ route, navigation }) {
     Alert.alert('Update', 'Update session functionality');
   };
 
+  // Show bill preview before final generation
+  const handleShowBillPreview = () => {
+    if (totalBill <= 0) {
+      Alert.alert(
+        'No Charges',
+        'No table time or menu items selected. Please play for some time or add menu items to generate a bill.',
+      );
+      return;
+    }
+    setShowBillPreview(true);
+  };
+
+  // Generate final bill and store in database
   const handleGenerateBill = async () => {
     try {
+      setIsCalculatingBill(true);
+
       const token = await AsyncStorage.getItem('authToken');
+      if (!token) {
+        Alert.alert('Error', 'Authentication required. Please login again.');
+        return;
+      }
 
-      Alert.alert(
-        'Generate Bill',
-        'Are you sure you want to end this session and generate bill?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Generate Bill',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                const response = await fetch(
-                  `${API_URL}/api/activeTables/stop`,
-                  {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({ active_id: sessionData.id }),
-                  },
-                );
+      // Prepare session_id - ensure it's a valid integer or null
+      let validSessionId = null;
+      if (sessionData?.id) {
+        console.log(
+          'Original session ID:',
+          sessionData.id,
+          'Type:',
+          typeof sessionData.id,
+        );
+        const sessionIdInt = parseInt(sessionData.id);
+        if (!isNaN(sessionIdInt) && sessionIdInt > 0) {
+          validSessionId = sessionIdInt;
+          console.log('Valid session ID:', validSessionId);
+        } else {
+          console.log('Invalid session ID, setting to null');
+        }
+      }
 
-                const result = await response.json();
+      // Prepare bill data
+      const billRequest = {
+        customer_name: 'Walk-in Customer',
+        customer_phone: '+91 XXXXXXXXXX',
+        table_id: table?.id ? parseInt(table.id) : null,
+        session_id: validSessionId,
+        selected_menu_items: billItems.map(item => ({
+          menu_item_id: item.id,
+          quantity: item.quantity || 1,
+        })),
+        session_duration: Math.round(timeSpent),
+        booking_time: sessionData?.start_time,
+        table_price_per_min: parseFloat(
+          table?.pricePerMin || table?.price_per_min || 10,
+        ),
+        frame_charges: timeOption === 'Select Frame' ? frameCount * 100 : 0,
+      };
 
-                if (response.ok) {
-                  Alert.alert('Success', 'Bill generated successfully!', [
-                    {
-                      text: 'OK',
-                      onPress: () =>
-                        navigation.navigate('MainTabs', { screen: 'Home' }),
-                    },
-                  ]);
-                } else {
-                  throw new Error(result.error || 'Failed to generate bill');
-                }
-              } catch (error) {
-                Alert.alert(
-                  'Error',
-                  'Failed to generate bill. Please try again.',
-                );
-              }
+      console.log('Creating bill with data:', billRequest);
+
+      const response = await fetch(`${API_URL}/api/bills/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(billRequest),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        // End the session
+        try {
+          await fetch(`${API_URL}/api/activeTables/stop`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
             },
-          },
-        ],
-      );
+            body: JSON.stringify({ active_id: validSessionId }),
+          });
+        } catch (sessionError) {
+          console.warn('Failed to end session:', sessionError);
+        }
+
+        Alert.alert(
+          'Bill Generated Successfully!',
+          `Bill Number: ${result.bill.bill_number}\nTotal Amount: ₹${result.bill.total_amount}\n\nTable Charges: ₹${result.bill.table_charges}\nMenu Charges: ₹${result.bill.menu_charges}`,
+          [
+            {
+              text: 'View in Bills',
+              onPress: () =>
+                navigation.navigate('MainTabs', { screen: 'Bill' }),
+            },
+            {
+              text: 'Go Home',
+              onPress: () =>
+                navigation.navigate('MainTabs', { screen: 'Home' }),
+            },
+          ],
+        );
+      } else {
+        throw new Error(result.error || 'Failed to create bill');
+      }
     } catch (error) {
-      Alert.alert('Error', 'Something went wrong. Please try again.');
+      console.error('Bill generation error:', error);
+      Alert.alert(
+        'Bill Generation Failed',
+        error.message || 'Failed to generate bill. Please try again.',
+      );
+    } finally {
+      setIsCalculatingBill(false);
     }
   };
 
@@ -424,39 +548,181 @@ export default function AfterBooking({ route, navigation }) {
           )}
         </View>
 
-        {/* Bill Summary */}
-        {billItems.length > 0 && (
+        {/* Comprehensive Bill Summary */}
+        {(timeSpent > 0 || billItems.length > 0) && (
           <View style={styles.billSummaryContainer}>
-            <Text style={styles.billSummaryTitle}>Bill Summary</Text>
-            {billItems.map((item, index) => (
-              <View key={item.id || index} style={styles.billItem}>
-                <Text style={styles.billItemName}>
-                  {item.name} x{item.quantity}
-                </Text>
-                <Text style={styles.billItemPrice}>
-                  ₹{item.price * item.quantity}
-                </Text>
+            <Text style={styles.billSummaryTitle}>Current Bill Preview</Text>
+
+            {/* Table Charges */}
+            {timeSpent > 0 && (
+              <View style={styles.billSection}>
+                <Text style={styles.billSectionTitle}>Table Charges</Text>
+                <View style={styles.billItem}>
+                  <Text style={styles.billItemName}>
+                    {gameType || 'Gaming'} - {table?.name} ({timeSpent} min)
+                  </Text>
+                  <Text style={styles.billItemPrice}>
+                    ₹{tableCharges.toFixed(2)}
+                  </Text>
+                </View>
               </View>
-            ))}
+            )}
+
+            {/* Menu Charges */}
+            {billItems.length > 0 && (
+              <View style={styles.billSection}>
+                <Text style={styles.billSectionTitle}>Menu Items</Text>
+                {billItems.map((item, index) => (
+                  <View key={item.id || index} style={styles.billItem}>
+                    <Text style={styles.billItemName}>
+                      {item.name} x{item.quantity}
+                    </Text>
+                    <Text style={styles.billItemPrice}>
+                      ₹{(item.price * item.quantity).toFixed(2)}
+                    </Text>
+                  </View>
+                ))}
+                <View style={styles.billSubtotal}>
+                  <Text style={styles.billSubtotalText}>
+                    Menu Subtotal: ₹{menuCharges.toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Total */}
             <View style={styles.billTotal}>
-              <Text style={styles.billTotalText}>Food Total: ₹{totalBill}</Text>
+              <Text style={styles.billTotalText}>
+                Total Amount: ₹{totalBill.toFixed(2)}
+              </Text>
             </View>
+
+            {/* Preview Button */}
+            {totalBill > 0 && (
+              <TouchableOpacity
+                style={styles.previewButton}
+                onPress={handleShowBillPreview}
+              >
+                <Text style={styles.previewButtonText}>Preview Final Bill</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
         {/* Action Buttons */}
         <View style={styles.buttonsContainer}>
-          <TouchableOpacity style={styles.updateButton} onPress={handleUpdate}>
-            <Text style={styles.updateButtonText}>Update</Text>
+          <TouchableOpacity
+            style={styles.endSessionButton}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Home' })}
+          >
+            <Text style={styles.endSessionButtonText}>End Session</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.generateBillButton}
-            onPress={handleGenerateBill}
+            style={[
+              styles.generateBillButton,
+              (totalBill <= 0 || isCalculatingBill) &&
+                styles.generateBillButtonDisabled,
+            ]}
+            onPress={totalBill > 0 ? handleGenerateBill : handleShowBillPreview}
+            disabled={isCalculatingBill}
           >
-            <Text style={styles.generateBillButtonText}>Generate Bill</Text>
+            <Text style={styles.generateBillButtonText}>
+              {isCalculatingBill ? 'Creating Bill...' : 'Generate & Pay Bill'}
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Bill Preview Modal */}
+      <Modal
+        visible={showBillPreview}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowBillPreview(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.billPreviewModal}>
+            <View style={styles.billPreviewHeader}>
+              <Text style={styles.billPreviewTitle}>Final Bill Preview</Text>
+              <TouchableOpacity onPress={() => setShowBillPreview(false)}>
+                <Icon name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.billPreviewContent}>
+              <View style={styles.billPreviewSection}>
+                <Text style={styles.billPreviewCustomer}>
+                  Customer: Walk-in Customer
+                </Text>
+                <Text style={styles.billPreviewTable}>
+                  Table: {table?.name}
+                </Text>
+                <Text style={styles.billPreviewTime}>
+                  Duration: {timeSpent} minutes
+                </Text>
+              </View>
+
+              {tableCharges > 0 && (
+                <View style={styles.billPreviewSection}>
+                  <Text style={styles.billPreviewSectionTitle}>
+                    Table Charges
+                  </Text>
+                  <View style={styles.billPreviewItem}>
+                    <Text style={styles.billPreviewItemName}>
+                      {gameType} Session ({timeSpent} min)
+                    </Text>
+                    <Text style={styles.billPreviewItemPrice}>
+                      ₹{tableCharges.toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {billItems.length > 0 && (
+                <View style={styles.billPreviewSection}>
+                  <Text style={styles.billPreviewSectionTitle}>Menu Items</Text>
+                  {billItems.map((item, index) => (
+                    <View key={index} style={styles.billPreviewItem}>
+                      <Text style={styles.billPreviewItemName}>
+                        {item.name} × {item.quantity}
+                      </Text>
+                      <Text style={styles.billPreviewItemPrice}>
+                        ₹{(item.price * item.quantity).toFixed(2)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <View style={styles.billPreviewTotal}>
+                <Text style={styles.billPreviewTotalText}>
+                  Total Amount: ₹{totalBill.toFixed(2)}
+                </Text>
+              </View>
+            </ScrollView>
+
+            <View style={styles.billPreviewActions}>
+              <TouchableOpacity
+                style={styles.billPreviewCancelButton}
+                onPress={() => setShowBillPreview(false)}
+              >
+                <Text style={styles.billPreviewCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.billPreviewConfirmButton}
+                onPress={handleGenerateBill}
+                disabled={isCalculatingBill}
+              >
+                <Text style={styles.billPreviewConfirmText}>
+                  {isCalculatingBill
+                    ? 'Creating...'
+                    : 'Confirm & Generate Bill'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -783,9 +1049,180 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   billTotalText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FF8C42',
+    textAlign: 'center',
+  },
+  billSection: {
+    marginBottom: 12,
+  },
+  billSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+  },
+  billSubtotal: {
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    paddingTop: 8,
+    marginTop: 8,
+  },
+  billSubtotalText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'right',
+  },
+  previewButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  previewButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  endSessionButton: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 25,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FF8C42',
+    marginRight: 6,
+  },
+  endSessionButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#FF8C42',
-    textAlign: 'right',
+  },
+  generateBillButtonDisabled: {
+    backgroundColor: '#CCC',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  billPreviewModal: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    maxHeight: '80%',
+    width: '100%',
+    maxWidth: 400,
+  },
+  billPreviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  billPreviewTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  billPreviewContent: {
+    padding: 20,
+    maxHeight: 400,
+  },
+  billPreviewSection: {
+    marginBottom: 20,
+  },
+  billPreviewCustomer: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  billPreviewTable: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  billPreviewTime: {
+    fontSize: 14,
+    color: '#666',
+  },
+  billPreviewSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    paddingBottom: 4,
+  },
+  billPreviewItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingVertical: 4,
+  },
+  billPreviewItemName: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+  },
+  billPreviewItemPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  billPreviewTotal: {
+    borderTopWidth: 2,
+    borderTopColor: '#FF8C42',
+    paddingTop: 16,
+    marginTop: 16,
+  },
+  billPreviewTotalText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FF8C42',
+    textAlign: 'center',
+  },
+  billPreviewActions: {
+    flexDirection: 'row',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  billPreviewCancelButton: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#CCC',
+    marginRight: 8,
+  },
+  billPreviewCancelText: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '600',
+  },
+  billPreviewConfirmButton: {
+    flex: 2,
+    backgroundColor: '#FF8C42',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  billPreviewConfirmText: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });

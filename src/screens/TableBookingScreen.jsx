@@ -46,6 +46,12 @@ export default function TableBookingScreen({ route, navigation }) {
   const [timerDuration, setTimerDuration] = useState('60');
   const [selectedFrame, setSelectedFrame] = useState('1');
   const [isBooking, setIsBooking] = useState(false);
+  const [showPricingPreview, setShowPricingPreview] = useState(false);
+  const [estimatedCost, setEstimatedCost] = useState({
+    tableCharges: 0,
+    menuCharges: 0,
+    totalAmount: 0,
+  });
 
   // ===== DATA AND CONSTANTS AFTER HOOKS =====
   const { table, gameType, color, selectedFoodItems } = route.params || {};
@@ -105,6 +111,55 @@ export default function TableBookingScreen({ route, navigation }) {
 
   const handleTimeConfirm = () => {
     setShowTimeModal(false);
+    calculateEstimatedCost();
+  };
+
+  // Calculate estimated cost based on selected options
+  const calculateEstimatedCost = () => {
+    let tableCharges = 0;
+    let menuCharges = 0;
+
+    // Calculate table charges based on selected time option
+    if (safeTable) {
+      const pricePerMin = parseFloat(
+        safeTable.pricePerMin || safeTable.price_per_min || 10,
+      );
+      const frameCharge = parseFloat(safeTable.frameCharge || 0);
+
+      if (selectedTimeOption === 'Timer') {
+        const duration = parseInt(timerDuration || 60);
+        tableCharges = duration * pricePerMin + frameCharge;
+      } else if (selectedTimeOption === 'Select Frame') {
+        const frames = parseInt(selectedFrame || 1);
+        const pricePerFrame = parseFloat(safeTable.pricePerFrame || 100);
+        tableCharges = frames * pricePerFrame + frameCharge;
+      } else {
+        // Set Time - estimate 60 minutes
+        tableCharges = 60 * pricePerMin + frameCharge;
+      }
+    }
+
+    // Calculate menu charges
+    menuCharges = selectedFood.reduce((total, item) => {
+      return (
+        total +
+        (item.qty || item.quantity || 1) * (item.item?.price || item.price || 0)
+      );
+    }, 0);
+
+    const totalAmount = tableCharges + menuCharges;
+
+    setEstimatedCost({
+      tableCharges,
+      menuCharges,
+      totalAmount,
+    });
+  };
+
+  // Show pricing preview before booking
+  const handleShowPricingPreview = () => {
+    calculateEstimatedCost();
+    setShowPricingPreview(true);
   };
 
   const getTimeDisplayText = () => {
@@ -444,7 +499,7 @@ export default function TableBookingScreen({ route, navigation }) {
 
         <TouchableOpacity
           style={[styles.bookButton, isBooking && styles.bookButtonDisabled]}
-          onPress={handleBook}
+          onPress={handleShowPricingPreview}
           disabled={isBooking}
         >
           {isBooking ? (
@@ -455,7 +510,7 @@ export default function TableBookingScreen({ route, navigation }) {
               </Text>
             </View>
           ) : (
-            <Text style={styles.bookButtonText}>Book Table</Text>
+            <Text style={styles.bookButtonText}>View Pricing & Book Table</Text>
           )}
         </TouchableOpacity>
 
@@ -652,6 +707,109 @@ export default function TableBookingScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Pricing Preview Modal */}
+      <Modal
+        visible={showPricingPreview}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPricingPreview(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.pricingPreviewModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Booking Summary & Pricing</Text>
+              <TouchableOpacity onPress={() => setShowPricingPreview(false)}>
+                <Icon name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.pricingContent}>
+              <View style={styles.pricingSection}>
+                <Text style={styles.pricingSectionTitle}>
+                  Table Information
+                </Text>
+                <Text style={styles.pricingText}>Table: {safeTable.name}</Text>
+                <Text style={styles.pricingText}>Game: {safeGameType}</Text>
+                <Text style={styles.pricingText}>
+                  Time Option: {getTimeDisplayText()}
+                </Text>
+              </View>
+
+              <View style={styles.pricingSection}>
+                <Text style={styles.pricingSectionTitle}>
+                  Estimated Charges
+                </Text>
+
+                <View style={styles.pricingItem}>
+                  <Text style={styles.pricingItemName}>Table Charges</Text>
+                  <Text style={styles.pricingItemPrice}>
+                    ₹{estimatedCost.tableCharges.toFixed(2)}
+                  </Text>
+                </View>
+
+                {selectedFood.length > 0 && (
+                  <>
+                    <Text style={styles.pricingSubTitle}>Menu Items:</Text>
+                    {selectedFood.map((item, index) => (
+                      <View key={index} style={styles.pricingItem}>
+                        <Text style={styles.pricingItemName}>
+                          {item.item?.name || item.name} ×{' '}
+                          {item.qty || item.quantity || 1}
+                        </Text>
+                        <Text style={styles.pricingItemPrice}>
+                          ₹
+                          {(
+                            (item.qty || item.quantity || 1) *
+                            (item.item?.price || item.price || 0)
+                          ).toFixed(2)}
+                        </Text>
+                      </View>
+                    ))}
+                    <View style={styles.pricingItem}>
+                      <Text style={styles.pricingItemName}>Menu Subtotal</Text>
+                      <Text style={styles.pricingItemPrice}>
+                        ₹{estimatedCost.menuCharges.toFixed(2)}
+                      </Text>
+                    </View>
+                  </>
+                )}
+
+                <View style={styles.pricingTotal}>
+                  <Text style={styles.pricingTotalText}>
+                    Estimated Total: ₹{estimatedCost.totalAmount.toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.pricingNote}>
+                * Final amount may vary based on actual session duration
+              </Text>
+            </ScrollView>
+
+            <View style={styles.pricingActions}>
+              <TouchableOpacity
+                style={styles.pricingCancelButton}
+                onPress={() => setShowPricingPreview(false)}
+              >
+                <Text style={styles.pricingCancelText}>Modify Selection</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.pricingConfirmButton}
+                onPress={() => {
+                  setShowPricingPreview(false);
+                  handleBook();
+                }}
+                disabled={isBooking}
+              >
+                <Text style={styles.pricingConfirmText}>
+                  {isBooking ? 'Booking...' : 'Confirm & Book Table'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -1003,5 +1161,109 @@ const styles = StyleSheet.create({
     color: '#FF9500',
     textAlign: 'center',
     paddingVertical: 8,
+  },
+  pricingPreviewModal: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    maxHeight: '85%',
+    width: '90%',
+    maxWidth: 400,
+  },
+  pricingContent: {
+    padding: 20,
+    maxHeight: 500,
+  },
+  pricingSection: {
+    marginBottom: 20,
+  },
+  pricingSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: '#FF9500',
+    paddingBottom: 4,
+  },
+  pricingText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  pricingSubTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  pricingItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingVertical: 4,
+  },
+  pricingItemName: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+  },
+  pricingItemPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  pricingTotal: {
+    borderTopWidth: 2,
+    borderTopColor: '#FF9500',
+    paddingTop: 12,
+    marginTop: 12,
+  },
+  pricingTotalText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FF9500',
+    textAlign: 'center',
+  },
+  pricingNote: {
+    fontSize: 12,
+    color: '#999',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  pricingActions: {
+    flexDirection: 'row',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  pricingCancelButton: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#CCC',
+    marginRight: 8,
+  },
+  pricingCancelText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '600',
+  },
+  pricingConfirmButton: {
+    flex: 2,
+    backgroundColor: '#FF9500',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  pricingConfirmText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });
