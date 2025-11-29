@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -34,6 +36,12 @@ export default function AfterBooking({ route, navigation }) {
   const [frameCount, setFrameCount] = useState(
     timeDetails?.selectedFrame ? parseInt(timeDetails.selectedFrame) : 0,
   );
+  const [menuItems, setMenuItems] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('Food');
+  const [loading, setLoading] = useState(false);
+  const [billItems, setBillItems] = useState([]);
+  const [totalBill, setTotalBill] = useState(0);
 
   // Update timer every second
   useEffect(() => {
@@ -48,6 +56,59 @@ export default function AfterBooking({ route, navigation }) {
 
     return () => clearInterval(interval);
   }, [sessionData]);
+
+  // Fetch menu items on component mount
+  useEffect(() => {
+    fetchMenuItems();
+  }, []);
+
+  // Update total bill when bill items change
+  useEffect(() => {
+    const total = billItems.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0,
+    );
+    setTotalBill(total);
+  }, [billItems]);
+
+  // Fetch menu items from backend
+  const fetchMenuItems = async () => {
+    try {
+      setLoading(true);
+      const token = await AsyncStorage.getItem('authToken');
+
+      const response = await fetch(`${API_URL}/api/menu`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const items = Array.isArray(result) ? result : result.data || [];
+
+        // Extract unique categories
+        const uniqueCategories = [
+          ...new Set(items.map(item => item.category || 'Food')),
+        ];
+        setCategories(
+          uniqueCategories.length > 0
+            ? uniqueCategories
+            : ['Food', 'Fast Food', 'Beverages'],
+        );
+
+        setMenuItems(items);
+        console.log('Fetched menu items:', items);
+      } else {
+        console.error('Failed to fetch menu items:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching menu items:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Format time display
   const formatTime = minutes => {
@@ -64,6 +125,57 @@ export default function AfterBooking({ route, navigation }) {
         .padStart(2, '0')} min`;
     }
     return `${mins}.${seconds.toString().padStart(2, '0')} min`;
+  };
+
+  // Add item to bill
+  const handleAddToBill = menuItem => {
+    const existingItem = billItems.find(item => item.id === menuItem.id);
+
+    if (existingItem) {
+      // Increase quantity if item already exists
+      setBillItems(prev =>
+        prev.map(item =>
+          item.id === menuItem.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item,
+        ),
+      );
+    } else {
+      // Add new item to bill
+      setBillItems(prev => [
+        ...prev,
+        {
+          ...menuItem,
+          quantity: 1,
+          price: menuItem.price || 0,
+        },
+      ]);
+    }
+
+    Alert.alert('Added to Bill', `${menuItem.name} added to your bill`);
+  };
+
+  // Remove item from bill
+  const handleRemoveFromBill = itemId => {
+    setBillItems(prev => {
+      const existingItem = prev.find(item => item.id === itemId);
+      if (existingItem && existingItem.quantity > 1) {
+        // Decrease quantity
+        return prev.map(item =>
+          item.id === itemId ? { ...item, quantity: item.quantity - 1 } : item,
+        );
+      } else {
+        // Remove item completely
+        return prev.filter(item => item.id !== itemId);
+      }
+    });
+  };
+
+  // Get filtered menu items by category
+  const getFilteredMenuItems = () => {
+    return menuItems.filter(
+      item => (item.category || 'Food') === selectedCategory,
+    );
   };
 
   const handleUpdate = () => {
@@ -220,56 +332,117 @@ export default function AfterBooking({ route, navigation }) {
 
         {/* Categories */}
         <View style={styles.categoriesContainer}>
-          <TouchableOpacity
-            style={[styles.categoryButton, styles.categoryButtonActive]}
-          >
-            <Text style={[styles.categoryText, styles.categoryTextActive]}>
-              Food
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.categoryButton}>
-            <Text style={styles.categoryText}>Fast Food</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.categoryButton}>
-            <Text style={styles.categoryText}>Beverages</Text>
-          </TouchableOpacity>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {categories.map((category, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.categoryButton,
+                  selectedCategory === category && styles.categoryButtonActive,
+                ]}
+                onPress={() => setSelectedCategory(category)}
+              >
+                <Text
+                  style={[
+                    styles.categoryText,
+                    selectedCategory === category && styles.categoryTextActive,
+                  ]}
+                >
+                  {category}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
         {/* Food Items */}
         <View style={styles.foodItemsContainer}>
-          <View style={styles.foodItem}>
-            <View style={styles.foodIcon}>
-              <Text style={styles.foodEmoji}>🥟</Text>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#FF8C42" />
+              <Text style={styles.loadingText}>Loading menu items...</Text>
             </View>
-            <View style={styles.foodDetails}>
-              <Text style={styles.foodName}>Cigarette</Text>
-              <Text style={styles.foodPrice}>ADD</Text>
+          ) : getFilteredMenuItems().length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Icon name="restaurant-outline" size={48} color="#ccc" />
+              <Text style={styles.emptyText}>
+                No items found in {selectedCategory}
+              </Text>
+              <Text style={styles.emptySubText}>
+                Try selecting a different category
+              </Text>
             </View>
-            <Text style={styles.foodItemPrice}>₹170</Text>
-          </View>
-
-          <View style={styles.foodItem}>
-            <View style={styles.foodIcon}>
-              <Text style={styles.foodEmoji}>🍕</Text>
-            </View>
-            <View style={styles.foodDetails}>
-              <Text style={styles.foodName}>Pizza</Text>
-              <Text style={styles.foodPrice}>ADD</Text>
-            </View>
-            <Text style={styles.foodItemPrice}>₹140</Text>
-          </View>
-
-          <View style={styles.foodItem}>
-            <View style={styles.foodIcon}>
-              <Text style={styles.foodEmoji}>🍕</Text>
-            </View>
-            <View style={styles.foodDetails}>
-              <Text style={styles.foodName}>Pizza</Text>
-              <Text style={styles.foodPrice}>ADD</Text>
-            </View>
-            <Text style={styles.foodItemPrice}>₹140</Text>
-          </View>
+          ) : (
+            getFilteredMenuItems().map((item, index) => {
+              const billItem = billItems.find(bi => bi.id === item.id);
+              return (
+                <View key={item.id || index} style={styles.foodItem}>
+                  <View style={styles.foodIcon}>
+                    <Text style={styles.foodEmoji}>
+                      {item.category === 'Beverages'
+                        ? '🥤'
+                        : item.category === 'Fast Food'
+                        ? '🍔'
+                        : '🍽️'}
+                    </Text>
+                  </View>
+                  <View style={styles.foodDetails}>
+                    <Text style={styles.foodName}>{item.name}</Text>
+                    <View style={styles.quantityContainer}>
+                      {billItem ? (
+                        <View style={styles.quantityControls}>
+                          <TouchableOpacity
+                            style={styles.quantityButton}
+                            onPress={() => handleRemoveFromBill(item.id)}
+                          >
+                            <Icon name="remove" size={16} color="#FF8C42" />
+                          </TouchableOpacity>
+                          <Text style={styles.quantityText}>
+                            {billItem.quantity}
+                          </Text>
+                          <TouchableOpacity
+                            style={styles.quantityButton}
+                            onPress={() => handleAddToBill(item)}
+                          >
+                            <Icon name="add" size={16} color="#FF8C42" />
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.addButton}
+                          onPress={() => handleAddToBill(item)}
+                        >
+                          <Text style={styles.addButtonText}>ADD</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                  <Text style={styles.foodItemPrice}>₹{item.price || 0}</Text>
+                </View>
+              );
+            })
+          )}
         </View>
+
+        {/* Bill Summary */}
+        {billItems.length > 0 && (
+          <View style={styles.billSummaryContainer}>
+            <Text style={styles.billSummaryTitle}>Bill Summary</Text>
+            {billItems.map((item, index) => (
+              <View key={item.id || index} style={styles.billItem}>
+                <Text style={styles.billItemName}>
+                  {item.name} x{item.quantity}
+                </Text>
+                <Text style={styles.billItemPrice}>
+                  ₹{item.price * item.quantity}
+                </Text>
+              </View>
+            ))}
+            <View style={styles.billTotal}>
+              <Text style={styles.billTotalText}>Food Total: ₹{totalBill}</Text>
+            </View>
+          </View>
+        )}
 
         {/* Action Buttons */}
         <View style={styles.buttonsContainer}>
@@ -511,5 +684,108 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#333',
+    marginTop: 12,
+  },
+  emptySubText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  quantityContainer: {
+    marginTop: 4,
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quantityButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFF8F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FF8C42',
+  },
+  quantityText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    minWidth: 20,
+    textAlign: 'center',
+  },
+  addButton: {
+    backgroundColor: '#FF8C42',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  addButtonText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  billSummaryContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  billSummaryTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+  },
+  billItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  billItemName: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+  },
+  billItemPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  billTotal: {
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    paddingTop: 8,
+    marginTop: 8,
+  },
+  billTotalText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FF8C42',
+    textAlign: 'right',
   },
 });
