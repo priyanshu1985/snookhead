@@ -77,8 +77,28 @@ export default function HomeScreen({ navigation }) {
         ? tablesResult
         : tablesResult.tables || tablesResult.data || [];
 
+      // Fetch active sessions
+      let activeSessions = [];
+      try {
+        const activeResponse = await fetch(`${API_URL}/api/activeTables`, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (activeResponse.ok) {
+          const activeResult = await activeResponse.json();
+          activeSessions = Array.isArray(activeResult)
+            ? activeResult
+            : activeResult.sessions || activeResult.data || [];
+        }
+      } catch (err) {
+        console.log('No active sessions endpoint or error:', err);
+      }
+
       console.log('Fetched games:', games);
       console.log('Fetched tables:', tables);
+      console.log('Fetched active sessions:', activeSessions);
 
       // Transform data to match HomeScreen structure
       const transformedGameData = games
@@ -92,13 +112,39 @@ export default function HomeScreen({ navigation }) {
               const tableGameId = table.game_id || table.gameid;
               return String(tableGameId) === String(gameId);
             })
-            .map(table => ({
-              id: table.id,
-              name: table.name || `T${table.id}`,
-              price: `₹${table.pricePerMin || table.price_per_min || 200}/hr`,
-              status: table.status || 'available',
-              time: table.activeTime || null, // For occupied tables
-            }));
+            .map(table => {
+              // Find active session for this table
+              const activeSession = activeSessions.find(
+                session =>
+                  String(session.table_id) === String(table.id) &&
+                  session.status === 'active',
+              );
+
+              const transformedTable = {
+                id: table.id,
+                name: table.name || `T${table.id}`,
+                price: `₹${table.pricePerMin || table.price_per_min || 200}/hr`,
+                status: activeSession
+                  ? 'occupied'
+                  : table.status || 'available',
+                time: table.activeTime || null, // For occupied tables
+                sessionId: activeSession?.id || null,
+                startTime: activeSession?.start_time || null,
+                game_id: gameId,
+              };
+
+              // Log each transformed table to debug
+              if (activeSession) {
+                console.log(`Table ${table.name} has active session:`, {
+                  tableId: table.id,
+                  sessionId: activeSession.id,
+                  status: transformedTable.status,
+                  startTime: transformedTable.startTime,
+                });
+              }
+
+              return transformedTable;
+            });
 
           return {
             id: gameId,
@@ -108,6 +154,24 @@ export default function HomeScreen({ navigation }) {
           };
         })
         .filter(game => game.tables.length > 0); // Only include games that have tables
+
+      // Add test occupied table for debugging
+      if (
+        transformedGameData.length > 0 &&
+        transformedGameData[0].tables.length > 0
+      ) {
+        // Make first table occupied for testing
+        transformedGameData[0].tables[0] = {
+          ...transformedGameData[0].tables[0],
+          status: 'occupied',
+          sessionId: 'test-session-123',
+          startTime: new Date().toISOString(),
+        };
+        console.log(
+          'Added test occupied table:',
+          transformedGameData[0].tables[0],
+        );
+      }
 
       setGameData(transformedGameData);
       console.log('Transformed game data:', transformedGameData);
@@ -127,9 +191,17 @@ export default function HomeScreen({ navigation }) {
   // Refetch data when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
-      fetchGamesAndTables();
+      // Add small delay to ensure backend is updated
+      setTimeout(() => {
+        fetchGamesAndTables();
+      }, 100);
     }, []),
   );
+
+  // Force refresh function for when tables need to be updated
+  const forceRefresh = async () => {
+    await fetchGamesAndTables();
+  };
 
   const handleTabPress = index => {
     setActiveTab(index);
@@ -141,9 +213,65 @@ export default function HomeScreen({ navigation }) {
     setActiveTab(index);
   };
 
-  const handleTablePress = (table, gameType, color) => {
-    // If you have TableBooking screen, uncomment this:
-    navigation.navigate('TableBookingScreen', { table, gameType, color });
+  const handleTablePress = async (table, action, gameType, color, gameId) => {
+    console.log('HomeScreen handleTablePress:', {
+      tableName: table.name,
+      action,
+      sessionId: table.sessionId,
+      startTime: table.startTime,
+      status: table.status,
+    });
+
+    if (action === 'stop') {
+      // Navigate to AfterBooking screen to show session details
+      console.log('Navigating to AfterBooking screen');
+      navigation.navigate('AfterBooking', {
+        table,
+        session: {
+          id: table.sessionId || 'unknown',
+          start_time: table.startTime || new Date().toISOString(),
+          status: 'active',
+        },
+        gameType,
+        color,
+      });
+    } else if (action === 'book') {
+      // Add game_id to table object for booking
+      console.log('Navigating to TableBookingScreen');
+      const tableWithGameId = { ...table, game_id: gameId };
+      navigation.navigate('TableBookingScreen', {
+        table: tableWithGameId,
+        gameType,
+        color,
+      });
+    }
+  };
+
+  const stopTableSession = async sessionId => {
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${API_URL}/api/activeTables/stop`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ active_id: sessionId }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        Alert.alert('Success', 'Session ended successfully!');
+        // Refresh the data to show updated table status
+        fetchGamesAndTables();
+      } else {
+        throw new Error(result.error || 'Failed to end session');
+      }
+    } catch (error) {
+      console.error('Error ending session:', error);
+      Alert.alert('Error', 'Failed to end session. Please try again.');
+    }
   };
 
   const handleDeleteTable = (gameIndex, tableId) => {
@@ -173,7 +301,9 @@ export default function HomeScreen({ navigation }) {
           <TableCard
             table={table}
             color={item.color}
-            onPress={() => handleTablePress(table, item.name, item.color)}
+            onPress={(table, action) =>
+              handleTablePress(table, action, item.name, item.color, item.id)
+            }
             onDelete={() => handleDeleteTable(gameIndex, table.id)}
           />
         )}
