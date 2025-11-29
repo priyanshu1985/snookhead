@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,77 +8,34 @@ import {
   FlatList,
   StatusBar,
   TextInput,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
+import { API_URL } from '../config';
 
-// Sample history bills data (paid bills)
-const historyBillsData = [
-  {
-    id: '1',
-    date: '02/08/2025',
-    customerName: 'Amit sharma',
-    items: 'Table tennis + Food+ Cigarette',
-    mobile: '+91 9999999999',
-    billNumber: 'T2 S0176',
-    amount: '₹1,600/-',
-    status: 'Paid',
-    summary: 'Table tennis + Food+ Cigarette',
-    walletAmount: '₹0.00',
-    totalAmount: '₹1600 /-',
-  },
-  {
-    id: '2',
-    date: '02/08/2025',
-    customerName: 'Jon Deo',
-    items: 'Pool + PS5 + Cigarette+ beverages',
-    mobile: '+91 9999999999',
-    billNumber: 'T5 S0816',
-    amount: '₹2,300/-',
-    status: 'Paid',
-    summary: 'Pool + PS5 + Cigarette+ beverages',
-    walletAmount: '₹0.00',
-    totalAmount: '₹2300 /-',
-  },
-  {
-    id: '3',
-    date: '02/08/2025',
-    customerName: 'Amit sharma',
-    items: 'Table tennis + Food+ Cigarette',
-    mobile: '+91 9999999999',
-    billNumber: 'T1 S0901',
-    amount: '₹3,100/-',
-    status: 'Paid',
-    summary: 'Table tennis + Food+ Cigarette',
-    walletAmount: '₹0.00',
-    totalAmount: '₹3100 /-',
-  },
-  {
-    id: '4',
-    date: '02/08/2025',
-    customerName: 'Amit sharma',
-    items: 'Table tennis + Food+ Cigarette',
-    mobile: '+91 9999999999',
-    billNumber: 'T1 S0601',
-    amount: '₹3,100/-',
-    status: 'Paid',
-    summary: 'Table tennis + Food+ Cigarette',
-    walletAmount: '₹0.00',
-    totalAmount: '₹3100 /-',
-  },
-  {
-    id: '5',
-    date: '02/08/2025',
-    customerName: 'Jon Deo',
-    items: 'Pool + PS5 + Cigarette+ beverages',
-    mobile: '+91 9999999999',
-    billNumber: 'T5 S0816',
-    amount: '₹2,300/-',
-    status: 'Paid',
-    summary: 'Pool + PS5 + Cigarette+ beverages',
-    walletAmount: '₹0.00',
-    totalAmount: '₹2300 /-',
-  },
-];
+// Helper function to get auth token
+async function getAuthToken() {
+  try {
+    return await AsyncStorage.getItem('authToken');
+  } catch {
+    return null;
+  }
+}
+
+// Helper function to format date
+const formatDate = dateString => {
+  const date = new Date(dateString);
+  return date
+    .toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
+    .replace(/\//g, '/');
+};
 
 export default function BillHistoryList({
   onShowActive,
@@ -86,6 +43,96 @@ export default function BillHistoryList({
   navigation,
 }) {
   const [searchText, setSearchText] = useState('');
+  const [bills, setBills] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(null);
+
+  // Fetch bill history from backend
+  const fetchBillHistory = async () => {
+    const token = await getAuthToken();
+    if (!token) {
+      setError('Please login first');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(`${API_URL}/api/bills`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      const billsData = Array.isArray(result)
+        ? result
+        : result.bills || result.data || [];
+
+      // Filter paid bills (bill history)
+      const paidBills = billsData
+        .filter(bill => bill.status === 'paid')
+        .map(bill => ({
+          id: bill.id.toString(),
+          date: formatDate(bill.createdAt || bill.created_at),
+          customerName:
+            bill.customer_name || bill.customerName || 'Unknown Customer',
+          items: bill.items_summary || bill.itemsSummary || 'Items',
+          mobile: bill.customer_phone || bill.mobile || '+91 XXXXXXXXXX',
+          billNumber: bill.bill_number || bill.billNumber || `B${bill.id}`,
+          amount: `₹${
+            bill.total_amount || bill.totalAmount || bill.amount || 0
+          }/-`,
+          status: 'Paid',
+          summary: bill.items_summary || bill.itemsSummary || 'Items purchased',
+          walletAmount: `₹${bill.wallet_amount || bill.walletAmount || 0}.00`,
+          totalAmount: `₹${
+            bill.total_amount || bill.totalAmount || bill.amount || 0
+          } /-`,
+          originalBill: bill, // Keep original data for detailed view
+        }));
+
+      setBills(paidBills);
+      console.log('Fetched bill history:', paidBills);
+    } catch (err) {
+      console.error('Error fetching bill history:', err);
+      setError('Failed to load bill history');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch data when component mounts
+  useEffect(() => {
+    fetchBillHistory();
+  }, []);
+
+  // Refetch data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchBillHistory();
+    }, []),
+  );
+
+  // Filter bills based on search text
+  const filteredBills = bills.filter(bill => {
+    if (!searchText) return true;
+    const searchLower = searchText.toLowerCase();
+    return (
+      bill.customerName.toLowerCase().includes(searchLower) ||
+      bill.billNumber.toLowerCase().includes(searchLower) ||
+      bill.items.toLowerCase().includes(searchLower) ||
+      bill.mobile.includes(searchText)
+    );
+  });
 
   const renderBillCard = ({ item }) => (
     <TouchableOpacity style={styles.billCard} onPress={() => onBillClick(item)}>
@@ -152,13 +199,36 @@ export default function BillHistoryList({
       </View>
 
       {/* Bills List */}
-      <FlatList
-        data={historyBillsData}
-        keyExtractor={item => item.id}
-        renderItem={renderBillCard}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-      />
+      {loading ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#FF8C42" />
+          <Text style={styles.loadingText}>Loading bill history...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.centerContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={fetchBillHistory}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : filteredBills.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Icon name="receipt-outline" size={64} color="#ccc" />
+          <Text style={styles.emptyText}>No bill history found</Text>
+          <Text style={styles.emptySubText}>No bills have been paid yet.</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredBills}
+          keyExtractor={item => item.id}
+          renderItem={renderBillCard}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -308,5 +378,44 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#fff',
     fontWeight: 'bold',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF4444',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#FF8C42',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  emptySubText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
   },
 });
