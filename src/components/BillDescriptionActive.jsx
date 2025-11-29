@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,21 +8,110 @@ import {
   ScrollView,
   StatusBar,
   Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../config';
 
 export default function BillDescriptionActive({
   bill,
   onBack,
   onPaymentComplete,
 }) {
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
   if (!bill) return null;
 
-  const handleProceedToPay = () => {
-    // Here you would integrate payment gateway
-    // For now, just go back after "payment"
-    alert('Payment Successful! ₹' + bill.totalAmount);
-    onPaymentComplete();
+  // Handle payment processing
+  const handleProceedToPay = async () => {
+    try {
+      setIsProcessingPayment(true);
+      const token = await AsyncStorage.getItem('authToken');
+
+      if (!token) {
+        Alert.alert('Error', 'Please login first');
+        return;
+      }
+
+      Alert.alert(
+        'Confirm Payment',
+        `Are you sure you want to process payment of ₹${bill.totalAmount}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Pay Now',
+            style: 'default',
+            onPress: async () => {
+              try {
+                const response = await fetch(
+                  `${API_URL}/api/bills/${
+                    bill.originalBill?.id || bill.id
+                  }/pay`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${token}`,
+                    },
+                  },
+                );
+
+                const result = await response.json();
+
+                if (response.ok) {
+                  Alert.alert(
+                    'Payment Successful!',
+                    `Payment of ₹${bill.totalAmount} has been processed successfully.`,
+                    [
+                      {
+                        text: 'OK',
+                        onPress: () => onPaymentComplete(),
+                      },
+                    ],
+                  );
+                } else {
+                  throw new Error(result.error || 'Payment failed');
+                }
+              } catch (error) {
+                console.error('Payment error:', error);
+                Alert.alert(
+                  'Payment Failed',
+                  error.message ||
+                    'Failed to process payment. Please try again.',
+                );
+              }
+            },
+          },
+        ],
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  // Helper function to safely get bill details
+  const getBillDetail = (field, defaultValue = '') => {
+    return bill[field] || bill.originalBill?.[field] || defaultValue;
+  };
+
+  // Format detailed items for display
+  const formatDetailedItems = () => {
+    const items = bill.detailedItems || bill.originalBill?.order_items || [];
+    if (Array.isArray(items)) {
+      return items;
+    }
+    // If items is a string, try to parse or create a simple item
+    return [
+      {
+        name: bill.items || 'Items',
+        quantity: '1 unit',
+        price: bill.totalAmount || 0,
+      },
+    ];
   };
 
   return (
@@ -52,18 +141,24 @@ export default function BillDescriptionActive({
           </View>
 
           {/* Items List */}
-          {bill.detailedItems.map((item, index) => (
+          {formatDetailedItems().map((item, index) => (
             <View key={index} style={styles.itemRow}>
               <View style={styles.itemLeft}>
                 <View style={styles.itemIcon}>
                   <Icon name="cube-outline" size={24} color="#FF8C42" />
                 </View>
                 <View>
-                  <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={styles.itemQuantity}>{item.quantity}</Text>
+                  <Text style={styles.itemName}>
+                    {item.name || item.item_name || 'Item'}
+                  </Text>
+                  <Text style={styles.itemQuantity}>
+                    {item.quantity || item.qty || '1 unit'}
+                  </Text>
                 </View>
               </View>
-              <Text style={styles.itemPrice}>₹{item.price}</Text>
+              <Text style={styles.itemPrice}>
+                ₹{item.price || item.amount || 0}
+              </Text>
             </View>
           ))}
         </View>
@@ -78,17 +173,23 @@ export default function BillDescriptionActive({
         <View style={styles.paymentDetailsCard}>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Mobile No. :</Text>
-            <Text style={styles.detailValue}>{bill.mobile}</Text>
+            <Text style={styles.detailValue}>
+              {getBillDetail('mobile', '+91 XXXXXXXXXX')}
+            </Text>
           </View>
 
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Wallet Amount :</Text>
-            <Text style={styles.detailValue}>₹ 0.00</Text>
+            <Text style={styles.detailValue}>
+              ₹ {getBillDetail('walletAmount', '0.00')}
+            </Text>
           </View>
 
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Total Amount :</Text>
-            <Text style={styles.detailValue}>₹ {bill.totalAmount} /-</Text>
+            <Text style={styles.detailValue}>
+              ₹ {getBillDetail('totalAmount', '0')} /-
+            </Text>
           </View>
 
           <View style={styles.detailRow}>
@@ -103,44 +204,64 @@ export default function BillDescriptionActive({
 
           <View style={styles.paymentRow}>
             <Text style={styles.paymentLabel}>Order Amount</Text>
-            <Text style={styles.paymentValue}>+₹{bill.orderAmount}rs</Text>
+            <Text style={styles.paymentValue}>
+              +₹
+              {getBillDetail('orderAmount', getBillDetail('totalAmount', '0'))}
+              rs
+            </Text>
           </View>
 
           <View style={styles.paymentRow}>
             <Text style={styles.paymentLabel}>Order Saving</Text>
-            <Text style={styles.paymentValue}>{bill.orderSaving}rs</Text>
+            <Text style={styles.paymentValue}>
+              {getBillDetail('orderSaving', '0')}rs
+            </Text>
           </View>
 
           <View style={styles.divider} />
 
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Total :</Text>
-            <Text style={styles.totalValue}>₹ {bill.totalAmount}</Text>
+            <Text style={styles.totalValue}>
+              ₹ {getBillDetail('totalAmount', '0')}
+            </Text>
           </View>
         </View>
 
         {/* Savings Banner */}
-        <View style={styles.savingsBanner}>
-          <Icon name="trophy" size={20} color="#FF8C42" />
-          <Text style={styles.savingsText}>
-            Cheers! You Saved ₹ {bill.savedAmount}.00
-          </Text>
-        </View>
+        {getBillDetail('savedAmount', '0') !== '0' && (
+          <View style={styles.savingsBanner}>
+            <Icon name="trophy" size={20} color="#FF8C42" />
+            <Text style={styles.savingsText}>
+              Cheers! You Saved ₹ {getBillDetail('savedAmount', '0')}.00
+            </Text>
+          </View>
+        )}
       </ScrollView>
 
       {/* Bottom Payment Bar */}
       <View style={styles.bottomBar}>
         <View style={styles.priceContainer}>
-          <Text style={styles.priceAmount}>₹ {bill.totalAmount}.00</Text>
+          <Text style={styles.priceAmount}>
+            ₹ {getBillDetail('totalAmount', '0')}.00
+          </Text>
           <TouchableOpacity>
             <Text style={styles.viewDetails}>View details</Text>
           </TouchableOpacity>
         </View>
         <TouchableOpacity
-          style={styles.proceedButton}
+          style={[
+            styles.proceedButton,
+            isProcessingPayment && styles.proceedButtonDisabled,
+          ]}
           onPress={handleProceedToPay}
+          disabled={isProcessingPayment}
         >
-          <Text style={styles.proceedButtonText}>Proceed To Pay</Text>
+          {isProcessingPayment ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.proceedButtonText}>Proceed To Pay</Text>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -374,5 +495,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     fontWeight: 'bold',
+  },
+  proceedButtonDisabled: {
+    backgroundColor: '#ccc',
+    opacity: 0.7,
   },
 });

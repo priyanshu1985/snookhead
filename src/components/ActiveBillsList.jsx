@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,108 +8,34 @@ import {
   FlatList,
   StatusBar,
   TextInput,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
+import { API_URL } from '../config';
 
-// Sample active bills data
-const activeBillsData = [
-  {
-    id: '1',
-    date: '02/08/2025',
-    customerName: 'Amit sharma',
-    items: 'Table tennis + Food+ Cigarette',
-    mobile: '+91 9999999999',
-    billNumber: 'T2 S0176',
-    amount: '₹1,600/-',
-    status: 'Unpaid',
-    detailedItems: [
-      { name: 'Snooker', quantity: '5 Frame', price: 730 },
-      { name: 'Cigarette', quantity: '2 Qty', price: 170 },
-      { name: 'Pasta', quantity: '1 Qty', price: 140 },
-    ],
-    orderAmount: 2400,
-    orderSaving: -110,
-    totalAmount: 2370,
-    savedAmount: 110,
-  },
-  {
-    id: '2',
-    date: '02/08/2025',
-    customerName: 'Jon Deo',
-    items: 'Pool + PS5 + Cigarette+ beverages',
-    mobile: '+91 9999999999',
-    billNumber: 'T5 S0816',
-    amount: '₹2,300/-',
-    status: 'Unpaid',
-    detailedItems: [
-      { name: 'Pool', quantity: '3 Frame', price: 450 },
-      { name: 'PS5', quantity: '2 Hours', price: 600 },
-      { name: 'Cigarette', quantity: '3 Qty', price: 255 },
-      { name: 'Beverages', quantity: '4 Qty', price: 200 },
-    ],
-    orderAmount: 2400,
-    orderSaving: -100,
-    totalAmount: 2300,
-    savedAmount: 100,
-  },
-  {
-    id: '3',
-    date: '02/08/2025',
-    customerName: 'Amit sharma',
-    items: 'Table tennis + Food+ Cigarette',
-    mobile: '+91 9999999999',
-    billNumber: 'T1 S0901',
-    amount: '₹3,100/-',
-    status: 'Unpaid',
-    detailedItems: [
-      { name: 'Table Tennis', quantity: '2 Hours', price: 400 },
-      { name: 'Food', quantity: '5 Items', price: 850 },
-      { name: 'Cigarette', quantity: '5 Qty', price: 425 },
-    ],
-    orderAmount: 3200,
-    orderSaving: -100,
-    totalAmount: 3100,
-    savedAmount: 100,
-  },
-  {
-    id: '4',
-    date: '02/08/2025',
-    customerName: 'Amit sharma',
-    items: 'Table tennis + Food+ Cigarette',
-    mobile: '+91 9999999999',
-    billNumber: 'T1 S0601',
-    amount: '₹3,100/-',
-    status: 'Unpaid',
-    detailedItems: [
-      { name: 'Snooker', quantity: '4 Frame', price: 800 },
-      { name: 'Food', quantity: '3 Items', price: 420 },
-      { name: 'Cigarette', quantity: '2 Qty', price: 170 },
-    ],
-    orderAmount: 3200,
-    orderSaving: -100,
-    totalAmount: 3100,
-    savedAmount: 100,
-  },
-  {
-    id: '5',
-    date: '02/08/2025',
-    customerName: 'Jon Deo',
-    items: 'Pool + PS5 + Cigarette+ beverages',
-    mobile: '+91 9999999999',
-    billNumber: 'T5 S0816',
-    amount: '₹2,300/-',
-    status: 'Unpaid',
-    detailedItems: [
-      { name: 'Pool', quantity: '5 Frame', price: 750 },
-      { name: 'Cigarette', quantity: '3 Qty', price: 255 },
-      { name: 'Beverages', quantity: '5 Qty', price: 250 },
-    ],
-    orderAmount: 2400,
-    orderSaving: -145,
-    totalAmount: 2300,
-    savedAmount: 145,
-  },
-];
+// Helper function to get auth token
+async function getAuthToken() {
+  try {
+    return await AsyncStorage.getItem('authToken');
+  } catch {
+    return null;
+  }
+}
+
+// Helper function to format date
+const formatDate = dateString => {
+  const date = new Date(dateString);
+  return date
+    .toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
+    .replace(/\//g, '/');
+};
 
 export default function ActiveBillsList({
   onShowHistory,
@@ -117,6 +43,96 @@ export default function ActiveBillsList({
   navigation,
 }) {
   const [searchText, setSearchText] = useState('');
+  const [bills, setBills] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+
+  // Fetch active bills from backend
+  const fetchActiveBills = async () => {
+    const token = await getAuthToken();
+    if (!token) {
+      setError('Please login first');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(`${API_URL}/api/bills`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      const billsData = Array.isArray(result)
+        ? result
+        : result.bills || result.data || [];
+
+      // Filter active bills (unpaid status)
+      const activeBills = billsData
+        .filter(bill => bill.status !== 'paid')
+        .map(bill => ({
+          id: bill.id.toString(),
+          date: formatDate(bill.createdAt || bill.created_at),
+          customerName:
+            bill.customer_name || bill.customerName || 'Unknown Customer',
+          items: bill.items_summary || bill.itemsSummary || 'Items',
+          mobile: bill.customer_phone || bill.mobile || '+91 XXXXXXXXXX',
+          billNumber: bill.bill_number || bill.billNumber || `B${bill.id}`,
+          amount: `₹${
+            bill.total_amount || bill.totalAmount || bill.amount || 0
+          }/-`,
+          status: bill.status === 'paid' ? 'Paid' : 'Unpaid',
+          detailedItems: bill.order_items || bill.orderItems || [],
+          orderAmount:
+            bill.order_amount || bill.orderAmount || bill.total_amount || 0,
+          totalAmount:
+            bill.total_amount || bill.totalAmount || bill.amount || 0,
+          originalBill: bill, // Keep original data for detailed view
+        }));
+
+      setBills(activeBills);
+      console.log('Fetched active bills:', activeBills);
+    } catch (err) {
+      console.error('Error fetching active bills:', err);
+      setError('Failed to load active bills');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch data when component mounts
+  useEffect(() => {
+    fetchActiveBills();
+  }, []);
+
+  // Refetch data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchActiveBills();
+    }, []),
+  );
+
+  // Filter bills based on search text
+  const filteredBills = bills.filter(bill => {
+    if (!searchText) return true;
+    const searchLower = searchText.toLowerCase();
+    return (
+      bill.customerName.toLowerCase().includes(searchLower) ||
+      bill.billNumber.toLowerCase().includes(searchLower) ||
+      bill.items.toLowerCase().includes(searchLower) ||
+      bill.mobile.includes(searchText)
+    );
+  });
 
   const renderBillCard = ({ item }) => (
     <TouchableOpacity style={styles.billCard} onPress={() => onBillClick(item)}>
@@ -178,18 +194,45 @@ export default function ActiveBillsList({
 
         <TouchableOpacity style={styles.dateSelector}>
           <Icon name="calendar-outline" size={18} color="#999" />
-          <Text style={styles.dateSelectorText}>02/08/2025</Text>
+          <Text style={styles.dateSelectorText}>
+            {formatDate(selectedDate)}
+          </Text>
         </TouchableOpacity>
       </View>
 
       {/* Bills List */}
-      <FlatList
-        data={activeBillsData}
-        keyExtractor={item => item.id}
-        renderItem={renderBillCard}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-      />
+      {loading ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#FF8C42" />
+          <Text style={styles.loadingText}>Loading active bills...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.centerContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={fetchActiveBills}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : filteredBills.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Icon name="receipt-outline" size={64} color="#ccc" />
+          <Text style={styles.emptyText}>No active bills found</Text>
+          <Text style={styles.emptySubText}>
+            All bills have been paid or no bills exist yet.
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredBills}
+          keyExtractor={item => item.id}
+          renderItem={renderBillCard}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -339,5 +382,44 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#fff',
     fontWeight: 'bold',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF4444',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#FF8C42',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  emptySubText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
   },
 });

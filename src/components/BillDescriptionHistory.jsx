@@ -13,6 +13,11 @@ import Icon from 'react-native-vector-icons/Ionicons';
 export default function BillDescriptionHistory({ bill, onBack }) {
   if (!bill) return null;
 
+  // Helper function to safely get bill details
+  const getBillDetail = (field, defaultValue = '') => {
+    return bill[field] || bill.originalBill?.[field] || defaultValue;
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F5F5F5" />
@@ -39,37 +44,49 @@ export default function BillDescriptionHistory({ bill, onBack }) {
         <View style={styles.detailsCard}>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Date :</Text>
-            <Text style={styles.detailValue}>{bill.date}</Text>
+            <Text style={styles.detailValue}>{getBillDetail('date')}</Text>
           </View>
 
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Name :</Text>
-            <Text style={styles.detailValue}>{bill.customerName}</Text>
+            <Text style={styles.detailValue}>
+              {getBillDetail('customerName', 'Unknown Customer')}
+            </Text>
           </View>
 
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Summary :</Text>
-            <Text style={styles.detailValue}>{bill.summary}</Text>
+            <Text style={styles.detailValue}>
+              {getBillDetail('summary', getBillDetail('items', 'Items'))}
+            </Text>
           </View>
 
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Mobile No. :</Text>
-            <Text style={styles.detailValue}>{bill.mobile}</Text>
+            <Text style={styles.detailValue}>
+              {getBillDetail('mobile', '+91 XXXXXXXXXX')}
+            </Text>
           </View>
 
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Wallet Amount :</Text>
-            <Text style={styles.detailValue}>{bill.walletAmount}</Text>
+            <Text style={styles.detailValue}>
+              {getBillDetail('walletAmount', '₹0.00')}
+            </Text>
           </View>
 
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Total Amount :</Text>
-            <Text style={styles.detailValue}>{bill.totalAmount}</Text>
+            <Text style={styles.detailValue}>
+              {getBillDetail('totalAmount', '₹0 /-')}
+            </Text>
           </View>
 
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Status :</Text>
-            <Text style={styles.statusPaid}>{bill.status}</Text>
+            <Text style={styles.statusPaid}>
+              {getBillDetail('status', 'Paid')}
+            </Text>
           </View>
         </View>
       </ScrollView>
