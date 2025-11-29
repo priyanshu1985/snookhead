@@ -137,14 +137,14 @@ export default function ActiveBillsList({
   const renderBillCard = ({ item }) => (
     <TouchableOpacity style={styles.billCard} onPress={() => onBillClick(item)}>
       <View style={styles.cardHeader}>
-        <View>
+        <View style={styles.cardLeft}>
           <Text style={styles.date}>{item.date}</Text>
           <Text style={styles.customerName}>{item.customerName}</Text>
           <Text style={styles.items}>{item.items}</Text>
           <Text style={styles.mobile}>{item.mobile}</Text>
         </View>
         <View style={styles.cardRight}>
-          <Text style={styles.billLabel}>Bill 1</Text>
+          <Text style={styles.billLabel}>Bill</Text>
           <Text style={styles.billNumber}>{item.billNumber}</Text>
           <Text style={styles.amount}>{item.amount}</Text>
           <View style={styles.statusBadge}>
@@ -321,62 +321,80 @@ const styles = StyleSheet.create({
   billCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
+    padding: 18,
     marginBottom: 12,
     elevation: 2,
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
   cardHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    minHeight: 80,
+  },
+  cardLeft: {
+    flex: 1,
+    paddingRight: 16,
     justifyContent: 'space-between',
   },
   date: {
     fontSize: 12,
     color: '#999',
-    marginBottom: 4,
+    marginBottom: 6,
+    fontWeight: '400',
   },
   customerName: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#333',
-    marginBottom: 4,
+    marginBottom: 6,
+    lineHeight: 22,
   },
   items: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#666',
-    marginBottom: 4,
+    marginBottom: 6,
+    lineHeight: 18,
   },
   mobile: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#999',
+    fontWeight: '400',
   },
   cardRight: {
     alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    minWidth: 120,
   },
   billLabel: {
     fontSize: 11,
     color: '#999',
-    marginBottom: 2,
+    marginBottom: 4,
+    fontWeight: '400',
   },
   billNumber: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#FF8C42',
-    marginBottom: 8,
+    marginBottom: 10,
+    textAlign: 'right',
   },
   amount: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#333',
-    marginBottom: 8,
+    marginBottom: 10,
+    textAlign: 'right',
   },
   statusBadge: {
     backgroundColor: '#FF3B30',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignSelf: 'flex-end',
   },
   statusText: {
     fontSize: 12,
