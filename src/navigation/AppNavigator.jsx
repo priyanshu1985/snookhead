@@ -24,6 +24,7 @@ import UpgradeSubscription from '../screens/UpgradeSubscription';
 import ReportBugs from '../screens/ReportBugs';
 import PrivacyPolicy from '../screens/PrivacyPolicy';
 import TableBookingScreen from '../screens/TableBookingScreen';
+import TableBookingOrders from '../components/TableBookingOrders';
 import PaymentGateway from '../screens/PaymentGateway';
 
 const Tab = createBottomTabNavigator(); // Creates bottom tabs
@@ -137,6 +138,10 @@ export default function AppNavigator() {
         <Stack.Screen
           name="TableBookingScreen"
           component={TableBookingScreen}
+        />
+        <Stack.Screen
+          name="TableBookingOrders"
+          component={TableBookingOrders}
         />
       </Stack.Navigator>
     </NavigationContainer>

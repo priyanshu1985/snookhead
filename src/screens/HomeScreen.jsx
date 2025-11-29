@@ -1,84 +1,135 @@
-import React, { useState, useRef } from 'react';
-import { View, FlatList, Dimensions, StyleSheet, Alert } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View,
+  FlatList,
+  Dimensions,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  Text,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import Header from '../components/Header';
 import HeaderTabs from '../components/HeaderTabs';
 import TableCard from '../components/TableCard';
+import { API_URL } from '../config';
 
 const { width } = Dimensions.get('window');
 
-const initialGameData = [
-  {
-    name: 'Snooker',
-    color: '#4A7C59',
-    tables: [
-      { id: 1, name: 'T1', price: '₹200/hr', status: 'available' },
-      { id: 2, name: 'T2', price: '₹200/hr', status: 'available' },
-      {
-        id: 3,
-        name: 'T3',
-        price: '₹200/hr',
-        status: 'occupied',
-        time: '5 min',
-      },
-      { id: 4, name: 'T4', price: '₹200/hr', status: 'available' },
-      { id: 5, name: 'T5', price: '₹200/hr', status: 'available' },
-      {
-        id: 6,
-        name: 'T6',
-        price: '₹200/hr',
-        status: 'occupied',
-        time: '31 min',
-      },
-      {
-        id: 7,
-        name: 'T7',
-        price: '₹200/hr',
-        status: 'occupied',
-        time: '17 min',
-      },
-      { id: 8, name: 'T8', price: '₹200/hr', status: 'available' },
-      { id: 9, name: 'T9', price: '₹200/hr', status: 'available' },
-      { id: 10, name: 'T10', price: '₹200/hr', status: 'available' },
-    ],
-  },
-  {
-    name: 'Pool',
-    color: '#2E5F8A',
-    tables: [
-      {
-        id: 1,
-        name: 'T1',
-        price: '₹250/hr',
-        status: 'occupied',
-        time: '8 min',
-      },
-      { id: 2, name: 'T2', price: '₹250/hr', status: 'available' },
-      { id: 3, name: 'T3', price: '₹250/hr', status: 'available' },
-      { id: 4, name: 'T4', price: '₹250/hr', status: 'available' },
-      {
-        id: 5,
-        name: 'T5',
-        price: '₹250/hr',
-        status: 'occupied',
-        time: '4 min',
-      },
-      { id: 6, name: 'T6', price: '₹250/hr', status: 'available' },
-      {
-        id: 7,
-        name: 'T7',
-        price: '₹250/hr',
-        status: 'occupied',
-        time: '27 min',
-      },
-      { id: 8, name: 'T8', price: '₹250/hr', status: 'available' },
-    ],
-  },
-];
+// Game colors for different game types
+const GAME_COLORS = {
+  snooker: '#4A7C59',
+  pool: '#2E5F8A',
+  billiards: '#8B4513',
+  default: '#FF8C42',
+};
+
+async function getAuthToken() {
+  try {
+    return await AsyncStorage.getItem('authToken');
+  } catch {
+    return null;
+  }
+}
 
 export default function HomeScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState(0);
-  const [gameData, setGameData] = useState(initialGameData);
+  const [gameData, setGameData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const flatListRef = useRef(null);
+
+  // Fetch games and tables from backend
+  const fetchGamesAndTables = async () => {
+    const token = await getAuthToken();
+    if (!token) {
+      setError('Please login first');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Fetch games
+      const gamesResponse = await fetch(`${API_URL}/api/games`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const gamesResult = await gamesResponse.json();
+      const games = Array.isArray(gamesResult)
+        ? gamesResult
+        : gamesResult.games || gamesResult.data || [];
+
+      // Fetch tables
+      const tablesResponse = await fetch(`${API_URL}/api/tables`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const tablesResult = await tablesResponse.json();
+      const tables = Array.isArray(tablesResult)
+        ? tablesResult
+        : tablesResult.tables || tablesResult.data || [];
+
+      console.log('Fetched games:', games);
+      console.log('Fetched tables:', tables);
+
+      // Transform data to match HomeScreen structure
+      const transformedGameData = games
+        .map(game => {
+          const gameId = game.game_id || game.id;
+          const gameName = game.gamename || game.game_name || game.name;
+
+          // Filter tables for this game
+          const gameTables = tables
+            .filter(table => {
+              const tableGameId = table.game_id || table.gameid;
+              return String(tableGameId) === String(gameId);
+            })
+            .map(table => ({
+              id: table.id,
+              name: table.name || `T${table.id}`,
+              price: `₹${table.pricePerMin || table.price_per_min || 200}/hr`,
+              status: table.status || 'available',
+              time: table.activeTime || null, // For occupied tables
+            }));
+
+          return {
+            id: gameId,
+            name: gameName,
+            color: GAME_COLORS[gameName.toLowerCase()] || GAME_COLORS.default,
+            tables: gameTables,
+          };
+        })
+        .filter(game => game.tables.length > 0); // Only include games that have tables
+
+      setGameData(transformedGameData);
+      console.log('Transformed game data:', transformedGameData);
+    } catch (err) {
+      console.error('Error fetching games and tables:', err);
+      setError('Failed to load games and tables');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch data when component mounts
+  useEffect(() => {
+    fetchGamesAndTables();
+  }, []);
+
+  // Refetch data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchGamesAndTables();
+    }, []),
+  );
 
   const handleTabPress = index => {
     setActiveTab(index);
@@ -131,6 +182,43 @@ export default function HomeScreen({ navigation }) {
     </View>
   );
 
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Header navigation={navigation} />
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#FF8C42" />
+          <Text style={styles.loadingText}>Loading games and tables...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Header navigation={navigation} />
+        <View style={styles.centerContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (gameData.length === 0) {
+    return (
+      <View style={styles.container}>
+        <Header navigation={navigation} />
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyText}>No games or tables available.</Text>
+          <Text style={styles.emptySubText}>
+            Please add games and tables in Setup Menu.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Header navigation={navigation} />
@@ -144,7 +232,7 @@ export default function HomeScreen({ navigation }) {
       <FlatList
         ref={flatListRef}
         data={gameData}
-        keyExtractor={item => item.name}
+        keyExtractor={item => String(item.id)}
         renderItem={renderGame}
         horizontal
         pagingEnabled
@@ -163,5 +251,33 @@ const styles = StyleSheet.create({
   row: {
     justifyContent: 'space-between',
     marginBottom: 16,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF4444',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptySubText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
   },
 });

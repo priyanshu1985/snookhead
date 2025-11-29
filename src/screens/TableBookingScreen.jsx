@@ -37,24 +37,42 @@ export default function TableBookingScreen({ route, navigation }) {
   const [selectedFood, setSelectedFood] = useState([]);
   const [showInstructionModal, setShowInstructionModal] = useState(false);
   const [foodInstructions, setFoodInstructions] = useState('');
+  const [showTimeModal, setShowTimeModal] = useState(false);
+  const [selectedTime, setSelectedTime] = useState('12:00 PM');
+  const [timerDuration, setTimerDuration] = useState('60');
+  const [selectedFrame, setSelectedFrame] = useState('1');
 
   // ===== DATA AND CONSTANTS AFTER HOOKS =====
-  const { table, gameType, color } = route.params;
+  const { table, gameType, color, selectedFoodItems } = route.params || {};
   const dates = getNextDates();
 
-  const foodOptions = [
-    { id: 1, name: 'Food', icon: '🍔' },
-    { id: 2, name: 'Fastfood', icon: '🍕' },
-    { id: 3, name: 'Beverages', icon: '🥤' },
-  ];
+  // Add safety checks for undefined parameters
+  const safeTable = table || { name: 'Unknown Table', id: 'unknown' };
+  const safeGameType = gameType || 'Game';
+
+  // Update selectedFood when coming back from TableBookingOrders
+  React.useEffect(() => {
+    if (selectedFoodItems && selectedFoodItems.length > 0) {
+      console.log(
+        'Selected food items received:',
+        JSON.stringify(selectedFoodItems, null, 2),
+      );
+      setSelectedFood(selectedFoodItems);
+    }
+  }, [selectedFoodItems]);
+
+  const foodOptions = [{ id: 1, name: 'Food', icon: '🍔' }];
 
   // ===== HANDLERS =====
-  const toggleFoodSelection = id => {
-    if (selectedFood.includes(id)) {
-      setSelectedFood(selectedFood.filter(item => item !== id));
-    } else {
-      setSelectedFood([...selectedFood, id]);
-    }
+  const handleFoodSelection = () => {
+    // Navigate to TableBookingOrders component
+    navigation.navigate('TableBookingOrders', {
+      tableId: safeTable.id,
+      tableName: safeTable.name,
+      table: safeTable,
+      gameType: safeGameType,
+      color: color,
+    });
   };
 
   const handleAddInstructions = () => {
@@ -69,12 +87,45 @@ export default function TableBookingScreen({ route, navigation }) {
     setShowInstructionModal(false);
   };
 
+  const handleTimeOptionSelect = option => {
+    setSelectedTimeOption(option);
+    if (
+      option === 'Set Time' ||
+      option === 'Timer' ||
+      option === 'Select Frame'
+    ) {
+      setShowTimeModal(true);
+    }
+  };
+
+  const handleTimeConfirm = () => {
+    setShowTimeModal(false);
+  };
+
+  const getTimeDisplayText = () => {
+    switch (selectedTimeOption) {
+      case 'Set Time':
+        return `Set Time: ${selectedTime}`;
+      case 'Timer':
+        return `Timer: ${timerDuration} min`;
+      case 'Select Frame':
+        return `Frame: ${selectedFrame}`;
+      default:
+        return selectedTimeOption;
+    }
+  };
+
   const handleBook = () => {
     navigation.navigate('Scanner', {
-      table,
-      gameType,
+      table: safeTable,
+      gameType: safeGameType,
       date: dates[selectedDate].label,
       timeOption: selectedTimeOption,
+      timeDetails: {
+        selectedTime,
+        timerDuration,
+        selectedFrame,
+      },
       food: selectedFood,
       instructions: foodInstructions,
     });
@@ -87,13 +138,13 @@ export default function TableBookingScreen({ route, navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="chevron-back" size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{gameType}</Text>
+        <Text style={styles.headerTitle}>{safeGameType}</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.tableBadge}>
-          <Text style={styles.tableName}>{table.name} S0176</Text>
+          <Text style={styles.tableName}>{safeTable.name} S0176</Text>
         </View>
 
         <Text style={styles.sectionTitle}>Select date</Text>
@@ -130,7 +181,7 @@ export default function TableBookingScreen({ route, navigation }) {
               styles.timeOption,
               selectedTimeOption === 'Set Time' && styles.timeOptionActive,
             ]}
-            onPress={() => setSelectedTimeOption('Set Time')}
+            onPress={() => handleTimeOptionSelect('Set Time')}
           >
             <View
               style={[
@@ -146,7 +197,7 @@ export default function TableBookingScreen({ route, navigation }) {
               styles.timeOption,
               selectedTimeOption === 'Timer' && styles.timeOptionActive,
             ]}
-            onPress={() => setSelectedTimeOption('Timer')}
+            onPress={() => handleTimeOptionSelect('Timer')}
           >
             <View
               style={[
@@ -162,7 +213,7 @@ export default function TableBookingScreen({ route, navigation }) {
               styles.timeOption,
               selectedTimeOption === 'Select Frame' && styles.timeOptionActive,
             ]}
-            onPress={() => setSelectedTimeOption('Select Frame')}
+            onPress={() => handleTimeOptionSelect('Select Frame')}
           >
             <View
               style={[
@@ -174,6 +225,12 @@ export default function TableBookingScreen({ route, navigation }) {
             <Text style={styles.timeOptionText}>Select Frame</Text>
           </TouchableOpacity>
         </View>
+
+        {selectedTimeOption && (
+          <View style={styles.timeDetailsContainer}>
+            <Text style={styles.timeDetailsText}>{getTimeDisplayText()}</Text>
+          </View>
+        )}
 
         <View style={styles.foodHeader}>
           <Text style={styles.sectionTitle}>Add Food</Text>
@@ -188,17 +245,66 @@ export default function TableBookingScreen({ route, navigation }) {
           {foodOptions.map(food => (
             <TouchableOpacity
               key={food.id}
-              style={[
-                styles.foodButton,
-                selectedFood.includes(food.id) && styles.foodButtonActive,
-              ]}
-              onPress={() => toggleFoodSelection(food.id)}
+              style={styles.foodButtonSingle}
+              onPress={handleFoodSelection}
             >
               <Text style={styles.foodIcon}>{food.icon}</Text>
               <Text style={styles.foodName}>{food.name}</Text>
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Display selected food items */}
+        {selectedFood.length > 0 && (
+          <View style={styles.selectedFoodContainer}>
+            <Text style={styles.selectedFoodTitle}>Selected Food Items:</Text>
+            {selectedFood.map((item, index) => (
+              <View key={index} style={styles.selectedFoodItem}>
+                <View style={styles.selectedFoodInfo}>
+                  <Text style={styles.selectedFoodName}>
+                    {item.item?.name ||
+                      item.name ||
+                      item.title ||
+                      'Unknown Item'}
+                  </Text>
+                  <Text style={styles.selectedFoodDetails}>
+                    Qty: {item.qty || item.quantity || 1} × ₹
+                    {item.item?.price || item.price || 0} = ₹
+                    {(item.qty || item.quantity || 1) *
+                      (item.item?.price || item.price || 0)}
+                  </Text>
+                </View>
+                <View style={styles.selectedFoodActions}>
+                  <TouchableOpacity
+                    style={styles.removeItemButton}
+                    onPress={() => {
+                      const updatedFood = selectedFood.filter(
+                        (_, i) => i !== index,
+                      );
+                      setSelectedFood(updatedFood);
+                    }}
+                  >
+                    <Icon name="close" size={16} color="#FF6B6B" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+            <View style={styles.selectedFoodTotal}>
+              <Text style={styles.selectedFoodTotalText}>
+                Total Bill: ₹
+                {selectedFood
+                  .reduce(
+                    (total, item) =>
+                      total +
+                      (item.qty || item.quantity || 1) *
+                        (item.item?.price || item.price || 0),
+                    0,
+                  )
+                  .toFixed(2)}
+              </Text>
+            </View>
+          </View>
+        )}
 
         {foodInstructions !== '' && (
           <View style={styles.instructionsPreview}>
@@ -264,6 +370,153 @@ export default function TableBookingScreen({ route, navigation }) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Time Selection Modal */}
+      <Modal
+        visible={showTimeModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowTimeModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {selectedTimeOption === 'Set Time' && 'Set Start Time'}
+                {selectedTimeOption === 'Timer' && 'Set Timer Duration'}
+                {selectedTimeOption === 'Select Frame' && 'Select Frame Count'}
+              </Text>
+              <TouchableOpacity onPress={() => setShowTimeModal(false)}>
+                <Icon name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedTimeOption === 'Set Time' && (
+              <View>
+                <Text style={styles.modalSubtitle}>
+                  Choose your preferred start time
+                </Text>
+                <View style={styles.timePickerContainer}>
+                  {[
+                    '10:00 AM',
+                    '11:00 AM',
+                    '12:00 PM',
+                    '1:00 PM',
+                    '2:00 PM',
+                    '3:00 PM',
+                    '4:00 PM',
+                    '5:00 PM',
+                    '6:00 PM',
+                    '7:00 PM',
+                    '8:00 PM',
+                    '9:00 PM',
+                  ].map(time => (
+                    <TouchableOpacity
+                      key={time}
+                      style={[
+                        styles.timePickerButton,
+                        selectedTime === time && styles.timePickerButtonActive,
+                      ]}
+                      onPress={() => setSelectedTime(time)}
+                    >
+                      <Text
+                        style={[
+                          styles.timePickerText,
+                          selectedTime === time && styles.timePickerTextActive,
+                        ]}
+                      >
+                        {time}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {selectedTimeOption === 'Timer' && (
+              <View>
+                <Text style={styles.modalSubtitle}>
+                  Set playing duration in minutes
+                </Text>
+                <View style={styles.timerInputContainer}>
+                  <TextInput
+                    style={styles.timerInput}
+                    value={timerDuration}
+                    onChangeText={setTimerDuration}
+                    placeholder="60"
+                    keyboardType="numeric"
+                    placeholderTextColor="#999"
+                  />
+                  <Text style={styles.timerLabel}>minutes</Text>
+                </View>
+                <View style={styles.quickTimerOptions}>
+                  {['30', '60', '90', '120'].map(duration => (
+                    <TouchableOpacity
+                      key={duration}
+                      style={[
+                        styles.quickTimerButton,
+                        timerDuration === duration &&
+                          styles.quickTimerButtonActive,
+                      ]}
+                      onPress={() => setTimerDuration(duration)}
+                    >
+                      <Text
+                        style={[
+                          styles.quickTimerText,
+                          timerDuration === duration &&
+                            styles.quickTimerTextActive,
+                        ]}
+                      >
+                        {duration}m
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {selectedTimeOption === 'Select Frame' && (
+              <View>
+                <Text style={styles.modalSubtitle}>
+                  How many frames will you play?
+                </Text>
+                <View style={styles.frameOptionsContainer}>
+                  {['1', '3', '5', '7', '9', '11'].map(frame => (
+                    <TouchableOpacity
+                      key={frame}
+                      style={[
+                        styles.frameButton,
+                        selectedFrame === frame && styles.frameButtonActive,
+                      ]}
+                      onPress={() => setSelectedFrame(frame)}
+                    >
+                      <Text
+                        style={[
+                          styles.frameButtonText,
+                          selectedFrame === frame &&
+                            styles.frameButtonTextActive,
+                        ]}
+                      >
+                        {frame}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={handleTimeConfirm}
+            >
+              <Text style={styles.saveButtonText}>Confirm</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -319,6 +572,19 @@ const styles = StyleSheet.create({
   },
   radioCircleActive: { borderColor: '#FF9500', backgroundColor: '#FF9500' },
   timeOptionText: { fontSize: 14, color: '#333' },
+  timeDetailsContainer: {
+    backgroundColor: '#FFF',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF9500',
+  },
+  timeDetailsText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
   foodHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -328,7 +594,7 @@ const styles = StyleSheet.create({
   addInstructionLink: { color: '#FF9500', fontSize: 13, fontWeight: '600' },
   foodOptions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     marginBottom: 20,
   },
   foodButton: {
@@ -340,6 +606,15 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     marginHorizontal: 4,
+  },
+  foodButtonSingle: {
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#DDD',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    width: 120,
   },
   foodButtonActive: { borderColor: '#FF9500', borderWidth: 2 },
   foodIcon: { fontSize: 32, marginBottom: 8 },
@@ -402,4 +677,188 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+
+  // Time picker styles
+  timePickerContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 20,
+  },
+  timePickerButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#DDD',
+    backgroundColor: '#FFF',
+  },
+  timePickerButtonActive: {
+    backgroundColor: '#FF9500',
+    borderColor: '#FF9500',
+  },
+  timePickerText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  timePickerTextActive: {
+    color: '#FFF',
+    fontWeight: '600',
+  },
+
+  // Timer input styles
+  timerInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  timerInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+  },
+  timerLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 8,
+  },
+  quickTimerOptions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 20,
+  },
+  quickTimerButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#DDD',
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+  },
+  quickTimerButtonActive: {
+    backgroundColor: '#FF9500',
+    borderColor: '#FF9500',
+  },
+  quickTimerText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  quickTimerTextActive: {
+    color: '#FFF',
+    fontWeight: '600',
+  },
+
+  // Frame selection styles
+  frameOptionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 20,
+    justifyContent: 'center',
+  },
+  frameButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: '#DDD',
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  frameButtonActive: {
+    backgroundColor: '#FF9500',
+    borderColor: '#FF9500',
+  },
+  frameButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  frameButtonTextActive: {
+    color: '#FFF',
+  },
+
+  // Selected food items styles
+  selectedFoodContainer: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  selectedFoodTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  selectedFoodItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    backgroundColor: '#FAFAFA',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  selectedFoodInfo: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  selectedFoodActions: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeItemButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#FFE5E5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedFoodName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  selectedFoodDetails: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '500',
+  },
+  selectedFoodTotal: {
+    paddingTop: 16,
+    paddingHorizontal: 8,
+    marginTop: 12,
+    borderTopWidth: 2,
+    borderTopColor: '#FF9500',
+    backgroundColor: '#FFF8F5',
+    borderRadius: 8,
+  },
+  selectedFoodTotalText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FF9500',
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
 });
