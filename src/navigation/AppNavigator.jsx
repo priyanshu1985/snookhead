@@ -26,6 +26,7 @@ import PrivacyPolicy from '../screens/PrivacyPolicy';
 import TableBookingScreen from '../screens/TableBookingScreen';
 import TableBookingOrders from '../components/TableBookingOrders';
 import PaymentGateway from '../screens/PaymentGateway';
+import AfterBooking from '../screens/AfterBooking';
 
 const Tab = createBottomTabNavigator(); // Creates bottom tabs
 const Stack = createNativeStackNavigator(); // Creates stack navigation
@@ -143,6 +144,7 @@ export default function AppNavigator() {
           name="TableBookingOrders"
           component={TableBookingOrders}
         />
+        <Stack.Screen name="AfterBooking" component={AfterBooking} />
       </Stack.Navigator>
     </NavigationContainer>
   );

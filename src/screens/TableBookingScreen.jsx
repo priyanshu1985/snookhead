@@ -11,8 +11,12 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../config';
 
 // Move OUTSIDE component
 const getNextDates = () => {
@@ -41,6 +45,7 @@ export default function TableBookingScreen({ route, navigation }) {
   const [selectedTime, setSelectedTime] = useState('12:00 PM');
   const [timerDuration, setTimerDuration] = useState('60');
   const [selectedFrame, setSelectedFrame] = useState('1');
+  const [isBooking, setIsBooking] = useState(false);
 
   // ===== DATA AND CONSTANTS AFTER HOOKS =====
   const { table, gameType, color, selectedFoodItems } = route.params || {};
@@ -115,20 +120,138 @@ export default function TableBookingScreen({ route, navigation }) {
     }
   };
 
-  const handleBook = () => {
-    navigation.navigate('Scanner', {
-      table: safeTable,
-      gameType: safeGameType,
-      date: dates[selectedDate].label,
-      timeOption: selectedTimeOption,
-      timeDetails: {
-        selectedTime,
-        timerDuration,
-        selectedFrame,
-      },
-      food: selectedFood,
-      instructions: foodInstructions,
-    });
+  const handleBook = async () => {
+    try {
+      setIsBooking(true);
+
+      // Validation
+      if (!safeTable.id) {
+        Alert.alert('Error', 'Invalid table selected');
+        return;
+      }
+
+      // Check if table appears to be occupied in frontend
+      if (safeTable.status === 'occupied' || safeTable.status === 'reserved') {
+        Alert.alert(
+          'Table Not Available',
+          'This table appears to be occupied. Please refresh and try again.',
+          [
+            { text: 'OK' },
+            {
+              text: 'Go Back',
+              onPress: () => navigation.goBack(),
+            },
+          ],
+        );
+        return;
+      }
+
+      // Get auth token
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) {
+        Alert.alert('Error', 'Please login first');
+        return;
+      }
+
+      // Prepare booking data
+      const bookingData = {
+        table_id: safeTable.id,
+        game_id: safeTable.game_id || safeTable.gameid || 1, // Get game_id from table data
+        user_id: null, // Will be extracted from token on backend
+      };
+
+      console.log('Table object:', safeTable);
+      console.log('Table status:', safeTable.status);
+      console.log('Booking table with data:', bookingData);
+      console.log('API URL:', `${API_URL}/api/activeTables/start`);
+
+      // Start active table session
+      const response = await fetch(`${API_URL}/api/activeTables/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(bookingData),
+      });
+
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+
+      // Get response text first to see what we're actually getting
+      const responseText = await response.text();
+      console.log('Response text:', responseText);
+
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('JSON parse error. Raw response:', responseText);
+        throw new Error(
+          `Server returned invalid response: ${responseText.substring(
+            0,
+            200,
+          )}...`,
+        );
+      }
+
+      if (!response.ok) {
+        let errorMessage =
+          result.error || result.message || 'Failed to book table';
+
+        // Provide specific messages for common errors
+        if (
+          errorMessage.includes('not available') ||
+          errorMessage.includes('not found')
+        ) {
+          errorMessage =
+            'This table is currently not available. It may be occupied or under maintenance.';
+        } else if (
+          errorMessage.includes('reserved') ||
+          errorMessage.includes('occupied')
+        ) {
+          errorMessage =
+            'This table is already occupied. Please select another table.';
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      console.log('Table booked successfully:', result);
+
+      Alert.alert(
+        'Success!',
+        `Table ${safeTable.name} has been booked successfully!`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Small delay to ensure backend processing is complete
+              setTimeout(() => {
+                // Navigate back to Home tab to see the updated table status
+                navigation.navigate('MainTabs', { screen: 'Home' });
+              }, 500);
+            },
+          },
+        ],
+      );
+    } catch (error) {
+      console.error('Booking error:', error);
+      const errorMessage =
+        error.message || 'Could not book the table. Please try again.';
+
+      Alert.alert('Booking Failed', errorMessage, [
+        { text: 'OK' },
+        {
+          text: 'Go Back & Refresh',
+          onPress: () => {
+            navigation.goBack();
+          },
+        },
+      ]);
+    } finally {
+      setIsBooking(false);
+    }
   };
 
   // ===== RENDER =====
@@ -319,8 +442,21 @@ export default function TableBookingScreen({ route, navigation }) {
           </View>
         )}
 
-        <TouchableOpacity style={styles.bookButton} onPress={handleBook}>
-          <Text style={styles.bookButtonText}>Book</Text>
+        <TouchableOpacity
+          style={[styles.bookButton, isBooking && styles.bookButtonDisabled]}
+          onPress={handleBook}
+          disabled={isBooking}
+        >
+          {isBooking ? (
+            <View style={styles.bookButtonLoading}>
+              <ActivityIndicator size="small" color="#FFF" />
+              <Text style={[styles.bookButtonText, { marginLeft: 8 }]}>
+                Booking...
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.bookButtonText}>Book Table</Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
@@ -637,6 +773,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
     marginTop: 20,
+  },
+  bookButtonDisabled: {
+    backgroundColor: '#CCC',
+  },
+  bookButtonLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   bookButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
   newUserText: { color: '#CCC', fontSize: 14, textAlign: 'center' },
