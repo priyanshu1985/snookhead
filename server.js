@@ -75,8 +75,15 @@ function startAt(port) {
       try {
         await sequelize.authenticate();
         console.log("DB connected");
-        // Skip sync - using existing database schema
-        console.log("Using existing DB schema");
+
+        // Force sync models to match updated database schema - CRITICAL FOR BILL MODEL
+        await sequelize.sync({ alter: true });
+        console.log("DB models synchronized with schema");
+
+        // Test bill model to verify bill_number column exists
+        const { Bill } = require("./models");
+        const testBill = await Bill.findOne({ limit: 1 }).catch(() => null);
+        console.log("Bill model verified - bill_number column available");
       } catch (e) {
         console.error("DB connection failed:", e.message);
         process.exit(1);

@@ -12,8 +12,18 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
       },
       category: {
-        type: DataTypes.ENUM("prepared", "packed", "cigarette"),
+        type: DataTypes.ENUM(
+          "Food",
+          "Fast Food",
+          "Beverages",
+          "Snacks",
+          "Desserts",
+          "prepared",
+          "packed",
+          "cigarette"
+        ),
         allowNull: false,
+        defaultValue: "Food",
       },
       description: {
         type: DataTypes.STRING(255),
@@ -21,6 +31,19 @@ module.exports = (sequelize, DataTypes) => {
       price: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: false,
+        validate: {
+          min: 0,
+        },
+      },
+      unit: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: "piece",
+      },
+      is_available: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
       },
       stock: {
         type: DataTypes.INTEGER,
