@@ -71,7 +71,7 @@ function BottomTabs() {
         component={ScannerScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Icon name="people-outline" size={size} color={color} />
+            <Icon name="scan-outline" size={size} color={color} />
           ),
         }}
       />
@@ -81,8 +81,8 @@ function BottomTabs() {
         name="Bill"
         component={BillScreen}
         options={{
-          tabBarIcon: ({ color }) => (
-            <Icon name="receipt-outline" size={35} color="#fff" />
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="wallet-outline" size={size} color={color} />
           ),
         }}
       />
@@ -94,13 +94,6 @@ function BottomTabs() {
           tabBarIcon: ({ color, size }) => (
             <Icon name="document-text-outline" size={size} color={color} />
           ),
-        }}
-      />
-      <Tab.Screen
-        name="PaymentGateway"
-        component={PaymentGateway}
-        options={{
-          tabBarButton: () => null, // Hide from tab bar
         }}
       />
     </Tab.Navigator>
