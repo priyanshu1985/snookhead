@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -74,6 +74,36 @@ export default function SetupMenu({ navigation }) {
   });
 
   const [selectedGameId, setSelectedGameId] = useState(null); // NEW
+
+  // --- New: refs & state for header scroll indicators ---
+  const scrollViewRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [contentWidth, setContentWidth] = useState(0);
+  const [scrollX, setScrollX] = useState(0);
+
+  function onLayoutHeader(e) {
+    setContainerWidth(e.nativeEvent.layout.width);
+  }
+
+  function onContentSizeChange(w /*, h */) {
+    setContentWidth(w);
+  }
+
+  function onScrollHeader(e) {
+    const x = e.nativeEvent.contentOffset.x;
+    setScrollX(x);
+  }
+
+  function scrollBy(delta) {
+    if (!scrollViewRef.current) return;
+    const maxScroll = Math.max(0, contentWidth - containerWidth);
+    const target = Math.max(0, Math.min(scrollX + delta, maxScroll));
+    scrollViewRef.current.scrollTo({ x: target, animated: true });
+    setScrollX(target);
+  }
+
+  const canScrollLeft = scrollX > 6; // tolerance
+  const canScrollRight = contentWidth - (scrollX + containerWidth) > 6;
 
   // --- Fetch from backend, always array, with auth token ---
   useEffect(() => {
@@ -538,44 +568,70 @@ export default function SetupMenu({ navigation }) {
   } else if (activeTab === 'MANAGE TABLE GAMES') {
     Content = (
       <>
-        {/* Clean Horizontal Game Header */}
-        <View style={styles.gameHeaderContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.gameHeaderScroll}
-          >
-            {games.map(g => (
-              <TouchableOpacity
-                key={g.game_id || g.id}
-                style={[
-                  styles.gameHeaderTab,
-                  selectedGameId === (g.game_id || g.id) &&
-                    styles.gameHeaderTabActive,
-                ]}
-                onPress={() => {
-                  const gameId = g.game_id || g.id;
-                  console.log(
-                    'User selected game:',
-                    g.gamename || g.game_name,
-                    'with ID:',
-                    gameId,
-                  );
-                  setSelectedGameId(gameId);
-                }}
-              >
-                <Text
+        {/* Clean Horizontal Game Header with scroll indicators */}
+        <View style={styles.gameHeaderOuter}>
+          {canScrollLeft && (
+            <TouchableOpacity
+              style={[styles.scrollArrow, { left: 6 }]}
+              onPress={() => scrollBy(-Math.round(containerWidth * 0.6))}
+              activeOpacity={0.8}
+            >
+              <Icon name="chevron-back" size={20} color="#333" />
+            </TouchableOpacity>
+          )}
+
+          <View style={styles.gameHeaderContainer} onLayout={onLayoutHeader}>
+            <ScrollView
+              ref={scrollViewRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.gameHeaderScroll}
+              onContentSizeChange={onContentSizeChange}
+              onScroll={onScrollHeader}
+              scrollEventThrottle={16}
+            >
+              {games.map(g => (
+                <TouchableOpacity
+                  key={g.game_id || g.id}
                   style={[
-                    styles.gameHeaderText,
+                    styles.gameHeaderTab,
                     selectedGameId === (g.game_id || g.id) &&
-                      styles.gameHeaderTextActive,
+                      styles.gameHeaderTabActive,
                   ]}
+                  onPress={() => {
+                    const gameId = g.game_id || g.id;
+                    console.log(
+                      'User selected game:',
+                      g.gamename || g.game_name,
+                      'with ID:',
+                      gameId,
+                    );
+                    setSelectedGameId(gameId);
+                  }}
                 >
-                  {g.gamename || g.game_name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+                  <Text
+                    style={[
+                      styles.gameHeaderText,
+                      selectedGameId === (g.game_id || g.id) &&
+                        styles.gameHeaderTextActive,
+                    ]}
+                  >
+                    {g.gamename || g.game_name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {canScrollRight && (
+            <TouchableOpacity
+              style={[styles.scrollArrow, { right: 6 }]}
+              onPress={() => scrollBy(Math.round(containerWidth * 0.6))}
+              activeOpacity={0.8}
+            >
+              <Icon name="chevron-forward" size={20} color="#333" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Tables Grid - Right Under Header */}
@@ -927,57 +983,79 @@ const styles = StyleSheet.create({
   },
 
   // Add these into your existing styles object
-gameHeaderContainer: {
-  paddingVertical: 10,        // vertical padding for the header bar
-  paddingLeft: 12,            // left padding so first tab isn't glued to edge
-  backgroundColor: '#fff',
-  borderBottomWidth: 1,
-  borderBottomColor: '#EEE',
-},
+  gameHeaderOuter: {
+    position: 'relative',
+    backgroundColor: '#fff',
+  },
 
-gameHeaderScroll: {
-  alignItems: 'center',       // vertically center items inside the horizontal ScrollView
-  paddingRight: 12,           // breathing room at the end
-},
+  gameHeaderContainer: {
+    paddingVertical: 10, // vertical padding for the header bar
+    paddingLeft: 12, // left padding so first tab isn't glued to edge
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE',
+  },
 
-gameHeaderTab: {
-  paddingVertical: 8,
-  paddingHorizontal: 14,
-  marginRight: 10,            // spacing between tabs
-  borderRadius: 4,
-  backgroundColor: '#F3F2F0', // inactive background
-},
+  gameHeaderScroll: {
+    alignItems: 'center', // vertically center items inside the horizontal ScrollView
+    paddingRight: 12, // breathing room at the end
+  },
 
-gameHeaderTabActive: {
-  backgroundColor: '#FF8C42', // active background (orange)
-  elevation: 2,
-},
+  gameHeaderTab: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginRight: 10, // spacing between tabs
+    borderRadius: 4,
+    backgroundColor: '#F3F2F0', // inactive background
+  },
 
-gameHeaderText: {
-  color: '#555',
-  fontWeight: '700',
-  fontSize: 13,
-},
+  gameHeaderTabActive: {
+    backgroundColor: '#FF8C42', // active background (orange)
+    elevation: 2,
+  },
 
-gameHeaderTextActive: {
-  color: '#fff',
-},
+  gameHeaderText: {
+    color: '#555',
+    fontWeight: '700',
+    fontSize: 13,
+  },
 
-// containers for the grid below the header (you referenced tablesContainer, tablesList, tablesGrid)
-tablesContainer: {
-  paddingHorizontal: 12,
-  paddingTop: 12,
-  backgroundColor: '#FAFAFA',
-},
+  gameHeaderTextActive: {
+    color: '#fff',
+  },
 
-tablesList: {
-  // optional: if you want padding / margin on the FlatList itself
-  // leave empty or set e.g. marginHorizontal: -6 to compensate for item margins
-},
+  // containers for the grid below the header (you referenced tablesContainer, tablesList, tablesGrid)
+  tablesContainer: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    backgroundColor: '#FAFAFA',
+  },
 
-tablesGrid: {
-  // optional contentContainerStyle for FlatList: add bottom padding
-  paddingBottom: 18,
-},
+  tablesList: {
+    // optional: if you want padding / margin on the FlatList itself
+    // leave empty or set e.g. marginHorizontal: -6 to compensate for item margins
+  },
 
+  tablesGrid: {
+    // optional contentContainerStyle for FlatList: add bottom padding
+    paddingBottom: 18,
+  },
+
+  scrollArrow: {
+    position: 'absolute',
+    top: '50%',
+    transform: [{ translateY: -18 }],
+    zIndex: 20,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  },
 });
