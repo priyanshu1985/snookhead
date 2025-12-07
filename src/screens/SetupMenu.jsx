@@ -925,4 +925,59 @@ const styles = StyleSheet.create({
     fontSize: 17,
     textAlign: 'center',
   },
+
+  // Add these into your existing styles object
+gameHeaderContainer: {
+  paddingVertical: 10,        // vertical padding for the header bar
+  paddingLeft: 12,            // left padding so first tab isn't glued to edge
+  backgroundColor: '#fff',
+  borderBottomWidth: 1,
+  borderBottomColor: '#EEE',
+},
+
+gameHeaderScroll: {
+  alignItems: 'center',       // vertically center items inside the horizontal ScrollView
+  paddingRight: 12,           // breathing room at the end
+},
+
+gameHeaderTab: {
+  paddingVertical: 8,
+  paddingHorizontal: 14,
+  marginRight: 10,            // spacing between tabs
+  borderRadius: 4,
+  backgroundColor: '#F3F2F0', // inactive background
+},
+
+gameHeaderTabActive: {
+  backgroundColor: '#FF8C42', // active background (orange)
+  elevation: 2,
+},
+
+gameHeaderText: {
+  color: '#555',
+  fontWeight: '700',
+  fontSize: 13,
+},
+
+gameHeaderTextActive: {
+  color: '#fff',
+},
+
+// containers for the grid below the header (you referenced tablesContainer, tablesList, tablesGrid)
+tablesContainer: {
+  paddingHorizontal: 12,
+  paddingTop: 12,
+  backgroundColor: '#FAFAFA',
+},
+
+tablesList: {
+  // optional: if you want padding / margin on the FlatList itself
+  // leave empty or set e.g. marginHorizontal: -6 to compensate for item margins
+},
+
+tablesGrid: {
+  // optional contentContainerStyle for FlatList: add bottom padding
+  paddingBottom: 18,
+},
+
 });
