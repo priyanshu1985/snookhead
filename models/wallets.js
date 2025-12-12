@@ -1,0 +1,82 @@
+module.exports = (sequelize, DataTypes) => {
+  return sequelize.define(
+    "Wallets",
+    {
+      id: {
+        type: DataTypes.CHAR(36),
+        primaryKey: true,
+        allowNull: false,
+      },
+
+      customer_id: {
+        type: DataTypes.CHAR(36),
+        allowNull: false,
+      },
+
+      balance: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: false,
+        defaultValue: 0.0,
+      },
+
+      credit_limit: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: false,
+        defaultValue: 0.0,
+      },
+
+      currency: {
+        type: DataTypes.STRING(3),
+        allowNull: false,
+        defaultValue: "INR",
+      },
+
+      reserved_amount: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: false,
+        defaultValue: 0.0,
+      },
+
+      last_transaction_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+      },
+
+      custmer: {
+        // NOTE: SQL column name has a typo: "custmer"
+        type: DataTypes.STRING(45),
+        allowNull: true,
+      },
+
+      phone_no: {
+        type: DataTypes.STRING(14), // Correct type for phone numbers
+        allowNull: true,
+      },
+
+      qr_id: {
+        type: DataTypes.STRING(50),
+        allowNull: false,
+      },
+
+      qr_code: {
+        type: DataTypes.BLOB, // Correct SQL mapping
+        allowNull: true,
+      },
+    },
+    {
+      tableName: "wallets",
+      timestamps: true,
+      underscored: false,
+    }
+  );
+};

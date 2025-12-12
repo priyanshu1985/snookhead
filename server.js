@@ -57,6 +57,8 @@ app.use("/api/activeTables", require("./routes/activeTables"));
 app.use("/api/queue", require("./routes/queue"));
 app.use("/api/games", require("./routes/games"));
 app.use("/api/debug", require("./routes/debug"));
+app.use("/api/wallets", require("./routes/wallets"));
+
 
 // error handler
 app.use((err, req, res, next) => {
