@@ -58,6 +58,7 @@ app.use("/api/queue", require("./routes/queue"));
 app.use("/api/games", require("./routes/games"));
 app.use("/api/debug", require("./routes/debug"));
 app.use("/api/wallets", require("./routes/wallets"));
+app.use("/api/customer", require("./routes/customer"));
 
 
 // error handler

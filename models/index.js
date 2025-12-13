@@ -14,6 +14,7 @@ const ActiveTable = require("./activeTable")(sequelize, DataTypes);
 const Queue = require("./queue")(sequelize, DataTypes);
 const FoodItem = require("./fooditem")(sequelize, DataTypes);
 const Wallet = require("./wallets")(sequelize, DataTypes);
+const Customer = require("./customer")(sequelize, DataTypes);
 
 // =============================================
 // CORE RELATIONSHIPS
@@ -95,5 +96,6 @@ module.exports = {
   ActiveTable,
   Queue,
   FoodItem,
-  Wallet
+  Wallet,
+  Customer,
 };
