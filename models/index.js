@@ -13,7 +13,7 @@ const Game = require("./game")(sequelize, DataTypes);
 const ActiveTable = require("./activeTable")(sequelize, DataTypes);
 const Queue = require("./queue")(sequelize, DataTypes);
 const FoodItem = require("./fooditem")(sequelize, DataTypes);
-const wallet = require("./wallets")(sequelize, DataTypes);
+const Wallet = require("./wallets")(sequelize, DataTypes);
 
 // =============================================
 // CORE RELATIONSHIPS
@@ -95,5 +95,5 @@ module.exports = {
   ActiveTable,
   Queue,
   FoodItem,
-  wallet
+  Wallet
 };

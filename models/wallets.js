@@ -1,16 +1,18 @@
 module.exports = (sequelize, DataTypes) => {
   return sequelize.define(
-    "Wallets",
+    "Wallet", // ✅ Model name MUST be singular & PascalCase
     {
       id: {
         type: DataTypes.CHAR(36),
-        primaryKey: true,
         allowNull: false,
+        primaryKey: true,
+        defaultValue: DataTypes.UUIDV4, // ✅ important
       },
 
       customer_id: {
         type: DataTypes.CHAR(36),
         allowNull: false,
+        unique: true,
       },
 
       balance: {
@@ -41,25 +43,8 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
-
-      createdAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
-
-      updatedAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
-
-      custmer: {
-        // NOTE: SQL column name has a typo: "custmer"
-        type: DataTypes.STRING(45),
-        allowNull: true,
-      },
-
       phone_no: {
-        type: DataTypes.STRING(14), // Correct type for phone numbers
+        type: DataTypes.STRING(14),
         allowNull: true,
       },
 
@@ -69,14 +54,21 @@ module.exports = (sequelize, DataTypes) => {
       },
 
       qr_code: {
-        type: DataTypes.BLOB, // Correct SQL mapping
+        type: DataTypes.BLOB,
         allowNull: true,
       },
     },
     {
-      tableName: "wallets",
-      timestamps: true,
-      underscored: false,
+      tableName: "wallets",      // ✅ exact DB table
+      timestamps: true,          // ✅ auto-manages createdAt / updatedAt
+      charset: "utf8mb4",
+      collate: "utf8mb4_bin",
+      indexes: [
+        {
+          unique: true,
+          fields: ["customer_id"],
+        },
+      ],
     }
   );
 };

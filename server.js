@@ -79,7 +79,7 @@ function startAt(port) {
         console.log("DB connected");
 
         // Force sync models to match updated database schema - CRITICAL FOR BILL MODEL
-        await sequelize.sync({ alter: true });
+        await sequelize.sync();
         console.log("DB models synchronized with schema");
 
         // Test bill model to verify bill_number column exists
