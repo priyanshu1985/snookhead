@@ -72,6 +72,10 @@ OrderItem.belongsTo(MenuItem, { foreignKey: "menuItemId" });
 Order.hasOne(Bill, { foreignKey: "orderId" });
 Bill.belongsTo(Order, { foreignKey: "orderId" });
 
+Customer.hasOne(Wallet, { foreignKey: "customer_id" });
+Wallet.belongsTo(Customer, { foreignKey: "customer_id" });
+
+
 // =============================================
 // SYNC DATABASE (optional - remove after first run)
 // =============================================
