@@ -75,6 +75,15 @@ Bill.belongsTo(Order, { foreignKey: "orderId" });
 Customer.hasOne(Wallet, { foreignKey: "customer_id" });
 Wallet.belongsTo(Customer, { foreignKey: "customer_id" });
 
+Queue.belongsTo(TableAsset, {
+  foreignKey: "preferred_table_id",
+  as: "preferredTable",
+});
+
+TableAsset.hasMany(Queue, {
+  foreignKey: "preferred_table_id",
+});
+
 
 // =============================================
 // SYNC DATABASE (optional - remove after first run)
