@@ -31,17 +31,49 @@ router.post('/register',
   async (req, res) => {
   try {
     const { name, email, password, phone, role } = req.body;
-    
+
+    // Debug logging
+    console.log('=== REGISTRATION DEBUG ===');
+    console.log('Full request body:', JSON.stringify(req.body));
+    console.log('Extracted role:', role);
+
     // Prevent admin role creation during registration
     if (role === 'admin') {
       return res.status(403).json({ error: 'Cannot register as admin' });
     }
-    
+
+    // Use the provided role, default to 'customer' only if role is undefined/null/empty
+    const validRoles = ['staff', 'owner', 'customer'];
+    let userRole = 'customer';
+    if (role && typeof role === 'string' && validRoles.includes(role.toLowerCase())) {
+      userRole = role.toLowerCase();
+    }
+    console.log('Final role to save:', userRole);
+
     const existing = await User.findOne({ where: { email } });
     if (existing) return res.status(400).json({ error: 'User exists' });
     const hash = await bcrypt.hash(password, 10);
-    const user = await User.create({ name, email, passwordHash: hash, phone, role: role || 'customer' });
-    res.status(201).json({ id: user.id, email: user.email, name: user.name, role: user.role });
+    const user = await User.create({ name, email, passwordHash: hash, phone, role: userRole });
+
+    console.log('User created with role:', user.role);
+
+    // Generate tokens so user is logged in after registration
+    const access = makeAccessToken(user);
+    const refresh = makeRefreshToken();
+    tokenStore.setRefreshToken(user.id, refresh);
+
+    res.status(201).json({
+      accessToken: access,
+      refreshToken: refresh,
+      expiresIn: JWT_EXP,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -62,7 +94,18 @@ router.post('/login',
     const access = makeAccessToken(user);
     const refresh = makeRefreshToken();
     tokenStore.setRefreshToken(user.id, refresh);
-    res.json({ accessToken: access, refreshToken: refresh, expiresIn: JWT_EXP });
+    res.json({
+      accessToken: access,
+      refreshToken: refresh,
+      expiresIn: JWT_EXP,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
