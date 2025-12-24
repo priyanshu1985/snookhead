@@ -7,7 +7,9 @@ const cors = require("cors");
 const { sequelize } = require("./config/database");
 const models = require("./models");
 const { securityHeaders } = require("./middleware/security");
-const { requestLogger } = require("./middleware/logger");
+const { requestLogger, logStartup } = require("./middleware/logger");
+
+const path = require("path");
 
 const app = express();
 app.use(requestLogger);
@@ -16,7 +18,8 @@ app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// routes
+// Serve static files from public folder
+app.use("/static", express.static(path.join(__dirname, "public")));
 
 // --- create default admin if missing
 async function createAdmin() {
@@ -35,15 +38,14 @@ async function createAdmin() {
         passwordHash: hash,
         role: "admin",
       });
-      console.log("Default admin created:", adminEmail);
-    } else {
-      console.log("Admin user exists:", adminEmail);
+      logStartup.success(`Admin created: ${adminEmail}`);
     }
   } catch (err) {
-    console.error("Error creating admin user:", err.message);
+    logStartup.error(`Admin setup failed: ${err.message}`);
   }
 }
 
+// Routes
 app.use("/api/health", require("./routes/health"));
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/users", require("./routes/users"));
@@ -56,58 +58,51 @@ app.use("/api/reservations", require("./routes/reservations"));
 app.use("/api/activeTables", require("./routes/activeTables"));
 app.use("/api/queue", require("./routes/queue"));
 app.use("/api/games", require("./routes/games"));
+app.use("/api/stock-images", require("./routes/stockImages"));
 app.use("/api/debug", require("./routes/debug"));
 app.use("/api/wallets", require("./routes/wallets"));
 app.use("/api/customer", require("./routes/customer"));
 
-
-// error handler
+// Error handler
 app.use((err, req, res, next) => {
-  console.error(err);
+  logStartup.error(`${err.message}`);
   res.status(500).json({ error: err.message || "Server error" });
 });
 
-// try preferred port, fallback if in use
+// Server startup
 const preferred = parseInt(process.env.PORT, 10) || 4000;
 const maxPort = preferred + 10;
 
 function startAt(port) {
-  const server = app
+  app
     .listen(port, async () => {
-      console.log(`Server listening on port ${port}`);
+      logStartup.server(port);
       try {
         await sequelize.authenticate();
-        console.log("DB connected");
-
-        // Force sync models to match updated database schema - CRITICAL FOR BILL MODEL
+        logStartup.success("Database connected");
         await sequelize.sync();
-        console.log("DB models synchronized with schema");
-
-        // Test bill model to verify bill_number column exists
-        const { Bill } = require("./models");
-        const testBill = await Bill.findOne({ limit: 1 }).catch(() => null);
-        console.log("Bill model verified - bill_number column available");
+        logStartup.success("Models synchronized");
       } catch (e) {
-        console.error("DB connection failed:", e.message);
+        logStartup.error(`Database failed: ${e.message}`);
         process.exit(1);
       }
     })
     .on("error", (err) => {
       if (err.code === "EADDRINUSE") {
-        console.warn(`Port ${port} in use, trying ${port + 1}...`);
+        logStartup.warn(`Port ${port} in use, trying ${port + 1}`);
         if (port + 1 <= maxPort) startAt(port + 1);
         else {
-          console.error("No available ports in range", preferred, "-", maxPort);
+          logStartup.error(`No ports available (${preferred}-${maxPort})`);
           process.exit(1);
         }
       } else {
-        console.error("Server error:", err);
+        logStartup.error(`Server error: ${err.message}`);
         process.exit(1);
       }
     });
 }
 
-// Initialize admin user and start server
+// Initialize
 (async () => {
   await createAdmin();
   startAt(preferred);

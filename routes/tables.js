@@ -50,7 +50,7 @@ router.get("/:id", auth, async (req, res) => {
 // -------------------------------------------------
 // ADD TABLE
 // -------------------------------------------------
-router.post("/", auth, authorize("staff", "admin"), async (req, res) => {
+router.post("/", auth, authorize("owner", "staff", "admin"), async (req, res) => {
   try {
     const {
       name,
@@ -62,14 +62,6 @@ router.post("/", auth, authorize("staff", "admin"), async (req, res) => {
       frameCharge,
       game_id,
     } = req.body;
-
-    console.log("Backend received table creation request:", {
-      name,
-      game_id,
-      type,
-      status,
-      fullBody: req.body,
-    });
 
     if (!name) {
       return res.status(400).json({ error: "Table name is required" });
@@ -95,18 +87,11 @@ router.post("/", auth, authorize("staff", "admin"), async (req, res) => {
       game_id,
     });
 
-    console.log("Table created successfully:", {
-      id: newTable.id,
-      name: newTable.name,
-      game_id: newTable.game_id,
-    });
-
     res.status(201).json({
       message: "Table added successfully",
       table: newTable,
     });
   } catch (err) {
-    console.error("Error creating table:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -114,7 +99,7 @@ router.post("/", auth, authorize("staff", "admin"), async (req, res) => {
 // -------------------------------------------------
 // UPDATE TABLE
 // -------------------------------------------------
-router.put("/:id", auth, authorize("staff", "admin"), async (req, res) => {
+router.put("/:id", auth, authorize("owner", "staff", "admin"), async (req, res) => {
   try {
     const table = await TableAsset.findByPk(req.params.id);
 
@@ -136,7 +121,7 @@ router.put("/:id", auth, authorize("staff", "admin"), async (req, res) => {
 // -------------------------------------------------
 // DELETE TABLE
 // -------------------------------------------------
-router.delete("/:id", auth, authorize("admin"), async (req, res) => {
+router.delete("/:id", auth, authorize("owner", "admin"), async (req, res) => {
   try {
     const table = await TableAsset.findByPk(req.params.id);
 
@@ -159,7 +144,7 @@ router.delete("/:id", auth, authorize("admin"), async (req, res) => {
 router.patch(
   "/:id/status",
   auth,
-  authorize("staff", "admin"),
+  authorize("owner", "staff", "admin"),
   async (req, res) => {
     try {
       const { status } = req.body;

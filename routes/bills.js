@@ -94,7 +94,6 @@ router.get(
 
       res.json(transformedBills);
     } catch (err) {
-      console.error("Error fetching bills:", err);
       res.status(500).json({ error: err.message });
     }
   }
@@ -182,7 +181,6 @@ router.get(
 
       res.json(transformedBill);
     } catch (err) {
-      console.error("Error fetching bill details:", err);
       res.status(500).json({ error: err.message });
     }
   }
@@ -206,7 +204,6 @@ router.post(
       bill.paid_at = new Date();
       await bill.save();
 
-      console.log(`Bill ${bill.id} marked as paid`);
       res.json({
         success: true,
         message: "Bill paid successfully",
@@ -218,7 +215,6 @@ router.post(
         },
       });
     } catch (err) {
-      console.error("Error paying bill:", err);
       res.status(500).json({ error: err.message });
     }
   }
@@ -254,31 +250,14 @@ router.post(
         // Convert price per hour to price per minute if needed
         let pricePerMin = table_price_per_min || table.pricePerMin || 0;
 
-        // Debug logging
-        console.log("Table pricing debug:", {
-          table_id,
-          session_duration,
-          table_price_per_min,
-          table_pricePerMin: table.pricePerMin,
-          calculated_pricePerMin: pricePerMin,
-        });
-
         // If the price seems too high (>100), assume it's per hour and convert to per minute
         if (pricePerMin > 100) {
           pricePerMin = pricePerMin / 60;
-          console.log("Converted hourly rate to per minute:", pricePerMin);
         }
 
         table_charges =
           session_duration * pricePerMin +
           (frame_charges || table.frameCharge || 0);
-
-        console.log("Calculated table charges:", {
-          session_duration,
-          pricePerMin,
-          frame_charges: frame_charges || table.frameCharge || 0,
-          total_table_charges: table_charges,
-        });
       }
 
       // 2. Calculate menu charges
@@ -385,7 +364,6 @@ router.post(
         },
       });
     } catch (err) {
-      console.error("Error creating bill:", err);
       res.status(500).json({ error: err.message });
     }
   }
@@ -460,7 +438,6 @@ router.post("/calculate-pricing", auth, async (req, res) => {
       pricing,
     });
   } catch (err) {
-    console.error("Error calculating pricing:", err);
     res.status(500).json({ error: err.message });
   }
 });
