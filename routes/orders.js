@@ -103,9 +103,9 @@ router.post("/", auth, async (req, res) => {
 });
 
 // --------------------------------------------------
-// GET ALL ORDERS (for staff/admin)
+// GET ALL ORDERS (for all authenticated users)
 // --------------------------------------------------
-router.get("/", auth, authorize("staff", "admin"), async (req, res) => {
+router.get("/", auth, async (req, res) => {
   try {
     const { page = 1, limit = 20, status } = req.query;
 
@@ -122,7 +122,7 @@ router.get("/", auth, authorize("staff", "admin"), async (req, res) => {
           include: [MenuItem],
         },
       ],
-      order: [["orderDate", "DESC"]],
+      order: [["createdAt", "DESC"]],
     });
 
     res.json({
@@ -210,37 +210,32 @@ router.post("/:orderId/items", auth, async (req, res) => {
 });
 
 // --------------------------------------------------
-// UPDATE ORDER STATUS
+// UPDATE ORDER STATUS (for all authenticated users)
 // --------------------------------------------------
-router.patch(
-  "/:id/status",
-  auth,
-  authorize("staff", "admin"),
-  async (req, res) => {
-    try {
-      const { status } = req.body;
+router.patch("/:id/status", auth, async (req, res) => {
+  try {
+    const { status } = req.body;
 
-      if (!["pending", "completed", "cancelled"].includes(status)) {
-        return res.status(400).json({ error: "Invalid status" });
-      }
-
-      const order = await Order.findByPk(req.params.id);
-      if (!order) {
-        return res.status(404).json({ error: "Order not found" });
-      }
-
-      order.status = status;
-      await order.save();
-
-      res.json({
-        message: "Order status updated",
-        order,
-      });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
+    if (!["pending", "completed", "cancelled"].includes(status)) {
+      return res.status(400).json({ error: "Invalid status" });
     }
+
+    const order = await Order.findByPk(req.params.id);
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    order.status = status;
+    await order.save();
+
+    res.json({
+      message: "Order status updated",
+      order,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-);
+});
 
 // --------------------------------------------------
 // DELETE ORDER
