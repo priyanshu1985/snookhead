@@ -62,6 +62,8 @@ app.use("/api/stock-images", require("./routes/stockImages"));
 app.use("/api/debug", require("./routes/debug"));
 app.use("/api/wallets", require("./routes/wallets"));
 app.use("/api/customer", require("./routes/customer"));
+app.use("/api/bugs", require("./routes/bugs"));
+app.use("/api/admin/stations", require("./routes/adminStations"));
 
 // Error handler
 app.use((err, req, res, next) => {

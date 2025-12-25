@@ -15,6 +15,10 @@ const Queue = require("./queue")(sequelize, DataTypes);
 const FoodItem = require("./fooditem")(sequelize, DataTypes);
 const Wallet = require("./wallets")(sequelize, DataTypes);
 const Customer = require("./customer")(sequelize, DataTypes);
+const Bug = require("./bug")(sequelize, DataTypes);
+const Station = require("./Station")(sequelize, DataTypes);
+const StationPayment = require("./StationPayment")(sequelize, DataTypes);
+const StationIssue = require("./StationIssue")(sequelize, DataTypes);
 
 // =============================================
 // CORE RELATIONSHIPS
@@ -84,6 +88,30 @@ TableAsset.hasMany(Queue, {
   foreignKey: "preferred_table_id",
 });
 
+// =============================================
+// BUG RELATIONSHIPS
+// =============================================
+
+// User ↔ Bug (reporter)
+User.hasMany(Bug, { foreignKey: "reported_by", as: "reportedBugs" });
+Bug.belongsTo(User, { foreignKey: "reported_by", as: "reporter" });
+
+// User ↔ Bug (assignee)
+User.hasMany(Bug, { foreignKey: "assigned_to", as: "assignedBugs" });
+Bug.belongsTo(User, { foreignKey: "assigned_to", as: "assignee" });
+
+// =============================================
+// STATION RELATIONSHIPS (Admin Panel)
+// =============================================
+
+// Station ↔ StationPayment
+Station.hasMany(StationPayment, { foreignKey: "station_id" });
+StationPayment.belongsTo(Station, { foreignKey: "station_id" });
+
+// Station ↔ StationIssue
+Station.hasMany(StationIssue, { foreignKey: "station_id" });
+StationIssue.belongsTo(Station, { foreignKey: "station_id" });
+
 
 // =============================================
 // SYNC DATABASE (optional - remove after first run)
@@ -111,4 +139,8 @@ module.exports = {
   FoodItem,
   Wallet,
   Customer,
+  Bug,
+  Station,
+  StationPayment,
+  StationIssue,
 };
