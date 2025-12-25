@@ -170,13 +170,14 @@ router.post(
 );
 
 // Auto-release expired sessions (called by frontend or cron)
+// body: { active_id, cart_items?: [{id, name, price, qty}] }
 router.post(
   "/auto-release",
   auth,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
-      const { active_id } = req.body;
+      const { active_id, cart_items = [] } = req.body;
 
       const session = await ActiveTable.findByPk(active_id);
       if (!session) {
@@ -199,26 +200,69 @@ router.post(
         await table.update({ status: "available" });
       }
 
-      // Compute billing
+      // Compute table charges
+      // Use booked duration if available (timer mode), otherwise use elapsed time
       const startTime = new Date(session.start_time);
       const diffMs = endTime - startTime;
-      const minutes = Math.ceil(diffMs / 60000);
+      const elapsedMinutes = Math.ceil(diffMs / 60000);
+      const minutes = session.duration_minutes || elapsedMinutes;
       const pricePerMin = Number(table?.pricePerMin || 0);
-      const frameCharge = Number(table?.frameCharge || 0);
-      const tableAmount = minutes * pricePerMin + frameCharge;
+      // Don't add frame charges for timer-based sessions (only for frame-based bookings)
+      const table_charges = minutes * pricePerMin;
 
-      // Create bill record
+      // Calculate menu charges from cart items
+      let menu_charges = 0;
+      const bill_items = [];
+
+      if (cart_items && cart_items.length > 0) {
+        for (const item of cart_items) {
+          const itemTotal = Number(item.price || 0) * Number(item.qty || 1);
+          menu_charges += itemTotal;
+          bill_items.push({
+            menu_item_id: item.id,
+            name: item.name,
+            price: Number(item.price || 0),
+            quantity: Number(item.qty || 1),
+            total: itemTotal,
+          });
+        }
+      }
+
+      const total_amount = table_charges + menu_charges;
+
+      // Generate bill number
+      const bill_number = `BILL-${Date.now()}-${Math.random()
+        .toString(36)
+        .substr(2, 9)
+        .toUpperCase()}`;
+
+      // Create items summary
+      const items_summary = [
+        `Table charges (${minutes} min)`,
+        ...bill_items.map((item) => `${item.name} x${item.quantity}`),
+      ]
+        .filter(Boolean)
+        .join(", ");
+
+      // Create bill record with proper structure
       const bill = await Bill.create({
+        bill_number,
         orderId: null,
-        total: tableAmount,
+        customer_name: "Walk-in Customer",
+        table_id: table?.id || null,
+        session_id: session.active_id,
+        table_charges,
+        menu_charges,
+        total_amount,
         status: "pending",
+        bill_items: bill_items.length > 0 ? bill_items : null,
+        items_summary,
+        session_duration: minutes,
         details: JSON.stringify({
           table_id: session.table_id,
           game_id: session.game_id,
           minutes,
           pricePerMin,
-          frameCharge,
-          tableAmount,
           auto_released: true,
         }),
       });
@@ -229,8 +273,9 @@ router.post(
         bill,
         breakdown: {
           minutes,
-          tableAmount,
-          total: tableAmount,
+          table_charges,
+          menu_charges,
+          total_amount,
         },
       });
     } catch (err) {

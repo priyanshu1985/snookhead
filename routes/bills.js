@@ -56,21 +56,30 @@ router.get(
         const game = activeTable.Game || {};
         const orderItems = order.OrderItems || [];
 
-        return {
-          id: bill.id,
-          bill_number: bill.bill_number || `B${bill.id}`,
-          total_amount: bill.total_amount || bill.amount || 0,
-          status: bill.status,
-          customer_name: bill.customer_name || "Unknown Customer",
-          customer_phone: bill.customer_phone || "+91 XXXXXXXXXX",
-          items_summary:
-            orderItems
-              .map((item) => {
-                const menuItem = item.MenuItem || {};
-                return menuItem.name || "Item";
-              })
-              .join(", ") || "Items",
-          order_items: orderItems.map((item) => {
+        // Handle bills created via auto-release (no Order, has bill_items JSON)
+        const hasOrder = bill.orderId && orderItems.length > 0;
+        const billItemsFromJson = bill.bill_items || [];
+
+        // Generate items summary - prefer stored summary, then from Order, then from bill_items
+        let itemsSummary = bill.items_summary;
+        if (!itemsSummary) {
+          if (hasOrder) {
+            itemsSummary = orderItems
+              .map((item) => (item.MenuItem || {}).name || "Item")
+              .join(", ") || "Items";
+          } else if (billItemsFromJson.length > 0) {
+            itemsSummary = billItemsFromJson
+              .map((item) => `${item.name} x${item.quantity}`)
+              .join(", ");
+          } else {
+            itemsSummary = "Table charges";
+          }
+        }
+
+        // Generate order_items array from Order or bill_items JSON
+        let orderItemsFormatted;
+        if (hasOrder) {
+          orderItemsFormatted = orderItems.map((item) => {
             const menuItem = item.MenuItem || {};
             return {
               name: menuItem.name || "Item",
@@ -80,13 +89,36 @@ router.get(
               qty: item.quantity,
               amount: item.price || menuItem.price || 0,
             };
-          }),
+          });
+        } else {
+          orderItemsFormatted = billItemsFromJson.map((item) => ({
+            name: item.name || "Item",
+            quantity: `${item.quantity || 1} unit`,
+            price: item.price || 0,
+            item_name: item.name,
+            qty: item.quantity || 1,
+            amount: item.total || item.price || 0,
+          }));
+        }
+
+        return {
+          id: bill.id,
+          bill_number: bill.bill_number || `B${bill.id}`,
+          total_amount: bill.total_amount || bill.amount || bill.total || 0,
+          table_charges: bill.table_charges || 0,
+          menu_charges: bill.menu_charges || 0,
+          session_duration: bill.session_duration || 0,
+          status: bill.status,
+          customer_name: bill.customer_name || "Unknown Customer",
+          customer_phone: bill.customer_phone || "+91 XXXXXXXXXX",
+          items_summary: itemsSummary,
+          order_items: orderItemsFormatted,
           table_info: {
             name: table.name || "Unknown Table",
             game_name: game.name || game.gamename || "Unknown Game",
           },
           wallet_amount: bill.wallet_amount || 0,
-          order_amount: bill.total_amount || 0,
+          order_amount: bill.total_amount || bill.total || 0,
           createdAt: bill.createdAt,
           updatedAt: bill.updatedAt,
         };
@@ -144,21 +176,30 @@ router.get(
       const game = activeTable.Game || {};
       const orderItems = order.OrderItems || [];
 
-      const transformedBill = {
-        id: bill.id,
-        bill_number: bill.bill_number || `B${bill.id}`,
-        total_amount: bill.total_amount || bill.amount || 0,
-        status: bill.status,
-        customer_name: bill.customer_name || "Unknown Customer",
-        customer_phone: bill.customer_phone || "+91 XXXXXXXXXX",
-        items_summary:
-          orderItems
-            .map((item) => {
-              const menuItem = item.MenuItem || {};
-              return menuItem.name || "Item";
-            })
-            .join(", ") || "Items",
-        order_items: orderItems.map((item) => {
+      // Handle bills created via auto-release (no Order, has bill_items JSON)
+      const hasOrder = bill.orderId && orderItems.length > 0;
+      const billItemsFromJson = bill.bill_items || [];
+
+      // Generate items summary - prefer stored summary, then from Order, then from bill_items
+      let itemsSummary = bill.items_summary;
+      if (!itemsSummary) {
+        if (hasOrder) {
+          itemsSummary = orderItems
+            .map((item) => (item.MenuItem || {}).name || "Item")
+            .join(", ") || "Items";
+        } else if (billItemsFromJson.length > 0) {
+          itemsSummary = billItemsFromJson
+            .map((item) => `${item.name} x${item.quantity}`)
+            .join(", ");
+        } else {
+          itemsSummary = "Table charges";
+        }
+      }
+
+      // Generate order_items array from Order or bill_items JSON
+      let orderItemsFormatted;
+      if (hasOrder) {
+        orderItemsFormatted = orderItems.map((item) => {
           const menuItem = item.MenuItem || {};
           return {
             name: menuItem.name || "Item",
@@ -168,13 +209,36 @@ router.get(
             qty: item.quantity,
             amount: item.price || menuItem.price || 0,
           };
-        }),
+        });
+      } else {
+        orderItemsFormatted = billItemsFromJson.map((item) => ({
+          name: item.name || "Item",
+          quantity: `${item.quantity || 1} unit`,
+          price: item.price || 0,
+          item_name: item.name,
+          qty: item.quantity || 1,
+          amount: item.total || item.price || 0,
+        }));
+      }
+
+      const transformedBill = {
+        id: bill.id,
+        bill_number: bill.bill_number || `B${bill.id}`,
+        total_amount: bill.total_amount || bill.amount || bill.total || 0,
+        table_charges: bill.table_charges || 0,
+        menu_charges: bill.menu_charges || 0,
+        session_duration: bill.session_duration || 0,
+        status: bill.status,
+        customer_name: bill.customer_name || "Unknown Customer",
+        customer_phone: bill.customer_phone || "+91 XXXXXXXXXX",
+        items_summary: itemsSummary,
+        order_items: orderItemsFormatted,
         table_info: {
           name: table.name || "Unknown Table",
           game_name: game.name || game.gamename || "Unknown Game",
         },
         wallet_amount: bill.wallet_amount || 0,
-        order_amount: bill.total_amount || 0,
+        order_amount: bill.total_amount || bill.total || 0,
         createdAt: bill.createdAt,
         updatedAt: bill.updatedAt,
       };
@@ -241,23 +305,23 @@ router.post(
 
       // 1. Calculate table charges
       let table_charges = 0;
+      let actualPricePerMin = 0;
+      let actualFrameCharges = 0;
+
       if (table_id && session_duration > 0) {
         const table = await TableAsset.findByPk(table_id);
         if (!table) {
           return res.status(404).json({ error: "Table not found" });
         }
 
-        // Convert price per hour to price per minute if needed
-        let pricePerMin = table_price_per_min || table.pricePerMin || 0;
+        // Use provided price per min, or fallback to table's price
+        actualPricePerMin = table_price_per_min !== undefined ? Number(table_price_per_min) : Number(table.pricePerMin || 0);
 
-        // If the price seems too high (>100), assume it's per hour and convert to per minute
-        if (pricePerMin > 100) {
-          pricePerMin = pricePerMin / 60;
-        }
+        // Only use frame charges if explicitly provided (not from table defaults)
+        // frame_charges of 0 means no frame charges, don't fallback to table.frameCharge
+        actualFrameCharges = frame_charges !== undefined ? Number(frame_charges) : 0;
 
-        table_charges =
-          session_duration * pricePerMin +
-          (frame_charges || table.frameCharge || 0);
+        table_charges = session_duration * actualPricePerMin + actualFrameCharges;
       }
 
       // 2. Calculate menu charges
@@ -292,9 +356,10 @@ router.post(
       // 3. Calculate total amount
       const total_amount = table_charges + menu_charges;
 
-      if (total_amount <= 0) {
+      // Allow zero amount bills (e.g., complimentary sessions)
+      if (total_amount < 0) {
         return res.status(400).json({
-          error: "Total amount must be greater than 0",
+          error: "Total amount cannot be negative",
         });
       }
 
@@ -329,12 +394,13 @@ router.post(
         session_duration,
         details: JSON.stringify({
           booking_time,
-          table_price_per_min,
-          frame_charges,
+          table_price_per_min: actualPricePerMin,
+          frame_charges: actualFrameCharges,
           calculation_breakdown: {
             table_charges,
             menu_charges,
             total_amount,
+            session_duration,
           },
         }),
       });
