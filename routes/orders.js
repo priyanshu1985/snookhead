@@ -15,6 +15,7 @@ router.post("/", auth, async (req, res) => {
       cashAmount,
       onlineAmount,
       cart, // [{item: {id, name, price}, qty}]
+      order_source = "table_booking",
     } = req.body;
 
     // Validate required fields
@@ -45,6 +46,7 @@ router.post("/", auth, async (req, res) => {
           ? Number(onlineAmount)
           : 0,
       status: "pending", // pending, completed, cancelled
+      order_source,
       orderDate: new Date(),
     });
 
@@ -93,6 +95,7 @@ router.post("/", auth, async (req, res) => {
         total: order.total,
         paymentMethod: order.paymentMethod,
         status: order.status,
+        order_source: order.order_source,
         orderDate: order.orderDate,
       },
     });
@@ -107,10 +110,11 @@ router.post("/", auth, async (req, res) => {
 // --------------------------------------------------
 router.get("/", auth, async (req, res) => {
   try {
-    const { page = 1, limit = 20, status } = req.query;
+    const { page = 1, limit = 20, status, source } = req.query;
 
     const where = {};
     if (status) where.status = status;
+    if (source && source !== "all") where.order_source = source;
 
     const orders = await Order.findAll({
       where,

@@ -117,12 +117,40 @@ StationIssue.belongsTo(Station, { foreignKey: "station_id" });
 // SYNC DATABASE (optional - remove after first run)
 // =============================================
 
-// Uncomment this to sync models with database on startup
+// Database sync disabled - run manual migration below
 // sequelize.sync({ alter: true }).then(() => {
 //   console.log("Database synced");
 // }).catch(err => {
 //   console.error("Database sync error:", err);
 // });
+
+// Manual migration for order_source column
+(async () => {
+  try {
+    // Check if order_source column exists in orders table
+    const [results] = await sequelize.query(`
+      SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'orders'
+      AND COLUMN_NAME = 'order_source'
+    `);
+
+    if (results.length === 0) {
+      console.log("Adding order_source column to orders table...");
+      await sequelize.query(`
+        ALTER TABLE orders
+        ADD COLUMN order_source ENUM('table_booking', 'counter', 'zomato', 'swiggy')
+        NOT NULL DEFAULT 'table_booking'
+      `);
+      console.log("order_source column added successfully");
+    }
+  } catch (err) {
+    // Ignore if column already exists or table doesn't exist yet
+    if (!err.message.includes("Duplicate column")) {
+      console.log("Migration note:", err.message);
+    }
+  }
+})();
 
 module.exports = {
   sequelize,
