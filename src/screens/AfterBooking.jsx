@@ -32,7 +32,9 @@ export default function AfterBooking({ route, navigation }) {
     timeDetails,
   });
 
-  const [timeSpent, setTimeSpent] = useState(0);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [totalDurationSeconds, setTotalDurationSeconds] = useState(0);
+  const [timerExpired, setTimerExpired] = useState(false);
   const [sessionData, setSessionData] = useState(session);
   const [frameCount, setFrameCount] = useState(
     timeDetails?.selectedFrame ? parseInt(timeDetails.selectedFrame) : 0,
@@ -49,24 +51,75 @@ export default function AfterBooking({ route, navigation }) {
   const [isCalculatingBill, setIsCalculatingBill] = useState(false);
   const [billData, setBillData] = useState(null);
 
-  // Update timer every second
+  // Initialize countdown timer based on booking_end_time or duration_minutes
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (sessionData?.start_time) {
-        const startTime = new Date(sessionData.start_time);
-        const now = new Date();
-        const diffMinutes = Math.floor((now - startTime) / (1000 * 60));
-        setTimeSpent(diffMinutes);
+    if (sessionData?.booking_end_time) {
+      // Calculate remaining time from booking_end_time
+      const endTime = new Date(sessionData.booking_end_time);
+      const now = new Date();
+      const remainingMs = endTime - now;
+      const remainingSecs = Math.max(0, Math.floor(remainingMs / 1000));
+      setRemainingSeconds(remainingSecs);
+
+      // Set total duration for display
+      if (sessionData?.duration_minutes) {
+        setTotalDurationSeconds(sessionData.duration_minutes * 60);
+      } else {
+        setTotalDurationSeconds(remainingSecs);
       }
+    } else if (sessionData?.duration_minutes) {
+      // Fallback: use duration_minutes from start_time
+      const durationSecs = sessionData.duration_minutes * 60;
+      const startTime = new Date(sessionData.start_time);
+      const now = new Date();
+      const elapsedSecs = Math.floor((now - startTime) / 1000);
+      const remainingSecs = Math.max(0, durationSecs - elapsedSecs);
+      setRemainingSeconds(remainingSecs);
+      setTotalDurationSeconds(durationSecs);
+    }
+  }, [sessionData]);
+
+  // Countdown timer - decrements every second
+  useEffect(() => {
+    if (remainingSeconds <= 0 && totalDurationSeconds > 0 && !timerExpired) {
+      // Timer has expired - auto-generate bill
+      setTimerExpired(true);
+      handleTimerExpired();
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setRemainingSeconds(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [sessionData]);
+  }, [remainingSeconds, totalDurationSeconds, timerExpired]);
+
+  // Handle timer expiration - auto generate bill
+  const handleTimerExpired = async () => {
+    Alert.alert(
+      'Time Up!',
+      'Your booking time has ended. Generating bill...',
+      [
+        {
+          text: 'Generate Bill',
+          onPress: () => handleGenerateBill(),
+        },
+      ],
+      { cancelable: false }
+    );
+  };
 
   // Calculate pricing in real-time
   useEffect(() => {
     calculatePricing();
-  }, [timeSpent, billItems, table]);
+  }, [remainingSeconds, totalDurationSeconds, billItems, table]);
 
   // Fetch menu items on component mount
   useEffect(() => {
@@ -76,9 +129,11 @@ export default function AfterBooking({ route, navigation }) {
   // Calculate comprehensive pricing
   const calculatePricing = async () => {
     try {
-      // Calculate table charges
+      // Calculate table charges based on TOTAL booked duration (not remaining time)
       let calculatedTableCharges = 0;
-      if (table && timeSpent > 0) {
+      const bookedDurationMinutes = Math.ceil(totalDurationSeconds / 60);
+
+      if (table && bookedDurationMinutes > 0) {
         let pricePerMin = parseFloat(
           table.pricePerMin || table.price_per_min || 10,
         );
@@ -86,7 +141,7 @@ export default function AfterBooking({ route, navigation }) {
 
         // Debug logging
         console.log('Frontend pricing debug:', {
-          timeSpent,
+          bookedDurationMinutes,
           original_pricePerMin: pricePerMin,
           frameCharge,
         });
@@ -101,7 +156,7 @@ export default function AfterBooking({ route, navigation }) {
           const pricePerFrame = parseFloat(table.pricePerFrame || 100);
           calculatedTableCharges = frameCount * pricePerFrame + frameCharge;
         } else {
-          calculatedTableCharges = timeSpent * pricePerMin + frameCharge;
+          calculatedTableCharges = bookedDurationMinutes * pricePerMin + frameCharge;
         }
 
         console.log('Calculated table charges:', calculatedTableCharges);
@@ -171,21 +226,34 @@ export default function AfterBooking({ route, navigation }) {
     }
   };
 
-  // Format time display
-  const formatTime = minutes => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    const seconds =
-      Math.floor(
-        (Date.now() - new Date(sessionData?.start_time || Date.now())) / 1000,
-      ) % 60;
+  // Format countdown time display (MM:SS or HH:MM:SS)
+  const formatCountdownTime = (totalSeconds) => {
+    if (totalSeconds <= 0) return '00:00';
+
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
 
     if (hours > 0) {
-      return `${hours}.${mins.toString().padStart(2, '0')}.${seconds
+      return `${hours.toString().padStart(2, '0')}:${minutes
         .toString()
-        .padStart(2, '0')} min`;
+        .padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
-    return `${mins}.${seconds.toString().padStart(2, '0')} min`;
+    return `${minutes.toString().padStart(2, '0')}:${seconds
+      .toString()
+      .padStart(2, '0')}`;
+  };
+
+  // Get timer status text and color
+  const getTimerStatus = () => {
+    if (remainingSeconds <= 0) {
+      return { text: 'Time Expired', color: '#FF4444' };
+    } else if (remainingSeconds <= 60) {
+      return { text: 'Less than 1 minute!', color: '#FF8C00' };
+    } else if (remainingSeconds <= 300) {
+      return { text: 'Less than 5 minutes', color: '#FFA500' };
+    }
+    return { text: 'Session Running', color: '#4CAF50' };
   };
 
   // Add item to bill
@@ -268,15 +336,17 @@ export default function AfterBooking({ route, navigation }) {
       }
 
       // Prepare session_id - ensure it's a valid integer or null
+      // Use active_id if available (from ActiveTable model), otherwise fall back to id
       let validSessionId = null;
-      if (sessionData?.id) {
+      const rawSessionId = sessionData?.active_id || sessionData?.id;
+      if (rawSessionId) {
         console.log(
           'Original session ID:',
-          sessionData.id,
+          rawSessionId,
           'Type:',
-          typeof sessionData.id,
+          typeof rawSessionId,
         );
-        const sessionIdInt = parseInt(sessionData.id);
+        const sessionIdInt = parseInt(rawSessionId);
         if (!isNaN(sessionIdInt) && sessionIdInt > 0) {
           validSessionId = sessionIdInt;
           console.log('Valid session ID:', validSessionId);
@@ -287,20 +357,20 @@ export default function AfterBooking({ route, navigation }) {
 
       // Prepare bill data
       const billRequest = {
-        customer_name: 'Walk-in Customer',
-        customer_phone: '+91 XXXXXXXXXX',
+        customer_name: route.params?.customerName || sessionData?.customer_name || 'Walk-in Customer',
+        customer_phone: route.params?.customerPhone || sessionData?.customer_phone || '+91 XXXXXXXXXX',
         table_id: table?.id ? parseInt(table.id) : null,
         session_id: validSessionId,
         selected_menu_items: billItems.map(item => ({
           menu_item_id: item.id,
           quantity: item.quantity || 1,
         })),
-        session_duration: Math.round(timeSpent),
+        session_duration: Math.ceil(totalDurationSeconds / 60),
         booking_time: sessionData?.start_time,
         table_price_per_min: parseFloat(
           table?.pricePerMin || table?.price_per_min || 10,
         ),
-        frame_charges: timeOption === 'Select Frame' ? frameCount * 100 : 0,
+        frame_charges: timeOption === 'Select Frame' ? frameCount * parseFloat(table?.pricePerFrame || table?.price_per_frame || 100) : 0,
       };
 
       console.log('Creating bill with data:', billRequest);
@@ -378,14 +448,31 @@ export default function AfterBooking({ route, navigation }) {
           <Text style={styles.tableName}>{table?.name || 'Table'}</Text>
         </View>
 
-        {/* Timer Display */}
-        <View style={styles.timerContainer}>
-          <Text style={styles.timerLabel}>Total Time Span</Text>
-          <Text style={styles.timerValue}>{formatTime(timeSpent)}</Text>
+        {/* Countdown Timer Display */}
+        <View style={[styles.timerContainer, remainingSeconds <= 60 && remainingSeconds > 0 && styles.timerContainerWarning]}>
+          <Text style={styles.timerLabel}>Time Remaining</Text>
+          <Text style={[
+            styles.timerValue,
+            remainingSeconds <= 60 && styles.timerValueWarning,
+            remainingSeconds <= 0 && styles.timerValueExpired
+          ]}>
+            {formatCountdownTime(remainingSeconds)}
+          </Text>
           <View style={styles.timerStatus}>
-            <Icon name="radio-button-on" size={12} color="#FF4444" />
-            <Text style={styles.timerStatusText}>Session Running</Text>
+            <Icon
+              name={remainingSeconds <= 0 ? "alert-circle" : "radio-button-on"}
+              size={12}
+              color={getTimerStatus().color}
+            />
+            <Text style={[styles.timerStatusText, { color: getTimerStatus().color }]}>
+              {getTimerStatus().text}
+            </Text>
           </View>
+          {totalDurationSeconds > 0 && (
+            <Text style={styles.timerDurationInfo}>
+              Booked: {Math.ceil(totalDurationSeconds / 60)} minutes
+            </Text>
+          )}
         </View>
 
         {/* Time Selection Options */}
@@ -549,17 +636,17 @@ export default function AfterBooking({ route, navigation }) {
         </View>
 
         {/* Comprehensive Bill Summary */}
-        {(timeSpent > 0 || billItems.length > 0) && (
+        {(totalDurationSeconds > 0 || billItems.length > 0) && (
           <View style={styles.billSummaryContainer}>
             <Text style={styles.billSummaryTitle}>Current Bill Preview</Text>
 
             {/* Table Charges */}
-            {timeSpent > 0 && (
+            {totalDurationSeconds > 0 && (
               <View style={styles.billSection}>
                 <Text style={styles.billSectionTitle}>Table Charges</Text>
                 <View style={styles.billItem}>
                   <Text style={styles.billItemName}>
-                    {gameType || 'Gaming'} - {table?.name} ({timeSpent} min)
+                    {gameType || 'Gaming'} - {table?.name} ({Math.ceil(totalDurationSeconds / 60)} min)
                   </Text>
                   <Text style={styles.billItemPrice}>
                     ₹{tableCharges.toFixed(2)}
@@ -658,7 +745,10 @@ export default function AfterBooking({ route, navigation }) {
                   Table: {table?.name}
                 </Text>
                 <Text style={styles.billPreviewTime}>
-                  Duration: {timeSpent} minutes
+                  Booked Duration: {Math.ceil(totalDurationSeconds / 60)} minutes
+                </Text>
+                <Text style={styles.billPreviewTime}>
+                  Time Remaining: {formatCountdownTime(remainingSeconds)}
                 </Text>
               </View>
 
@@ -669,7 +759,7 @@ export default function AfterBooking({ route, navigation }) {
                   </Text>
                   <View style={styles.billPreviewItem}>
                     <Text style={styles.billPreviewItemName}>
-                      {gameType} Session ({timeSpent} min)
+                      {gameType} Session ({Math.ceil(totalDurationSeconds / 60)} min)
                     </Text>
                     <Text style={styles.billPreviewItemPrice}>
                       ₹{tableCharges.toFixed(2)}
@@ -728,179 +818,261 @@ export default function AfterBooking({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
+  // Main Container
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F8F9FA',
   },
+
+  // Header - Professional Look
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#fff',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  content: {
-    padding: 20,
-  },
-  tableBadge: {
-    alignSelf: 'center',
-    backgroundColor: '#FF8C42',
-    paddingHorizontal: 24,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginBottom: 24,
-  },
-  tableName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  timerContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  timerLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-  },
-  timerValue: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  timerStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  timerStatusText: {
-    fontSize: 12,
-    color: '#FF4444',
-    marginLeft: 4,
-    fontWeight: '500',
-  },
-  timeOptionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-  },
-  timeOption: {
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-  },
-  timeOptionActive: {
-    backgroundColor: '#FF8C42',
-  },
-  timeOptionText: {
-    fontSize: 14,
-    color: '#333',
-    marginTop: 4,
-  },
-  timeOptionTextActive: {
-    color: '#fff',
-  },
-  frameContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  frameLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 12,
-  },
-  frameCounterContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  frameButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFF8F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#FF8C42',
-  },
-  frameCountText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    minWidth: 80,
-    textAlign: 'center',
-  },
-  categoriesContainer: {
-    flexDirection: 'row',
-    marginBottom: 20,
-  },
-  categoryButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#E0E0E0',
-    marginRight: 12,
-  },
-  categoryButtonActive: {
-    backgroundColor: '#FF8C42',
-  },
-  categoryText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  categoryTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  foodItemsContainer: {
-    marginBottom: 30,
-  },
-  foodItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
   },
-  foodIcon: {
-    width: 50,
-    height: 50,
+  headerBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    letterSpacing: 0.3,
+  },
+
+  // Content Area
+  content: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+
+  // Table Badge - Prominent
+  tableBadge: {
+    alignSelf: 'center',
+    backgroundColor: '#FF8C42',
+    paddingHorizontal: 32,
+    paddingVertical: 12,
     borderRadius: 25,
-    backgroundColor: '#FFF8F0',
+    marginBottom: 24,
+    elevation: 4,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  tableName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+
+  // Timer Container - Focus Element
+  timerContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 28,
+    alignItems: 'center',
+    marginBottom: 24,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  timerContainerWarning: {
+    backgroundColor: '#FFF8E1',
+    borderWidth: 2,
+    borderColor: '#FFA500',
+  },
+  timerLabel: {
+    fontSize: 13,
+    color: '#888888',
+    marginBottom: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  timerValue: {
+    fontSize: 56,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 12,
+    letterSpacing: 2,
+  },
+  timerValueWarning: {
+    color: '#FFA500',
+  },
+  timerValueExpired: {
+    color: '#FF4444',
+  },
+  timerDurationInfo: {
+    fontSize: 13,
+    color: '#999999',
+    marginTop: 10,
+    fontWeight: '500',
+  },
+  timerStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  timerStatusText: {
+    fontSize: 13,
+    marginLeft: 6,
+    fontWeight: '600',
+  },
+
+  // Time Options Card
+  timeOptionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+  },
+  timeOption: {
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    minWidth: 90,
+  },
+  timeOptionActive: {
+    backgroundColor: '#FF8C42',
+  },
+  timeOptionText: {
+    fontSize: 13,
+    color: '#666666',
+    marginTop: 6,
+    fontWeight: '600',
+  },
+  timeOptionTextActive: {
+    color: '#FFFFFF',
+  },
+
+  // Frame Counter
+  frameContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 24,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+  },
+  frameLabel: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 16,
+    fontWeight: '600',
+  },
+  frameCounterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+  },
+  frameButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFF8F5',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    borderWidth: 2,
+    borderColor: '#FF8C42',
+  },
+  frameCountText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    minWidth: 100,
+    textAlign: 'center',
+  },
+
+  // Categories - Pill Style
+  categoriesContainer: {
+    flexDirection: 'row',
+    marginBottom: 20,
+  },
+  categoryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 25,
+    backgroundColor: '#F0F0F0',
+    marginRight: 10,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  categoryButtonActive: {
+    backgroundColor: '#FF8C42',
+    borderColor: '#FF8C42',
+  },
+  categoryText: {
+    fontSize: 14,
+    color: '#666666',
+    fontWeight: '600',
+  },
+  categoryTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // Food Items List
+  foodItemsContainer: {
+    marginBottom: 24,
+  },
+  foodItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+  },
+  // Food Item Styling
+  foodIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: '#FFF8F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
   },
   foodEmoji: {
-    fontSize: 24,
+    fontSize: 26,
   },
   foodDetails: {
     flex: 1,
@@ -908,228 +1080,269 @@ const styles = StyleSheet.create({
   foodName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
+    color: '#1A1A1A',
+    marginBottom: 6,
   },
   foodPrice: {
     fontSize: 14,
     color: '#FF8C42',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   foodItemPrice: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: '#1A1A1A',
   },
+
+  // Action Buttons Container
   buttonsContainer: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 14,
+    marginTop: 8,
   },
   updateButton: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 25,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#FF8C42',
   },
   updateButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#FF8C42',
   },
   generateBillButton: {
     flex: 1,
     backgroundColor: '#FF8C42',
-    borderRadius: 25,
+    borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
   },
   generateBillButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
+
+  // Loading & Empty States
   loadingContainer: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 50,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#666',
+    marginTop: 14,
+    fontSize: 15,
+    color: '#666666',
+    fontWeight: '500',
   },
   emptyContainer: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 50,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginVertical: 10,
   },
   emptyText: {
     fontSize: 16,
-    color: '#333',
-    marginTop: 12,
+    color: '#333333',
+    marginTop: 14,
+    fontWeight: '600',
   },
   emptySubText: {
     fontSize: 14,
-    color: '#666',
-    marginTop: 4,
+    color: '#888888',
+    marginTop: 6,
   },
+
+  // Quantity Controls
   quantityContainer: {
-    marginTop: 4,
+    marginTop: 6,
   },
   quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 10,
+    padding: 4,
   },
   quantityButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#FFF8F0',
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#FF8C42',
+    borderColor: '#E8E8E8',
   },
   quantityText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-    minWidth: 20,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    minWidth: 32,
     textAlign: 'center',
   },
   addButton: {
     backgroundColor: '#FF8C42',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 8,
   },
   addButtonText: {
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: 'bold',
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
+
+  // Bill Summary Card
   billSummaryContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    elevation: 2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 24,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 6,
   },
   billSummaryTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 16,
+    textAlign: 'center',
   },
   billItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
   },
   billItemName: {
     fontSize: 14,
-    color: '#666',
+    color: '#666666',
     flex: 1,
   },
   billItemPrice: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1A1A1A',
   },
   billTotal: {
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-    paddingTop: 8,
-    marginTop: 8,
+    backgroundColor: '#FFF8F5',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#FFE0CC',
   },
   billTotalText: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
     color: '#FF8C42',
     textAlign: 'center',
   },
   billSection: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
   billSectionTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#666',
-    marginBottom: 8,
+    color: '#888888',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   billSubtotal: {
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-    paddingTop: 8,
-    marginTop: 8,
+    borderTopColor: '#E8E8E8',
+    paddingTop: 10,
+    marginTop: 10,
   },
   billSubtotalText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: '#333333',
     textAlign: 'right',
   },
   previewButton: {
     backgroundColor: '#4CAF50',
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 16,
+    elevation: 2,
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
   },
   previewButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
     textAlign: 'center',
   },
+
+  // Session Action Buttons
   endSessionButton: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 25,
-    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 18,
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#FF8C42',
-    marginRight: 6,
+    marginRight: 8,
   },
   endSessionButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#FF8C42',
   },
   generateBillButtonDisabled: {
-    backgroundColor: '#CCC',
+    backgroundColor: '#CCCCCC',
+    elevation: 0,
+    shadowOpacity: 0,
   },
+
+  // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   billPreviewModal: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    maxHeight: '80%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    maxHeight: '85%',
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 420,
   },
   billPreviewHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#F0F0F0',
   },
   billPreviewTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#333',
   },
   billPreviewContent: {

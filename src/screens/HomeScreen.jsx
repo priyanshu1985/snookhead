@@ -7,7 +7,9 @@ import {
   Alert,
   ActivityIndicator,
   Text,
+  TouchableOpacity,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import Header from '../components/Header';
@@ -124,12 +126,17 @@ export default function HomeScreen({ navigation }) {
                 id: table.id,
                 name: table.name || `T${table.id}`,
                 price: `₹${table.pricePerMin || table.price_per_min || 200}/hr`,
+                pricePerMin: table.pricePerMin || table.price_per_min,
+                pricePerFrame: table.pricePerFrame || table.price_per_frame,
+                frameCharge: table.frameCharge || table.frame_charge,
                 status: activeSession
                   ? 'occupied'
                   : table.status || 'available',
                 time: table.activeTime || null, // For occupied tables
-                sessionId: activeSession?.id || null,
+                sessionId: activeSession?.active_id || activeSession?.id || null,
                 startTime: activeSession?.start_time || null,
+                bookingEndTime: activeSession?.booking_end_time || null,
+                durationMinutes: activeSession?.duration_minutes || null,
                 game_id: gameId,
               };
 
@@ -154,24 +161,6 @@ export default function HomeScreen({ navigation }) {
           };
         })
         .filter(game => game.tables.length > 0); // Only include games that have tables
-
-      // Add test occupied table for debugging
-      if (
-        transformedGameData.length > 0 &&
-        transformedGameData[0].tables.length > 0
-      ) {
-        // Make first table occupied for testing
-        transformedGameData[0].tables[0] = {
-          ...transformedGameData[0].tables[0],
-          status: 'occupied',
-          sessionId: 'test-session-123',
-          startTime: new Date().toISOString(),
-        };
-        console.log(
-          'Added test occupied table:',
-          transformedGameData[0].tables[0],
-        );
-      }
 
       setGameData(transformedGameData);
       console.log('Transformed game data:', transformedGameData);
@@ -224,12 +213,15 @@ export default function HomeScreen({ navigation }) {
 
     if (action === 'stop') {
       // Navigate to AfterBooking screen to show session details
-      console.log('Navigating to AfterBooking screen');
+      console.log('Navigating to AfterBooking screen with session:', table.sessionId);
       navigation.navigate('AfterBooking', {
         table,
         session: {
-          id: table.sessionId || 'unknown',
+          id: table.sessionId,
+          active_id: table.sessionId,
           start_time: table.startTime || new Date().toISOString(),
+          booking_end_time: table.bookingEndTime,
+          duration_minutes: table.durationMinutes,
           status: 'active',
         },
         gameType,
@@ -317,7 +309,9 @@ export default function HomeScreen({ navigation }) {
       <View style={styles.container}>
         <Header navigation={navigation} />
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#FF8C42" />
+          <View style={styles.emptyIcon}>
+            <ActivityIndicator size="large" color="#FF8C42" />
+          </View>
           <Text style={styles.loadingText}>Loading games and tables...</Text>
         </View>
       </View>
@@ -329,7 +323,22 @@ export default function HomeScreen({ navigation }) {
       <View style={styles.container}>
         <Header navigation={navigation} />
         <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>{error}</Text>
+          <View style={styles.errorContainer}>
+            <View style={styles.errorIcon}>
+              <Icon name="alert-circle-outline" size={28} color="#D32F2F" />
+            </View>
+            <Text style={styles.errorText}>{error}</Text>
+            <Text style={styles.errorSubText}>
+              Please check your connection and try again
+            </Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={fetchGamesAndTables}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -340,10 +349,22 @@ export default function HomeScreen({ navigation }) {
       <View style={styles.container}>
         <Header navigation={navigation} />
         <View style={styles.centerContainer}>
-          <Text style={styles.emptyText}>No games or tables available.</Text>
-          <Text style={styles.emptySubText}>
-            Please add games and tables in Setup Menu.
-          </Text>
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIcon}>
+              <Icon name="game-controller-outline" size={40} color="#FF8C42" />
+            </View>
+            <Text style={styles.emptyText}>No Games Available</Text>
+            <Text style={styles.emptySubText}>
+              Add games and tables in the Setup Menu to start booking sessions
+            </Text>
+            <TouchableOpacity
+              style={styles.setupButton}
+              onPress={() => navigation.navigate('Menu')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.setupButtonText}>Go to Setup</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -376,38 +397,117 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F8F9FA',
   },
   row: {
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 14,
   },
+  // Loading State
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#666',
+    marginTop: 16,
+    fontSize: 15,
+    color: '#666666',
+    fontWeight: '500',
+    letterSpacing: 0.3,
+  },
+  // Error State
+  errorContainer: {
+    backgroundColor: '#FFEBEE',
+    borderRadius: 16,
+    padding: 24,
+    marginHorizontal: 20,
+    alignItems: 'center',
+  },
+  errorIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   errorText: {
     fontSize: 16,
-    color: '#FF4444',
+    color: '#D32F2F',
     textAlign: 'center',
     marginBottom: 8,
+    fontWeight: '600',
+  },
+  errorSubText: {
+    fontSize: 14,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#FF8C42',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  // Empty State
+  emptyContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 32,
+    marginHorizontal: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#FFF8F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   emptyText: {
     fontSize: 18,
-    color: '#333',
+    color: '#1A1A1A',
     textAlign: 'center',
     marginBottom: 8,
+    fontWeight: '700',
   },
   emptySubText: {
     fontSize: 14,
-    color: '#666',
+    color: '#888888',
     textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  setupButton: {
+    backgroundColor: '#FF8C42',
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 12,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  setupButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

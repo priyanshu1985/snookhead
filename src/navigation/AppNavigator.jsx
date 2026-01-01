@@ -28,10 +28,18 @@ import TableBookingOrders from '../components/TableBookingOrders';
 import PaymentGateway from '../screens/PaymentGateway';
 import AfterBooking from '../screens/AfterBooking';
 
+// Import role-based screens
+import AdminDashboard from '../screens/admin/AdminDashboard';
+import StaffMember from '../screens/staff/StaffMember';
+
+// Import AuthContext and AuthChecker
+import { AuthProvider } from '../context/AuthContext';
+import AuthChecker from '../components/AuthChecker';
+
 const Tab = createBottomTabNavigator(); // Creates bottom tabs
 const Stack = createNativeStackNavigator(); // Creates stack navigation
 
-// Bottom Tab Navigator
+// Bottom Tab Navigator - Only for Owner and Customer roles
 function BottomTabs() {
   return (
     <Tab.Navigator
@@ -110,42 +118,54 @@ function BottomTabs() {
 // Main Navigator (includes Menu screen)
 export default function AppNavigator() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator
-        initialRouteName="LoginScreen"
-        screenOptions={{ headerShown: false }}
-      >
-        <Stack.Screen name="LoginScreen" component={LoginScreen} />
-        <Stack.Screen name="SignUpScreen" component={SignUpScreen} />
-        <Stack.Screen name="MainTabs" component={BottomTabs} />
-        <Stack.Screen
-          name="Menu"
-          component={MenuScreen}
-          options={{
-            presentation: 'transparentModal', // Slide from left
-            animation: 'slide_from_left',
-          }}
-        />
-        <Stack.Screen name="OwnerPanel" component={OwnerPanel} />
-        <Stack.Screen name="OwnerDashboard" component={OwnerDashboard} />
-        <Stack.Screen name="SetupMenu" component={SetupMenu} />
-        <Stack.Screen name="InventoryTracking" component={InventoryTracking} />
-        <Stack.Screen
-          name="UpgradeSubscription"
-          component={UpgradeSubscription}
-        />
-        <Stack.Screen name="ReportBugs" component={ReportBugs} />
-        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicy} />
-        <Stack.Screen
-          name="TableBookingScreen"
-          component={TableBookingScreen}
-        />
-        <Stack.Screen
-          name="TableBookingOrders"
-          component={TableBookingOrders}
-        />
-        <Stack.Screen name="AfterBooking" component={AfterBooking} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <AuthProvider>
+      <NavigationContainer>
+        <Stack.Navigator
+          initialRouteName="AuthChecker"
+          screenOptions={{ headerShown: false }}
+        >
+          <Stack.Screen name="AuthChecker" component={AuthChecker} />
+          <Stack.Screen name="LoginScreen" component={LoginScreen} />
+          <Stack.Screen name="SignUpScreen" component={SignUpScreen} />
+          <Stack.Screen name="MainTabs" component={BottomTabs} />
+
+          {/* Role-based screens */}
+          <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
+          <Stack.Screen name="StaffMember" component={StaffMember} />
+
+          {/* Common screens */}
+          <Stack.Screen
+            name="Menu"
+            component={MenuScreen}
+            options={{
+              presentation: 'transparentModal', // Slide from left
+              animation: 'slide_from_left',
+            }}
+          />
+          <Stack.Screen name="OwnerPanel" component={OwnerPanel} />
+          <Stack.Screen name="OwnerDashboard" component={OwnerDashboard} />
+          <Stack.Screen name="SetupMenu" component={SetupMenu} />
+          <Stack.Screen
+            name="InventoryTracking"
+            component={InventoryTracking}
+          />
+          <Stack.Screen
+            name="UpgradeSubscription"
+            component={UpgradeSubscription}
+          />
+          <Stack.Screen name="ReportBugs" component={ReportBugs} />
+          <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicy} />
+          <Stack.Screen
+            name="TableBookingScreen"
+            component={TableBookingScreen}
+          />
+          <Stack.Screen
+            name="TableBookingOrders"
+            component={TableBookingOrders}
+          />
+          <Stack.Screen name="AfterBooking" component={AfterBooking} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </AuthProvider>
   );
 }

@@ -9,56 +9,83 @@ import {
 
 export default function HeaderTabs({ tabs, activeTab, onTabPress }) {
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.container}
-    >
-      {tabs.map((tab, index) => (
-        <TouchableOpacity
-          key={index}
-          onPress={() => onTabPress(index)}
-          style={[
-            styles.tab,
-            activeTab === index && styles.activeTab, // Add underline if active
-          ]}
-        >
-          <Text
+    <View style={styles.outerContainer}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        style={styles.container}
+      >
+        {tabs.map((tab, index) => (
+          <TouchableOpacity
+            key={index}
+            onPress={() => onTabPress(index)}
+            activeOpacity={0.7}
             style={[
-              styles.tabText,
-              activeTab === index && styles.activeTabText, // Bold if active
+              styles.tab,
+              activeTab === index && styles.activeTab,
             ]}
           >
-            {tab}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === index && styles.activeTabText,
+              ]}
+            >
+              {tab}
+            </Text>
+            {activeTab === index && <View style={styles.activeIndicator} />}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+      <View style={styles.bottomBorder} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    backgroundColor: '#FFFFFF',
+    position: 'relative',
+  },
   container: {
-    backgroundColor: '#ffffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 0,
   },
   tab: {
-    marginRight: 24,
-    paddingBottom: 8,
-    marginBottom: -17,
+    marginRight: 28,
+    paddingBottom: 14,
+    position: 'relative',
   },
   activeTab: {
-    borderBottomWidth: 3,
-    borderBottomColor: '#FF8C42', // Orange underline
-    marginBottom: -15,
+    // Active state handled by indicator
+  },
+  activeIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: '#FF8C42',
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
   },
   tabText: {
-    fontSize: 16,
-    color: '#888',
+    fontSize: 15,
+    color: '#999999',
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
   activeTabText: {
-    color: '#1E3A5F',
-    fontWeight: 'bold',
+    color: '#1A1A1A',
+    fontWeight: '700',
+  },
+  bottomBorder: {
+    height: 1,
+    backgroundColor: '#F0F0F0',
   },
 });

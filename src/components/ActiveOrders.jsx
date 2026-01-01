@@ -81,7 +81,7 @@ export default function ActiveOrders({ refreshKey }) {
               const token = await getAuthToken();
               if (!token) return;
               const res = await fetch(`${API_URL}/api/orders/${orderId}`, {
-                method: 'get',
+                method: 'PUT',
                 headers: {
                   'Content-Type': 'application/json',
                   Authorization: `Bearer ${token}`,

@@ -7,36 +7,81 @@ import {
   TextInput,
   Alert,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { bugsAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function ReportBugs({ navigation }) {
+  const { user } = useAuth();
   const [bugTitle, setBugTitle] = useState('');
   const [bugDescription, setBugDescription] = useState('');
-  const [severity, setSeverity] = useState('Medium');
+  const [category, setCategory] = useState('App Issue');
+  const [priority, setPriority] = useState('medium');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const severities = ['Low', 'Medium', 'High', 'Critical'];
+  const categories = [
+    'App Issue',
+    'UI Problem',
+    'Feature Request',
+    'Performance',
+    'Crash',
+    'Other',
+  ];
+  const priorities = [
+    { value: 'low', label: 'Low', color: '#4CAF50' },
+    { value: 'medium', label: 'Medium', color: '#FFC107' },
+    { value: 'high', label: 'High', color: '#FF8C42' },
+    { value: 'critical', label: 'Critical', color: '#FF5252' },
+  ];
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!bugTitle.trim() || !bugDescription.trim()) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
-    Alert.alert(
-      'Success',
-      'Bug report submitted! Thank you for helping us improve.',
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            setBugTitle('');
-            setBugDescription('');
-            setSeverity('Medium');
-          },
-        },
-      ],
-    );
+    setIsSubmitting(true);
+
+    try {
+      const bugData = {
+        title: bugTitle.trim(),
+        description: bugDescription.trim(),
+        category,
+        priority,
+      };
+
+      const response = await bugsAPI.create(bugData);
+
+      if (response.success) {
+        Alert.alert(
+          'Success',
+          'Bug report submitted successfully! Thank you for helping us improve.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                setBugTitle('');
+                setBugDescription('');
+                setCategory('App Issue');
+                setPriority('medium');
+                navigation.goBack();
+              },
+            },
+          ],
+        );
+      } else {
+        throw new Error('Failed to submit bug report');
+      }
+    } catch (error) {
+      console.error('Error submitting bug report:', error);
+      Alert.alert('Error', 'Failed to submit bug report. Please try again.', [
+        { text: 'OK' },
+      ]);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -63,47 +108,58 @@ export default function ReportBugs({ navigation }) {
           value={bugTitle}
           onChangeText={setBugTitle}
           placeholderTextColor="#CCC"
+          editable={!isSubmitting}
         />
 
-        {/* Severity */}
-        <Text style={styles.label}>Severity Level *</Text>
-        <View style={styles.severityContainer}>
-          {severities.map(sev => (
+        {/* Category */}
+        <Text style={styles.label}>Category *</Text>
+        <View style={styles.categoryContainer}>
+          {categories.map(cat => (
             <TouchableOpacity
-              key={sev}
+              key={cat}
               style={[
-                styles.severityBtn,
-                severity === sev && styles.severityBtnActive,
-                {
-                  borderColor:
-                    sev === 'Low'
-                      ? '#4CAF50'
-                      : sev === 'Medium'
-                      ? '#FFC107'
-                      : sev === 'High'
-                      ? '#FF8C42'
-                      : '#FF5252',
-                  backgroundColor:
-                    severity === sev
-                      ? sev === 'Low'
-                        ? '#4CAF50'
-                        : sev === 'Medium'
-                        ? '#FFC107'
-                        : sev === 'High'
-                        ? '#FF8C42'
-                        : '#FF5252'
-                      : '#fff',
-                },
+                styles.categoryBtn,
+                category === cat && styles.categoryBtnActive,
               ]}
-              onPress={() => setSeverity(sev)}
+              onPress={() => setCategory(cat)}
+              disabled={isSubmitting}
             >
               <Text
                 style={[
-                  styles.severityText,
-                  severity === sev && { color: '#fff' },
+                  styles.categoryText,
+                  category === cat && { color: '#FF8C42', fontWeight: 'bold' },
                 ]}
               >
-                {sev}
+                {cat}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Priority */}
+        <Text style={styles.label}>Priority Level *</Text>
+        <View style={styles.priorityContainer}>
+          {priorities.map(pri => (
+            <TouchableOpacity
+              key={pri.value}
+              style={[
+                styles.priorityBtn,
+                priority === pri.value && styles.priorityBtnActive,
+                {
+                  borderColor: pri.color,
+                  backgroundColor: priority === pri.value ? pri.color : '#fff',
+                },
+              ]}
+              onPress={() => setPriority(pri.value)}
+              disabled={isSubmitting}
+            >
+              <Text
+                style={[
+                  styles.priorityText,
+                  priority === pri.value && { color: '#fff' },
+                ]}
+              >
+                {pri.label}
               </Text>
             </TouchableOpacity>
           ))}
@@ -120,12 +176,23 @@ export default function ReportBugs({ navigation }) {
           numberOfLines={6}
           placeholderTextColor="#CCC"
           textAlignVertical="top"
+          editable={!isSubmitting}
         />
 
         {/* Submit Button */}
-        <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
-          <Icon name="send" size={20} color="#fff" />
-          <Text style={styles.submitBtnText}>Submit Report</Text>
+        <TouchableOpacity
+          style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
+          onPress={handleSubmit}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Icon name="send" size={20} color="#fff" />
+          )}
+          <Text style={styles.submitBtnText}>
+            {isSubmitting ? 'Submitting...' : 'Submit Report'}
+          </Text>
         </TouchableOpacity>
 
         {/* Info */}
@@ -187,22 +254,44 @@ const styles = StyleSheet.create({
     minHeight: 120,
     paddingTop: 12,
   },
-  severityContainer: {
+  categoryContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  categoryBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#fff',
+  },
+  categoryBtnActive: {
+    borderColor: '#FF8C42',
+    backgroundColor: '#FFF8F5',
+  },
+  categoryText: {
+    fontSize: 12,
+    color: '#333',
+  },
+  priorityContainer: {
     flexDirection: 'row',
     gap: 10,
     marginBottom: 16,
   },
-  severityBtn: {
+  priorityBtn: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 2,
     alignItems: 'center',
   },
-  severityBtnActive: {
+  priorityBtnActive: {
     borderWidth: 2,
   },
-  severityText: {
+  priorityText: {
     fontSize: 12,
     fontWeight: '600',
     color: '#333',
@@ -216,6 +305,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 16,
     gap: 8,
+  },
+  submitBtnDisabled: {
+    backgroundColor: '#FFB366',
+    opacity: 0.7,
   },
   submitBtnText: {
     color: '#fff',

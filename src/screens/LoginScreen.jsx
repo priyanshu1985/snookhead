@@ -11,34 +11,60 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { API_URL } from '../config';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../context/AuthContext';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { login } = useAuth();
 
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Missing Info', 'Please enter all fields!');
       return;
     }
+
     try {
+      setIsLoading(true);
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
+
       const data = await res.json();
+
       if (res.ok && data.accessToken) {
-        await AsyncStorage.setItem('authToken', data.accessToken);
-        Alert.alert('Login Success', 'Logged in!');
-        navigation.replace('MainTabs');
+        // Save auth data using AuthContext
+        await login(data.accessToken, data.user);
+
+        Alert.alert('Login Success', 'Logged in successfully!');
+
+        // Navigate based on user role
+        const userRole = data.user.role;
+        switch (userRole) {
+          case 'admin':
+            navigation.replace('AdminDashboard');
+            break;
+          case 'staff':
+            navigation.replace('StaffMember');
+            break;
+          case 'owner':
+          case 'customer':
+          default:
+            navigation.replace('MainTabs');
+            break;
+        }
       } else {
         Alert.alert('Login Failed', data.error || 'Invalid credentials');
       }
     } catch (err) {
+      console.error('Login error:', err);
       Alert.alert('Network Error', 'Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -94,8 +120,14 @@ export default function LoginScreen({ navigation }) {
             />
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.loginBtn} onPress={handleLogin}>
-          <Text style={styles.loginBtnText}>Login</Text>
+        <TouchableOpacity
+          style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
+          onPress={handleLogin}
+          disabled={isLoading}
+        >
+          <Text style={styles.loginBtnText}>
+            {isLoading ? 'Logging in...' : 'Login'}
+          </Text>
         </TouchableOpacity>
         <View style={styles.signupSection}>
           <Text style={styles.textMuted}>Don't have an Account ? </Text>
@@ -150,6 +182,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     marginBottom: 14,
+  },
+  loginBtnDisabled: {
+    backgroundColor: '#FFB366',
+    opacity: 0.7,
   },
   loginBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 17 },
   signupSection: {

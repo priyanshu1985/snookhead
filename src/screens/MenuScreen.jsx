@@ -5,35 +5,85 @@ import {
   TouchableOpacity,
   StyleSheet,
   Dimensions,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
 export default function MenuScreen({ navigation }) {
-  const menuItems = [
-    { icon: 'id-card-outline', title: 'Owners panel', route: 'OwnerPanel' },
-    { icon: 'settings-outline', title: 'Set up menu', route: 'SetupMenu' },
-    {
-      icon: 'stats-chart-outline',
-      title: 'inventory tracking',
-      route: 'InventoryTracking',
-    },
-    {
-      icon: 'refresh-outline',
-      title: 'Upgrade subscription',
-      route: 'UpgradeSubscription',
-    },
-    { icon: 'bug-outline', title: 'Report bugs', route: 'ReportBugs' },
-    {
-      icon: 'shield-checkmark-outline',
-      title: 'Privacy and Policy',
-      route: 'PrivacyPolicy',
-    },
-  ];
+  const { user, logout, isOwner, isAdmin, isStaff } = useAuth();
+
+  // Define menu items based on roles
+  const getMenuItems = () => {
+    const allMenuItems = [
+      {
+        icon: 'id-card-outline',
+        title: 'Owners panel',
+        route: 'OwnerPanel',
+        roles: ['owner'], // Only owners can access
+      },
+      {
+        icon: 'settings-outline',
+        title: 'Set up menu',
+        route: 'SetupMenu',
+        roles: ['owner', 'admin'], // Owners and admins can access
+      },
+      {
+        icon: 'stats-chart-outline',
+        title: 'inventory tracking',
+        route: 'InventoryTracking',
+        roles: ['owner', 'admin'],
+      },
+      {
+        icon: 'refresh-outline',
+        title: 'Upgrade subscription',
+        route: 'UpgradeSubscription',
+        roles: ['owner'], // Only owners can upgrade
+      },
+      {
+        icon: 'bug-outline',
+        title: 'Report bugs',
+        route: 'ReportBugs',
+        roles: ['owner', 'customer', 'admin', 'staff'], // All roles can report bugs
+      },
+      {
+        icon: 'shield-checkmark-outline',
+        title: 'Privacy and Policy',
+        route: 'PrivacyPolicy',
+        roles: ['owner', 'customer', 'admin', 'staff'], // All roles can view policy
+      },
+    ];
+
+    // Filter menu items based on user role
+    return allMenuItems.filter(item =>
+      item.roles.includes(user?.role || 'customer'),
+    );
+  };
 
   const handleMenuItemPress = route => {
     navigation.navigate(route);
+  };
+
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      {
+        text: 'Cancel',
+        style: 'cancel',
+      },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'LoginScreen' }],
+          });
+        },
+      },
+    ]);
   };
 
   return (
@@ -52,12 +102,17 @@ export default function MenuScreen({ navigation }) {
           <View style={styles.avatar}>
             <Icon name="person" size={40} color="#fff" />
           </View>
-          <Text style={styles.staffId}>staff@id</Text>
-          <Text style={styles.email}>mike.den@example.com</Text>
+          <Text style={styles.staffId}>{user?.name || 'User'}</Text>
+          <Text style={styles.email}>{user?.email || 'user@example.com'}</Text>
+          <View style={styles.roleBadge}>
+            <Text style={styles.roleText}>
+              {user?.role?.toUpperCase() || 'GUEST'}
+            </Text>
+          </View>
         </View>
 
         {/* Menu Items */}
-        {menuItems.map((item, index) => (
+        {getMenuItems().map((item, index) => (
           <TouchableOpacity
             key={index}
             style={styles.menuItem}
@@ -75,7 +130,7 @@ export default function MenuScreen({ navigation }) {
         ))}
 
         {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutButton}>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </TouchableOpacity>
@@ -119,6 +174,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#888',
     marginTop: 4,
+  },
+  roleBadge: {
+    backgroundColor: '#FF8C42',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  roleText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: 'bold',
   },
   menuItem: {
     flexDirection: 'row',
