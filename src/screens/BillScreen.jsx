@@ -4,10 +4,10 @@ import {
   View,
   StyleSheet,
   StatusBar,
-  SafeAreaView,
   Animated,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import ActiveBillsList from '../components/ActiveBillsList';
 import BillHistoryList from '../components/BillHistoryList';
 import BillDescriptionActive from '../components/BillDescriptionActive';

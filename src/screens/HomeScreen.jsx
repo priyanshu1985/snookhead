@@ -75,9 +75,10 @@ export default function HomeScreen({ navigation }) {
         },
       });
       const tablesResult = await tablesResponse.json();
+      console.log('Raw tables response:', tablesResult);
       const tables = Array.isArray(tablesResult)
         ? tablesResult
-        : tablesResult.tables || tablesResult.data || [];
+        : tablesResult.data || tablesResult.tables || [];
 
       // Fetch active sessions
       let activeSessions = [];
@@ -106,7 +107,7 @@ export default function HomeScreen({ navigation }) {
       const transformedGameData = games
         .map(game => {
           const gameId = game.game_id || game.id;
-          const gameName = game.gamename || game.game_name || game.name;
+          const gameName = game.game_name || game.gamename || game.name;
 
           // Filter tables for this game
           const gameTables = tables

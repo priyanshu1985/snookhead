@@ -5,10 +5,10 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { API_URL } from '../config';
 import { useAuth } from '../context/AuthContext';
@@ -143,56 +143,101 @@ export default function LoginScreen({ navigation }) {
 const ORANGE = '#FF8C42';
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', justifyContent: 'flex-start' },
-  headerWrap: { alignItems: 'center', marginVertical: 44 },
-  logoText: {
-    fontSize: 28,
-    color: '#14213D',
-    fontWeight: 'bold',
-    letterSpacing: 1,
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
   },
-  formSection: { paddingHorizontal: 24 },
+  headerWrap: {
+    alignItems: 'center',
+    marginTop: 80,
+    marginBottom: 40,
+  },
+  logoText: {
+    fontSize: 32,
+    color: '#1A1A1A',
+    fontWeight: '800',
+    letterSpacing: 1.5,
+  },
+  formSection: {
+    paddingHorizontal: 28,
+    flex: 1,
+  },
   header: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#14213D',
-    marginBottom: 22,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 8,
     marginTop: 16,
+  },
+  subHeader: {
+    fontSize: 14,
+    color: '#888888',
+    marginBottom: 32,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: 1.5,
-    borderColor: ORANGE,
-    marginBottom: 18,
-    paddingHorizontal: 1,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 14,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: '#E8E8E8',
   },
-  inputIcon: { marginRight: 8 },
+  inputWrapperFocused: {
+    borderColor: ORANGE,
+    backgroundColor: '#FFF8F5',
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
   input: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 16,
     fontSize: 15,
-    color: '#1a1a1a',
+    color: '#1A1A1A',
     letterSpacing: 0.2,
   },
-  eyeBtn: { padding: 4, marginLeft: 2 },
+  eyeBtn: {
+    padding: 8,
+    marginLeft: 4,
+  },
   loginBtn: {
     backgroundColor: ORANGE,
-    borderRadius: 22,
+    borderRadius: 14,
     alignItems: 'center',
-    paddingVertical: 14,
-    marginBottom: 14,
+    paddingVertical: 18,
+    marginTop: 16,
+    marginBottom: 16,
+    elevation: 4,
+    shadowColor: ORANGE,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   loginBtnDisabled: {
-    backgroundColor: '#FFB366',
-    opacity: 0.7,
+    backgroundColor: '#CCCCCC',
+    elevation: 0,
+    shadowOpacity: 0,
   },
-  loginBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 17 },
+  loginBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+  },
   signupSection: {
-    marginTop: 10,
+    marginTop: 20,
     flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  textMuted: { color: '#878787', fontSize: 13 },
-  signupText: { color: ORANGE, fontWeight: 'bold', fontSize: 14 },
+  textMuted: {
+    color: '#888888',
+    fontSize: 14,
+  },
+  signupText: {
+    color: ORANGE,
+    fontWeight: '700',
+    fontSize: 14,
+  },
 });
