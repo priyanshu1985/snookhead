@@ -1,6 +1,7 @@
 // QueueScreen.js
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
+import Header from '../components/Header';
 import QueueListView from '../components/QueueListView';
 import QueueTableSelection from '../components/QueueTableSelection';
 import UpcomingReservationList from '../components/UpcomingReservationList';

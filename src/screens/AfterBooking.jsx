@@ -23,6 +23,7 @@ export default function AfterBooking({ route, navigation }) {
     gameType,
     timeOption = 'Set Time',
     timeDetails,
+    preSelectedFoodItems = [], // Food items added during booking
   } = route.params || {};
 
   console.log('AfterBooking received params:', {
@@ -31,6 +32,7 @@ export default function AfterBooking({ route, navigation }) {
     gameType,
     timeOption,
     timeDetails,
+    preSelectedFoodItems: preSelectedFoodItems?.length || 0,
   });
 
   const [remainingSeconds, setRemainingSeconds] = useState(0);
@@ -102,19 +104,90 @@ export default function AfterBooking({ route, navigation }) {
     return () => clearInterval(interval);
   }, [remainingSeconds, totalDurationSeconds, timerExpired]);
 
-  // Handle timer expiration - auto generate bill
+  // Handle timer expiration - auto generate bill silently
   const handleTimerExpired = async () => {
-    Alert.alert(
-      'Time Up!',
-      'Your booking time has ended. Generating bill...',
-      [
-        {
-          text: 'Generate Bill',
-          onPress: () => handleGenerateBill(),
+    // Auto-generate bill silently without any alert
+    console.log('Timer expired - auto generating bill silently');
+    await handleGenerateBillSilent();
+  };
+
+  // Generate bill silently (for auto-generation when timer expires)
+  const handleGenerateBillSilent = async () => {
+    try {
+      setIsCalculatingBill(true);
+
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) {
+        console.error('No auth token for silent bill generation');
+        navigation.navigate('MainTabs', { screen: 'Bill' });
+        return;
+      }
+
+      let validSessionId = null;
+      const rawSessionId = sessionData?.active_id || sessionData?.id;
+      if (rawSessionId) {
+        const sessionIdInt = parseInt(rawSessionId);
+        if (!isNaN(sessionIdInt) && sessionIdInt > 0) {
+          validSessionId = sessionIdInt;
+        }
+      }
+
+      const billRequest = {
+        customer_name: route.params?.customerName || sessionData?.customer_name || 'Walk-in Customer',
+        customer_phone: route.params?.customerPhone || sessionData?.customer_phone || '+91 XXXXXXXXXX',
+        table_id: table?.id ? parseInt(table.id) : null,
+        session_id: validSessionId,
+        selected_menu_items: billItems.map(item => ({
+          menu_item_id: item.id,
+          quantity: item.quantity || 1,
+        })),
+        session_duration: Math.ceil(totalDurationSeconds / 60),
+        booking_time: sessionData?.start_time,
+        table_price_per_min: parseFloat(table?.pricePerMin || table?.price_per_min || 10),
+        frame_charges: timeOption === 'Select Frame' ? frameCount * parseFloat(table?.pricePerFrame || table?.price_per_frame || 100) : 0,
+      };
+
+      console.log('Silent bill generation:', billRequest);
+
+      const response = await fetch(`${API_URL}/api/bills/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
-      ],
-      { cancelable: false }
-    );
+        body: JSON.stringify(billRequest),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        // End the session silently
+        try {
+          await fetch(`${API_URL}/api/activeTables/stop`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ active_id: validSessionId }),
+          });
+        } catch (sessionError) {
+          console.warn('Failed to end session:', sessionError);
+        }
+
+        console.log('Bill generated silently:', result.bill?.bill_number);
+        // Navigate to Bill screen without any alert
+        navigation.navigate('MainTabs', { screen: 'Bill' });
+      } else {
+        console.error('Silent bill generation failed:', result.error);
+        navigation.navigate('MainTabs', { screen: 'Bill' });
+      }
+    } catch (error) {
+      console.error('Silent bill generation error:', error);
+      navigation.navigate('MainTabs', { screen: 'Bill' });
+    } finally {
+      setIsCalculatingBill(false);
+    }
   };
 
   // Calculate pricing in real-time
@@ -122,10 +195,92 @@ export default function AfterBooking({ route, navigation }) {
     calculatePricing();
   }, [remainingSeconds, totalDurationSeconds, billItems, table]);
 
-  // Fetch menu items on component mount
+  // Initialize with pre-selected food items from TableBookingScreen
+  useEffect(() => {
+    if (preSelectedFoodItems && preSelectedFoodItems.length > 0) {
+      console.log('Initializing with pre-selected food items:', preSelectedFoodItems);
+      const formattedItems = preSelectedFoodItems.map(item => ({
+        id: item.id,
+        name: item.name,
+        price: item.price || 0,
+        quantity: item.quantity || 1,
+        category: item.category || 'Food',
+        fromPreBooking: true, // Mark as added during booking
+      }));
+      setBillItems(formattedItems);
+    }
+  }, []);
+
+  // Fetch menu items and existing session orders on component mount
   useEffect(() => {
     fetchMenuItems();
+    fetchExistingOrders();
   }, []);
+
+  // Fetch existing orders for this session (to include food already ordered)
+  const fetchExistingOrders = async () => {
+    try {
+      const sessionId = sessionData?.active_id || sessionData?.id;
+      if (!sessionId) {
+        console.log('No session ID available, skipping order fetch');
+        return;
+      }
+
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) return;
+
+      console.log('Fetching existing orders for session:', sessionId);
+
+      const response = await fetch(`${API_URL}/api/orders/by-session/${sessionId}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Existing session orders:', result);
+
+        // Add consolidated items to billItems (avoid duplicates)
+        if (result.consolidated_items && result.consolidated_items.length > 0) {
+          setBillItems(prevItems => {
+            const existingIds = new Set(prevItems.map(item => item.id));
+            const newItems = result.consolidated_items
+              .filter(item => !existingIds.has(item.id))
+              .map(item => ({
+                id: item.id,
+                name: item.name,
+                price: item.price,
+                quantity: item.quantity,
+                category: item.category,
+                fromExistingOrder: true, // Mark as already ordered
+              }));
+
+            // Merge quantities for items that exist in both
+            const mergedItems = prevItems.map(prevItem => {
+              const matchingNew = result.consolidated_items.find(i => i.id === prevItem.id);
+              if (matchingNew) {
+                return {
+                  ...prevItem,
+                  quantity: prevItem.quantity + matchingNew.quantity,
+                };
+              }
+              return prevItem;
+            });
+
+            return [...mergedItems, ...newItems];
+          });
+
+          console.log('Added existing order items to bill');
+        }
+      } else {
+        console.log('No existing orders found for session or error:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching existing orders:', error);
+    }
+  };
 
   // Calculate comprehensive pricing
   const calculatePricing = async () => {
@@ -325,7 +480,7 @@ export default function AfterBooking({ route, navigation }) {
     setShowBillPreview(true);
   };
 
-  // Generate final bill and store in database
+  // Generate final bill and store in database (manual/early generation)
   const handleGenerateBill = async () => {
     try {
       setIsCalculatingBill(true);
@@ -336,27 +491,30 @@ export default function AfterBooking({ route, navigation }) {
         return;
       }
 
-      // Prepare session_id - ensure it's a valid integer or null
-      // Use active_id if available (from ActiveTable model), otherwise fall back to id
+      // Calculate actual time used (for early bill generation)
+      const actualTimeUsedSeconds = totalDurationSeconds - remainingSeconds;
+      const actualTimeUsedMinutes = Math.ceil(actualTimeUsedSeconds / 60);
+      const isEarlyGeneration = remainingSeconds > 0;
+
+      console.log('Bill generation timing:', {
+        totalDuration: totalDurationSeconds,
+        remainingSeconds,
+        actualTimeUsedMinutes,
+        isEarlyGeneration,
+      });
+
       let validSessionId = null;
       const rawSessionId = sessionData?.active_id || sessionData?.id;
       if (rawSessionId) {
-        console.log(
-          'Original session ID:',
-          rawSessionId,
-          'Type:',
-          typeof rawSessionId,
-        );
         const sessionIdInt = parseInt(rawSessionId);
         if (!isNaN(sessionIdInt) && sessionIdInt > 0) {
           validSessionId = sessionIdInt;
-          console.log('Valid session ID:', validSessionId);
-        } else {
-          console.log('Invalid session ID, setting to null');
         }
       }
 
-      // Prepare bill data
+      // For early generation, use actual time used; otherwise use total booked duration
+      const billableDuration = isEarlyGeneration ? actualTimeUsedMinutes : Math.ceil(totalDurationSeconds / 60);
+
       const billRequest = {
         customer_name: route.params?.customerName || sessionData?.customer_name || 'Walk-in Customer',
         customer_phone: route.params?.customerPhone || sessionData?.customer_phone || '+91 XXXXXXXXXX',
@@ -366,12 +524,11 @@ export default function AfterBooking({ route, navigation }) {
           menu_item_id: item.id,
           quantity: item.quantity || 1,
         })),
-        session_duration: Math.ceil(totalDurationSeconds / 60),
+        session_duration: billableDuration,
         booking_time: sessionData?.start_time,
-        table_price_per_min: parseFloat(
-          table?.pricePerMin || table?.price_per_min || 10,
-        ),
+        table_price_per_min: parseFloat(table?.pricePerMin || table?.price_per_min || 10),
         frame_charges: timeOption === 'Select Frame' ? frameCount * parseFloat(table?.pricePerFrame || table?.price_per_frame || 100) : 0,
+        is_early_checkout: isEarlyGeneration,
       };
 
       console.log('Creating bill with data:', billRequest);
@@ -388,7 +545,11 @@ export default function AfterBooking({ route, navigation }) {
       const result = await response.json();
 
       if (response.ok) {
-        // End the session
+        // Stop the timer immediately
+        setTimerExpired(true);
+        setRemainingSeconds(0);
+
+        // End the session and free the table
         try {
           await fetch(`${API_URL}/api/activeTables/stop`, {
             method: 'POST',
@@ -398,26 +559,13 @@ export default function AfterBooking({ route, navigation }) {
             },
             body: JSON.stringify({ active_id: validSessionId }),
           });
+          console.log('Session ended, table is now available for next booking');
         } catch (sessionError) {
           console.warn('Failed to end session:', sessionError);
         }
 
-        Alert.alert(
-          'Bill Generated Successfully!',
-          `Bill Number: ${result.bill.bill_number}\nTotal Amount: ₹${result.bill.total_amount}\n\nTable Charges: ₹${result.bill.table_charges}\nMenu Charges: ₹${result.bill.menu_charges}`,
-          [
-            {
-              text: 'View in Bills',
-              onPress: () =>
-                navigation.navigate('MainTabs', { screen: 'Bill' }),
-            },
-            {
-              text: 'Go Home',
-              onPress: () =>
-                navigation.navigate('MainTabs', { screen: 'Home' }),
-            },
-          ],
-        );
+        // Navigate directly to Bill screen
+        navigation.navigate('MainTabs', { screen: 'Bill' });
       } else {
         throw new Error(result.error || 'Failed to create bill');
       }
@@ -662,9 +810,17 @@ export default function AfterBooking({ route, navigation }) {
                 <Text style={styles.billSectionTitle}>Menu Items</Text>
                 {billItems.map((item, index) => (
                   <View key={item.id || index} style={styles.billItem}>
-                    <Text style={styles.billItemName}>
-                      {item.name} x{item.quantity}
-                    </Text>
+                    <View style={styles.billItemNameContainer}>
+                      <Text style={styles.billItemName}>
+                        {item.name} x{item.quantity}
+                      </Text>
+                      {item.fromPreBooking && (
+                        <Text style={styles.preBookingBadge}>Pre-Booked</Text>
+                      )}
+                      {item.fromExistingOrder && (
+                        <Text style={styles.existingOrderBadge}>Already Ordered</Text>
+                      )}
+                    </View>
                     <Text style={styles.billItemPrice}>
                       ₹{(item.price * item.quantity).toFixed(2)}
                     </Text>
@@ -1230,10 +1386,24 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F5F5F5',
   },
+  billItemNameContainer: {
+    flex: 1,
+  },
   billItemName: {
     fontSize: 14,
     color: '#666666',
-    flex: 1,
+  },
+  existingOrderBadge: {
+    fontSize: 10,
+    color: '#4CAF50',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  preBookingBadge: {
+    fontSize: 10,
+    color: '#FF8C42',
+    fontWeight: '600',
+    marginTop: 2,
   },
   billItemPrice: {
     fontSize: 15,

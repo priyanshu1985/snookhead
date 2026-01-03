@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,6 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
-  StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -27,9 +26,24 @@ const getNextDates = () => {
   for (let i = 0; i < 7; i++) {
     const date = new Date(today);
     date.setDate(today.getDate() + i);
+    const monthNames = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     dates.push({
       id: i,
-      label: i === 0 ? 'Today' : `${date.getDate()}June`,
+      label:
+        i === 0 ? 'Today' : `${date.getDate()} ${monthNames[date.getMonth()]}`,
     });
   }
   return dates;
@@ -39,7 +53,6 @@ export default function TableBookingScreen({ route, navigation }) {
   // ===== ALL HOOKS AT THE TOP - MUST BE FIRST =====
   const [selectedDate, setSelectedDate] = useState(0);
   const [selectedTimeOption, setSelectedTimeOption] = useState('Set Time');
-  const [selectedFood, setSelectedFood] = useState([]);
   const [showInstructionModal, setShowInstructionModal] = useState(false);
   const [foodInstructions, setFoodInstructions] = useState('');
   const [showTimeModal, setShowTimeModal] = useState(false);
@@ -54,6 +67,13 @@ export default function TableBookingScreen({ route, navigation }) {
     totalAmount: 0,
   });
 
+  // Menu items state (similar to AfterBooking)
+  const [menuItems, setMenuItems] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('Food');
+  const [loading, setLoading] = useState(false);
+  const [billItems, setBillItems] = useState([]);
+
   // ===== DATA AND CONSTANTS AFTER HOOKS =====
   const { table, gameType, color, selectedFoodItems } = route.params || {};
   const dates = getNextDates();
@@ -62,34 +82,75 @@ export default function TableBookingScreen({ route, navigation }) {
   const safeTable = table || { name: 'Unknown Table', id: 'unknown' };
   const safeGameType = gameType || 'Game';
 
-  // Update selectedFood when coming back from TableBookingOrders
-  React.useEffect(() => {
+  // Update billItems when coming back from TableBookingOrders (backwards compatibility)
+  useEffect(() => {
     if (selectedFoodItems && selectedFoodItems.length > 0) {
-      console.log(
-        'Selected food items received:',
-        JSON.stringify(selectedFoodItems, null, 2),
-      );
-      setSelectedFood(selectedFoodItems);
+      const converted = selectedFoodItems.map(item => ({
+        id: item.item?.id || item.id,
+        name: item.item?.name || item.name,
+        price: item.item?.price || item.price || 0,
+        quantity: item.qty || item.quantity || 1,
+        category: item.item?.category || item.category || 'Food',
+      }));
+      setBillItems(converted);
     }
   }, [selectedFoodItems]);
 
-  const foodOptions = [{ id: 1, name: 'Food', icon: '🍔' }];
+  // Fetch menu items on mount
+  useEffect(() => {
+    fetchMenuItems();
+  }, []);
 
-  // ===== HANDLERS =====
-  const handleFoodSelection = () => {
-    // Navigate to TableBookingOrders component
-    navigation.navigate('TableBookingOrders', {
-      tableId: safeTable.id,
-      tableName: safeTable.name,
-      table: safeTable,
-      gameType: safeGameType,
-      color: color,
-    });
+  // Recalculate cost when billItems or time options change
+  useEffect(() => {
+    calculateEstimatedCost();
+  }, [billItems, selectedTimeOption, timerDuration, selectedFrame]);
+
+  // Fetch menu items from backend
+  const fetchMenuItems = async () => {
+    try {
+      setLoading(true);
+      const token = await AsyncStorage.getItem('authToken');
+
+      const response = await fetch(`${API_URL}/api/menu`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const items = Array.isArray(result) ? result : result.data || [];
+
+        // Extract unique categories
+        const uniqueCategories = [
+          ...new Set(items.map(item => item.category || 'Food')),
+        ];
+        setCategories(
+          uniqueCategories.length > 0
+            ? uniqueCategories
+            : ['Food', 'Fast Food', 'Beverages'],
+        );
+        if (uniqueCategories.length > 0) {
+          setSelectedCategory(uniqueCategories[0]);
+        }
+
+        setMenuItems(items);
+      } else {
+        console.error('Failed to fetch menu items:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching menu items:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // ===== HANDLERS =====
   const handleAddInstructions = () => {
-    if (selectedFood.length === 0) {
-      alert('Please select at least one food item first');
+    if (billItems.length === 0) {
+      Alert.alert('Info', 'Please select at least one food item first');
       return;
     }
     setShowInstructionModal(true);
@@ -113,6 +174,53 @@ export default function TableBookingScreen({ route, navigation }) {
   const handleTimeConfirm = () => {
     setShowTimeModal(false);
     calculateEstimatedCost();
+  };
+
+  // Add item to bill
+  const handleAddToBill = menuItem => {
+    const existingItem = billItems.find(item => item.id === menuItem.id);
+
+    if (existingItem) {
+      setBillItems(prev =>
+        prev.map(item =>
+          item.id === menuItem.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item,
+        ),
+      );
+    } else {
+      setBillItems(prev => [
+        ...prev,
+        {
+          id: menuItem.id,
+          name: menuItem.name,
+          price: menuItem.price || 0,
+          quantity: 1,
+          category: menuItem.category || 'Food',
+        },
+      ]);
+    }
+  };
+
+  // Remove item from bill
+  const handleRemoveFromBill = itemId => {
+    setBillItems(prev => {
+      const existingItem = prev.find(item => item.id === itemId);
+      if (existingItem && existingItem.quantity > 1) {
+        return prev.map(item =>
+          item.id === itemId ? { ...item, quantity: item.quantity - 1 } : item,
+        );
+      } else {
+        return prev.filter(item => item.id !== itemId);
+      }
+    });
+  };
+
+  // Get filtered menu items by category
+  const getFilteredMenuItems = () => {
+    return menuItems.filter(
+      item => (item.category || 'Food') === selectedCategory,
+    );
   };
 
   // Calculate estimated cost based on selected options
@@ -140,12 +248,9 @@ export default function TableBookingScreen({ route, navigation }) {
       }
     }
 
-    // Calculate menu charges
-    menuCharges = selectedFood.reduce((total, item) => {
-      return (
-        total +
-        (item.qty || item.quantity || 1) * (item.item?.price || item.price || 0)
-      );
+    // Calculate menu charges from billItems
+    menuCharges = billItems.reduce((total, item) => {
+      return total + (item.quantity || 1) * (item.price || 0);
     }, 0);
 
     const totalAmount = tableCharges + menuCharges;
@@ -166,11 +271,11 @@ export default function TableBookingScreen({ route, navigation }) {
   const getTimeDisplayText = () => {
     switch (selectedTimeOption) {
       case 'Set Time':
-        return `Set Time: ${selectedTime}`;
+        return `Start Time: ${selectedTime}`;
       case 'Timer':
-        return `Timer: ${timerDuration} min`;
+        return `Duration: ${timerDuration} min`;
       case 'Select Frame':
-        return `Frame: ${selectedFrame}`;
+        return `Frames: ${selectedFrame}`;
       default:
         return selectedTimeOption;
     }
@@ -214,23 +319,18 @@ export default function TableBookingScreen({ route, navigation }) {
       if (selectedTimeOption === 'Timer') {
         durationMinutes = parseInt(timerDuration) || 60;
       } else if (selectedTimeOption === 'Set Time') {
-        // For set time, default to 60 minutes (can be adjusted)
         durationMinutes = 60;
       }
-      // For 'Select Frame', duration is not time-based
 
       // Prepare booking data
       const bookingData = {
         table_id: safeTable.id,
-        game_id: safeTable.game_id || safeTable.gameid || 1, // Get game_id from table data
-        user_id: null, // Will be extracted from token on backend
-        duration_minutes: durationMinutes, // Pass duration to backend
+        game_id: safeTable.game_id || safeTable.gameid || 1,
+        user_id: null,
+        duration_minutes: durationMinutes,
       };
 
-      console.log('Table object:', safeTable);
-      console.log('Table status:', safeTable.status);
       console.log('Booking table with data:', bookingData);
-      console.log('API URL:', `${API_URL}/api/activeTables/start`);
 
       // Start active table session
       const response = await fetch(`${API_URL}/api/activeTables/start`, {
@@ -242,31 +342,18 @@ export default function TableBookingScreen({ route, navigation }) {
         body: JSON.stringify(bookingData),
       });
 
-      console.log('Response status:', response.status);
-      console.log('Response headers:', response.headers);
-
-      // Get response text first to see what we're actually getting
       const responseText = await response.text();
-      console.log('Response text:', responseText);
-
       let result;
       try {
         result = JSON.parse(responseText);
       } catch (parseError) {
-        console.error('JSON parse error. Raw response:', responseText);
-        throw new Error(
-          `Server returned invalid response: ${responseText.substring(
-            0,
-            200,
-          )}...`,
-        );
+        throw new Error(`Server returned invalid response`);
       }
 
       if (!response.ok) {
         let errorMessage =
           result.error || result.message || 'Failed to book table';
 
-        // Provide specific messages for common errors
         if (
           errorMessage.includes('not available') ||
           errorMessage.includes('not found')
@@ -286,22 +373,19 @@ export default function TableBookingScreen({ route, navigation }) {
 
       console.log('Table booked successfully:', result);
 
-      Alert.alert(
-        'Success!',
-        `Table ${safeTable.name} has been booked successfully!`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Small delay to ensure backend processing is complete
-              setTimeout(() => {
-                // Navigate back to Home tab to see the updated table status
-                navigation.navigate('MainTabs', { screen: 'Home' });
-              }, 500);
-            },
-          },
-        ],
-      );
+      // Navigate to AfterBooking with selected food items
+      navigation.navigate('AfterBooking', {
+        table: safeTable,
+        session: result.session || result.activeTable,
+        gameType: safeGameType,
+        timeOption: selectedTimeOption,
+        timeDetails: {
+          selectedTime,
+          timerDuration,
+          selectedFrame,
+        },
+        preSelectedFoodItems: billItems, // Pass pre-selected food items
+      });
     } catch (error) {
       console.error('Booking error:', error);
       const errorMessage =
@@ -333,11 +417,13 @@ export default function TableBookingScreen({ route, navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {/* Table Badge */}
         <View style={styles.tableBadge}>
-          <Text style={styles.tableName}>{safeTable.name} S0176</Text>
+          <Text style={styles.tableName}>{safeTable.name}</Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Select date</Text>
+        {/* Date Selection */}
+        <Text style={styles.sectionTitle}>Select Date</Text>
         <FlatList
           data={dates}
           horizontal
@@ -364,6 +450,7 @@ export default function TableBookingScreen({ route, navigation }) {
           )}
         />
 
+        {/* Time Selection */}
         <Text style={styles.sectionTitle}>Select Time</Text>
         <View style={styles.timeOptions}>
           <TouchableOpacity
@@ -418,84 +505,143 @@ export default function TableBookingScreen({ route, navigation }) {
 
         {selectedTimeOption && (
           <View style={styles.timeDetailsContainer}>
+            <Icon
+              name="time-outline"
+              size={18}
+              color="#FF8C42"
+              style={styles.timeDetailsIcon}
+            />
             <Text style={styles.timeDetailsText}>{getTimeDisplayText()}</Text>
+            <TouchableOpacity onPress={() => setShowTimeModal(true)}>
+              <Icon name="pencil" size={16} color="#FF8C42" />
+            </TouchableOpacity>
           </View>
         )}
 
+        {/* Food Section Header */}
         <View style={styles.foodHeader}>
-          <Text style={styles.sectionTitle}>Add Food</Text>
-          {selectedFood.length > 0 && (
+          <Text style={styles.sectionTitle}>Add Food Items</Text>
+          {billItems.length > 0 && (
             <TouchableOpacity onPress={handleAddInstructions}>
-              <Text style={styles.addInstructionLink}>+ Add Instructions</Text>
+              <Text style={styles.addInstructionLink}>+ Instructions</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        <View style={styles.foodOptions}>
-          {foodOptions.map(food => (
-            <TouchableOpacity
-              key={food.id}
-              style={styles.foodButtonSingle}
-              onPress={handleFoodSelection}
-            >
-              <Text style={styles.foodIcon}>{food.icon}</Text>
-              <Text style={styles.foodName}>{food.name}</Text>
-            </TouchableOpacity>
-          ))}
+        {/* Category Tabs */}
+        <View style={styles.categoriesContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {categories.map((category, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.categoryButton,
+                  selectedCategory === category && styles.categoryButtonActive,
+                ]}
+                onPress={() => setSelectedCategory(category)}
+              >
+                <Text
+                  style={[
+                    styles.categoryText,
+                    selectedCategory === category && styles.categoryTextActive,
+                  ]}
+                >
+                  {category}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
-        {/* Display selected food items */}
-        {selectedFood.length > 0 && (
-          <View style={styles.selectedFoodContainer}>
-            <Text style={styles.selectedFoodTitle}>Selected Food Items:</Text>
-            {selectedFood.map((item, index) => (
-              <View key={index} style={styles.selectedFoodItem}>
-                <View style={styles.selectedFoodInfo}>
-                  <Text style={styles.selectedFoodName}>
-                    {item.item?.name ||
-                      item.name ||
-                      item.title ||
-                      'Unknown Item'}
-                  </Text>
-                  <Text style={styles.selectedFoodDetails}>
-                    Qty: {item.qty || item.quantity || 1} × ₹
-                    {item.item?.price || item.price || 0} = ₹
-                    {(item.qty || item.quantity || 1) *
-                      (item.item?.price || item.price || 0)}
-                  </Text>
+        {/* Food Items Grid */}
+        <View style={styles.foodItemsContainer}>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#FF8C42" />
+              <Text style={styles.loadingText}>Loading menu...</Text>
+            </View>
+          ) : getFilteredMenuItems().length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Icon name="restaurant-outline" size={48} color="#ccc" />
+              <Text style={styles.emptyText}>
+                No items in {selectedCategory}
+              </Text>
+            </View>
+          ) : (
+            getFilteredMenuItems().map((item, index) => {
+              const billItem = billItems.find(bi => bi.id === item.id);
+              return (
+                <View key={item.id || index} style={styles.foodItem}>
+                  <View style={styles.foodIcon}>
+                    <Text style={styles.foodEmoji}>
+                      {item.category === 'Beverages'
+                        ? '🥤'
+                        : item.category === 'Fast Food'
+                        ? '🍔'
+                        : '🍽️'}
+                    </Text>
+                  </View>
+                  <View style={styles.foodDetails}>
+                    <Text style={styles.foodName}>{item.name}</Text>
+                    <Text style={styles.foodPrice}>₹{item.price || 0}</Text>
+                  </View>
+                  <View style={styles.quantityContainer}>
+                    {billItem ? (
+                      <View style={styles.quantityControls}>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() => handleRemoveFromBill(item.id)}
+                        >
+                          <Icon name="remove" size={16} color="#FF8C42" />
+                        </TouchableOpacity>
+                        <Text style={styles.quantityText}>
+                          {billItem.quantity}
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() => handleAddToBill(item)}
+                        >
+                          <Icon name="add" size={16} color="#FF8C42" />
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.addButton}
+                        onPress={() => handleAddToBill(item)}
+                      >
+                        <Text style={styles.addButtonText}>ADD</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
-                <View style={styles.selectedFoodActions}>
-                  <TouchableOpacity
-                    style={styles.removeItemButton}
-                    onPress={() => {
-                      const updatedFood = selectedFood.filter(
-                        (_, i) => i !== index,
-                      );
-                      setSelectedFood(updatedFood);
-                    }}
-                  >
-                    <Icon name="close" size={16} color="#FF6B6B" />
-                  </TouchableOpacity>
-                </View>
+              );
+            })
+          )}
+        </View>
+
+        {/* Bill Summary */}
+        {billItems.length > 0 && (
+          <View style={styles.billSummaryContainer}>
+            <Text style={styles.billSummaryTitle}>Order Summary</Text>
+            {billItems.map((item, index) => (
+              <View key={item.id || index} style={styles.billItem}>
+                <Text style={styles.billItemName}>
+                  {item.name} × {item.quantity}
+                </Text>
+                <Text style={styles.billItemPrice}>
+                  ₹{(item.price * item.quantity).toFixed(2)}
+                </Text>
               </View>
             ))}
-            <View style={styles.selectedFoodTotal}>
-              <Text style={styles.selectedFoodTotalText}>
-                Total Bill: ₹
-                {selectedFood
-                  .reduce(
-                    (total, item) =>
-                      total +
-                      (item.qty || item.quantity || 1) *
-                        (item.item?.price || item.price || 0),
-                    0,
-                  )
-                  .toFixed(2)}
+            <View style={styles.billTotal}>
+              <Text style={styles.billTotalText}>
+                Menu Total: ₹{estimatedCost.menuCharges.toFixed(2)}
               </Text>
             </View>
           </View>
         )}
 
+        {/* Instructions Preview */}
         {foodInstructions !== '' && (
           <View style={styles.instructionsPreview}>
             <Text style={styles.instructionsLabel}>Special Instructions:</Text>
@@ -509,6 +655,7 @@ export default function TableBookingScreen({ route, navigation }) {
           </View>
         )}
 
+        {/* Book Button */}
         <TouchableOpacity
           style={[styles.bookButton, isBooking && styles.bookButtonDisabled]}
           onPress={handleShowPricingPreview}
@@ -526,11 +673,12 @@ export default function TableBookingScreen({ route, navigation }) {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
-          <Text style={styles.newUserText}>New User</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('SignUpScreen')}>
+          <Text style={styles.newUserText}>New User? Sign Up</Text>
         </TouchableOpacity>
       </ScrollView>
 
+      {/* Food Instructions Modal */}
       <Modal
         visible={showInstructionModal}
         transparent
@@ -744,9 +892,7 @@ export default function TableBookingScreen({ route, navigation }) {
                 </Text>
                 <Text style={styles.pricingText}>Table: {safeTable.name}</Text>
                 <Text style={styles.pricingText}>Game: {safeGameType}</Text>
-                <Text style={styles.pricingText}>
-                  Time Option: {getTimeDisplayText()}
-                </Text>
+                <Text style={styles.pricingText}>{getTimeDisplayText()}</Text>
               </View>
 
               <View style={styles.pricingSection}>
@@ -761,21 +907,16 @@ export default function TableBookingScreen({ route, navigation }) {
                   </Text>
                 </View>
 
-                {selectedFood.length > 0 && (
+                {billItems.length > 0 && (
                   <>
                     <Text style={styles.pricingSubTitle}>Menu Items:</Text>
-                    {selectedFood.map((item, index) => (
+                    {billItems.map((item, index) => (
                       <View key={index} style={styles.pricingItem}>
                         <Text style={styles.pricingItemName}>
-                          {item.item?.name || item.name} ×{' '}
-                          {item.qty || item.quantity || 1}
+                          {item.name} × {item.quantity}
                         </Text>
                         <Text style={styles.pricingItemPrice}>
-                          ₹
-                          {(
-                            (item.qty || item.quantity || 1) *
-                            (item.item?.price || item.price || 0)
-                          ).toFixed(2)}
+                          ₹{(item.quantity * item.price).toFixed(2)}
                         </Text>
                       </View>
                     ))}
@@ -805,7 +946,7 @@ export default function TableBookingScreen({ route, navigation }) {
                 style={styles.pricingCancelButton}
                 onPress={() => setShowPricingPreview(false)}
               >
-                <Text style={styles.pricingCancelText}>Modify Selection</Text>
+                <Text style={styles.pricingCancelText}>Modify</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.pricingConfirmButton}
@@ -816,7 +957,7 @@ export default function TableBookingScreen({ route, navigation }) {
                 disabled={isBooking}
               >
                 <Text style={styles.pricingConfirmText}>
-                  {isBooking ? 'Booking...' : 'Confirm & Book Table'}
+                  {isBooking ? 'Booking...' : 'Confirm & Book'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -834,7 +975,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
   },
 
-  // Header - Clean and Professional
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -850,14 +991,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
   },
-  headerBackButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#F5F5F5',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -871,14 +1004,14 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
 
-  // Table Badge - Prominent Display
+  // Table Badge
   tableBadge: {
     alignSelf: 'center',
     backgroundColor: '#FF8C42',
     paddingHorizontal: 32,
     paddingVertical: 12,
     borderRadius: 25,
-    marginBottom: 28,
+    marginBottom: 24,
     elevation: 4,
     shadowColor: '#FF8C42',
     shadowOffset: { width: 0, height: 4 },
@@ -892,43 +1025,38 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // Section Titles - Consistent Typography
+  // Section Titles
   sectionTitle: {
     fontSize: 13,
     fontWeight: '600',
     color: '#666666',
-    marginBottom: 14,
-    marginTop: 12,
+    marginBottom: 12,
+    marginTop: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
 
-  // Date Selection - Pill Style
+  // Date Selection
   dateList: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   dateButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: '#E8E8E8',
     backgroundColor: '#FFFFFF',
     marginRight: 10,
-    minWidth: 80,
+    minWidth: 70,
     alignItems: 'center',
   },
   dateButtonActive: {
     backgroundColor: '#FF8C42',
     borderColor: '#FF8C42',
-    elevation: 3,
-    shadowColor: '#FF8C42',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
   },
   dateText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666666',
     fontWeight: '600',
   },
@@ -937,14 +1065,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Time Options - Radio Button Style
+  // Time Options
   timeOptions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 16,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 16,
+    padding: 14,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -954,40 +1082,33 @@ const styles = StyleSheet.create({
   timeOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 4,
   },
+  timeOptionActive: {},
   radioCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     borderWidth: 2,
     borderColor: '#D0D0D0',
     backgroundColor: '#FFFFFF',
-    marginRight: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginRight: 8,
   },
   radioCircleActive: {
     borderColor: '#FF8C42',
     backgroundColor: '#FF8C42',
   },
-  radioCircleInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FFFFFF',
-  },
   timeOptionText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#333333',
     fontWeight: '500',
   },
 
-  // Time Details Display
+  // Time Details
   timeDetailsContainer: {
     backgroundColor: '#FFF8F5',
-    padding: 16,
+    padding: 14,
     borderRadius: 12,
     marginBottom: 20,
     borderLeftWidth: 4,
@@ -996,118 +1117,245 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   timeDetailsIcon: {
-    marginRight: 12,
+    marginRight: 10,
   },
   timeDetailsText: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#1A1A1A',
     fontWeight: '600',
     flex: 1,
   },
 
-  // Food Section
+  // Food Header
   foodHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   addInstructionLink: {
     color: '#FF8C42',
     fontSize: 13,
     fontWeight: '700',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
   },
 
-  // Food Options - Card Style
-  foodOptions: {
+  // Categories
+  categoriesContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
-  foodButton: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
+  categoryButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#F0F0F0',
+    marginRight: 10,
     borderWidth: 1.5,
-    borderColor: '#E8E8E8',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    marginHorizontal: 6,
+    borderColor: 'transparent',
   },
-  foodButtonSingle: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#E8E8E8',
-    borderRadius: 16,
-    paddingVertical: 20,
-    paddingHorizontal: 32,
+  categoryButtonActive: {
+    backgroundColor: '#FF8C42',
+    borderColor: '#FF8C42',
+  },
+  categoryText: {
+    fontSize: 13,
+    color: '#666666',
+    fontWeight: '600',
+  },
+  categoryTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // Food Items
+  foodItemsContainer: {
+    marginBottom: 20,
+  },
+  foodItem: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
   },
-  foodButtonActive: {
-    borderColor: '#FF8C42',
-    borderWidth: 2,
-    backgroundColor: '#FFF8F5',
-  },
   foodIcon: {
-    fontSize: 36,
-    marginBottom: 10,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#FFF8F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  foodEmoji: {
+    fontSize: 24,
+  },
+  foodDetails: {
+    flex: 1,
   },
   foodName: {
-    fontSize: 14,
-    color: '#333333',
+    fontSize: 15,
     fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 4,
+  },
+  foodPrice: {
+    fontSize: 14,
+    color: '#FF8C42',
+    fontWeight: '700',
+  },
+  quantityContainer: {},
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 10,
+    padding: 4,
+  },
+  quantityButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+  },
+  quantityText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    minWidth: 28,
+    textAlign: 'center',
+  },
+  addButton: {
+    backgroundColor: '#FF8C42',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  addButtonText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // Loading & Empty
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666666',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+  },
+  emptyText: {
+    fontSize: 15,
+    color: '#666',
+    marginTop: 12,
+  },
+
+  // Bill Summary
+  billSummaryContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
+  billSummaryTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  billItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+  },
+  billItemName: {
+    fontSize: 13,
+    color: '#666666',
+  },
+  billItemPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  billTotal: {
+    backgroundColor: '#FFF8F5',
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#FFE0CC',
+  },
+  billTotalText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FF8C42',
+    textAlign: 'center',
   },
 
   // Instructions Preview
   instructionsPreview: {
     backgroundColor: '#FFFFFF',
-    padding: 16,
+    padding: 14,
     borderRadius: 12,
-    marginBottom: 24,
+    marginBottom: 20,
     borderLeftWidth: 4,
     borderLeftColor: '#FF8C42',
     elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
   },
   instructionsLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#888888',
-    marginBottom: 6,
+    marginBottom: 4,
     fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   instructionsText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#333333',
-    paddingRight: 36,
-    lineHeight: 20,
+    paddingRight: 30,
   },
   editInstructionBtn: {
     position: 'absolute',
-    top: 14,
-    right: 14,
-    padding: 6,
+    top: 12,
+    right: 12,
   },
 
-  // Primary Book Button
+  // Book Button
   bookButton: {
     backgroundColor: '#FF8C42',
-    paddingVertical: 18,
+    paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center',
-    marginBottom: 16,
-    marginTop: 24,
+    marginBottom: 14,
+    marginTop: 10,
     elevation: 4,
     shadowColor: '#FF8C42',
     shadowOffset: { width: 0, height: 4 },
@@ -1125,13 +1373,12 @@ const styles = StyleSheet.create({
   },
   bookButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    letterSpacing: 0.5,
   },
   newUserText: {
     color: '#999999',
-    fontSize: 14,
+    fontSize: 13,
     textAlign: 'center',
     fontWeight: '500',
   },
@@ -1154,44 +1401,35 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
-    paddingBottom: 16,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  modalCloseButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F5F5F5',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#1A1A1A',
   },
   modalSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666666',
-    marginBottom: 24,
-    lineHeight: 20,
+    marginBottom: 20,
   },
   textInput: {
     backgroundColor: '#F8F9FA',
     borderRadius: 14,
-    padding: 18,
-    fontSize: 15,
+    padding: 16,
+    fontSize: 14,
     color: '#333333',
-    height: 120,
+    height: 100,
     textAlignVertical: 'top',
-    marginBottom: 24,
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: '#E8E8E8',
   },
   saveButton: {
     backgroundColor: '#FF8C42',
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 14,
     alignItems: 'center',
     elevation: 3,
@@ -1202,25 +1440,25 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
 
-  // Time Picker Grid
+  // Time Picker
   timePickerContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   timePickerButton: {
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: '#E8E8E8',
     backgroundColor: '#FFFFFF',
-    minWidth: 85,
+    minWidth: 80,
     alignItems: 'center',
   },
   timePickerButtonActive: {
@@ -1228,7 +1466,7 @@ const styles = StyleSheet.create({
     borderColor: '#FF8C42',
   },
   timePickerText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#333333',
     fontWeight: '500',
   },
@@ -1243,32 +1481,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F8F9FA',
     borderRadius: 14,
-    padding: 18,
-    marginBottom: 20,
+    padding: 16,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#E8E8E8',
   },
   timerInput: {
     flex: 1,
-    fontSize: 24,
+    fontSize: 22,
     color: '#1A1A1A',
     textAlign: 'center',
     fontWeight: '700',
   },
   timerLabel: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#666666',
-    marginLeft: 12,
-    fontWeight: '500',
+    marginLeft: 10,
   },
   quickTimerOptions: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   quickTimerButton: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: '#E8E8E8',
@@ -1280,7 +1517,7 @@ const styles = StyleSheet.create({
     borderColor: '#FF8C42',
   },
   quickTimerText: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#333333',
     fontWeight: '600',
   },
@@ -1289,18 +1526,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Frame Selection - Circular Buttons
+  // Frame Selection
   frameOptionsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 14,
-    marginBottom: 24,
+    gap: 12,
+    marginBottom: 20,
     justifyContent: 'center',
   },
   frameButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     borderWidth: 2,
     borderColor: '#E8E8E8',
     backgroundColor: '#FFFFFF',
@@ -1315,12 +1552,9 @@ const styles = StyleSheet.create({
   frameButtonActive: {
     backgroundColor: '#FF8C42',
     borderColor: '#FF8C42',
-    elevation: 4,
-    shadowColor: '#FF8C42',
-    shadowOpacity: 0.3,
   },
   frameButtonText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#333333',
   },
@@ -1328,102 +1562,37 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 
-  // Selected Food Items Card
-  selectedFoodContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-  },
-  selectedFoodTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginBottom: 18,
-    textAlign: 'center',
-  },
-  selectedFoodItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    marginBottom: 10,
-  },
-  selectedFoodInfo: {
-    flex: 1,
-    paddingRight: 14,
-  },
-  selectedFoodActions: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  removeItemButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FFEBEE',
-    borderWidth: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  selectedFoodName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 4,
-  },
-  selectedFoodDetails: {
-    fontSize: 13,
-    color: '#666666',
-    fontWeight: '500',
-  },
-  selectedFoodTotal: {
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    marginTop: 14,
-    backgroundColor: '#FFF8F5',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#FFE0CC',
-  },
-  selectedFoodTotalText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FF8C42',
-    textAlign: 'center',
-  },
-
   // Pricing Preview Modal
   pricingPreviewModal: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    maxHeight: '90%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '85%',
     width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
   },
   pricingContent: {
     padding: 24,
-    maxHeight: 450,
+    maxHeight: 400,
   },
   pricingSection: {
     marginBottom: 24,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+    padding: 16,
   },
   pricingSectionTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: '#1A1A1A',
-    marginBottom: 14,
-    paddingBottom: 10,
-    borderBottomWidth: 2,
-    borderBottomColor: '#FF8C42',
+    marginBottom: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
   },
   pricingText: {
     fontSize: 14,
@@ -1435,8 +1604,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#333333',
-    marginTop: 10,
-    marginBottom: 10,
+    marginTop: 12,
+    marginBottom: 8,
   },
   pricingItem: {
     flexDirection: 'row',
@@ -1445,25 +1614,26 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 4,
     borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F5',
+    borderBottomColor: '#F0F0F0',
   },
   pricingItemName: {
     fontSize: 14,
-    color: '#666666',
+    color: '#555555',
     flex: 1,
   },
   pricingItemPrice: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#1A1A1A',
   },
   pricingTotal: {
-    backgroundColor: '#FFF8F5',
+    backgroundColor: '#FFF3E0',
     borderRadius: 12,
-    padding: 18,
+    padding: 20,
     marginTop: 16,
     borderWidth: 1,
-    borderColor: '#FFE0CC',
+    borderColor: '#FFE0B2',
+    alignItems: 'center',
   },
   pricingTotalText: {
     fontSize: 20,
@@ -1475,16 +1645,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999999',
     textAlign: 'center',
-    marginTop: 18,
+    marginTop: 16,
     fontStyle: 'italic',
+    lineHeight: 16,
   },
   pricingActions: {
     flexDirection: 'row',
-    padding: 20,
+    padding: 24,
     paddingBottom: 32,
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
-    gap: 12,
+    gap: 16,
+    backgroundColor: '#FAFAFA',
   },
   pricingCancelButton: {
     flex: 1,
@@ -1493,7 +1665,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#E0E0E0',
+    borderColor: '#D0D0D0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   pricingCancelText: {
     fontSize: 15,
@@ -1506,11 +1683,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
-    elevation: 3,
+    elevation: 4,
     shadowColor: '#FF8C42',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowRadius: 8,
   },
   pricingConfirmText: {
     fontSize: 15,

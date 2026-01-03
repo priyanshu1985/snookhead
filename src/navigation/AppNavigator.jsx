@@ -13,6 +13,9 @@ import BillScreen from '../screens/BillScreen';
 import ScannerScreen from '../screens/ScannerScreen';
 import OrdersScreen from '../screens/OrdersScreen';
 import MenuScreen from '../screens/MenuScreen';
+import Member from '../screens/Member';
+import MemberDetails from '../screens/MemberDetails';
+import Notifications from '../screens/Notifications';
 
 // Import Menu bar related screens
 import OwnerPanel from '../screens/OwnerPanel';
@@ -48,8 +51,41 @@ function BottomTabs() {
         tabBarActiveTintColor: '#FF8C42', // Orange color for active tab
         tabBarInactiveTintColor: '#888', // Gray for inactive tabs
         tabBarStyle: {
-          height: 60, // Tab bar height
-          paddingBottom: 8,
+          height: 75,
+          paddingBottom: 10,
+          paddingTop: 10,
+          paddingHorizontal: 8,
+          backgroundColor: '#FFFFFF',
+          borderTopWidth: 1,
+          borderTopColor: '#E8E8E8',
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -3 },
+          shadowOpacity: 0.1,
+          shadowRadius: 3,
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+        },
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '500',
+          marginTop: 4,
+          marginBottom: 2,
+          textAlign: 'center',
+        },
+        tabBarIconStyle: {
+          marginTop: 0,
+          marginBottom: 2,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 8,
+          paddingHorizontal: 4,
+          justifyContent: 'center',
+          alignItems: 'center',
+          flex: 1,
+          minWidth: 0,
         },
       }}
     >
@@ -58,8 +94,12 @@ function BottomTabs() {
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="home-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Icon
+              name={focused ? 'home' : 'home-outline'}
+              size={22}
+              color={color}
+            />
           ),
         }}
       />
@@ -68,8 +108,12 @@ function BottomTabs() {
         name="Queue"
         component={QueueScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="people-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Icon
+              name={focused ? 'people' : 'people-outline'}
+              size={22}
+              color={color}
+            />
           ),
         }}
       />
@@ -78,29 +122,41 @@ function BottomTabs() {
         name="Scanner"
         component={ScannerScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="people-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Icon
+              name={focused ? 'scan' : 'scan-outline'}
+              size={22}
+              color={color}
+            />
           ),
         }}
       />
 
-      {/* Bill Tab (Center - Highlighted) */}
+      {/* Bill Tab */}
       <Tab.Screen
         name="Bill"
         component={BillScreen}
         options={{
-          tabBarIcon: ({ color }) => (
-            <Icon name="receipt-outline" size={35} color="#fff" />
+          tabBarIcon: ({ color, focused }) => (
+            <Icon
+              name={focused ? 'receipt' : 'receipt-outline'}
+              size={22}
+              color={color}
+            />
           ),
         }}
       />
-      {/* Bill Tab */}
+      {/* Orders Tab */}
       <Tab.Screen
         name="Orders"
         component={OrdersScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="document-text-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Icon
+              name={focused ? 'document-text' : 'document-text-outline'}
+              size={22}
+              color={color}
+            />
           ),
         }}
       />
@@ -149,6 +205,9 @@ export default function AppNavigator() {
             name="InventoryTracking"
             component={InventoryTracking}
           />
+          <Stack.Screen name="Member" component={Member} />
+          <Stack.Screen name="MemberDetails" component={MemberDetails} />
+          <Stack.Screen name="Notifications" component={Notifications} />
           <Stack.Screen
             name="UpgradeSubscription"
             component={UpgradeSubscription}

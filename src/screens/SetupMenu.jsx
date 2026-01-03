@@ -17,7 +17,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../config'; // or your config location
+import { API_URL } from '../config';
+import ImageSelector from '../components/ImageSelector';
 const { width } = Dimensions.get('window');
 
 async function getAuthToken() {
@@ -50,6 +51,7 @@ export default function SetupMenu({ navigation }) {
     date: '',
     framePrice: '',
     hourPrice: '',
+    image_key: '',
   });
 
   // Edit game modal state
@@ -57,6 +59,7 @@ export default function SetupMenu({ navigation }) {
   const [editGameForm, setEditGameForm] = useState({
     game_id: null,
     name: '',
+    image_key: '',
   });
   const [deleteConfirmModal, setDeleteConfirmModal] = useState(false);
   const [gameToDelete, setGameToDelete] = useState(null);
@@ -84,6 +87,7 @@ export default function SetupMenu({ navigation }) {
     description: '',
     price: '',
     supplier: '',
+    image_key: '',
   });
 
   const [selectedGameId, setSelectedGameId] = useState(null); // NEW
@@ -197,7 +201,10 @@ export default function SetupMenu({ navigation }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ game_name: form.name }),
+        body: JSON.stringify({
+          game_name: form.name,
+          image_key: form.image_key || null,
+        }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -214,7 +221,7 @@ export default function SetupMenu({ navigation }) {
   }
 
   // Update Game API
-  async function updateGameAPI(gameId, newName) {
+  async function updateGameAPI(gameId, newName, imageKey) {
     setLoading(true);
     const token = await getAuthToken();
     try {
@@ -224,7 +231,10 @@ export default function SetupMenu({ navigation }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ game_name: newName }),
+        body: JSON.stringify({
+          game_name: newName,
+          image_key: imageKey || null,
+        }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -273,6 +283,7 @@ export default function SetupMenu({ navigation }) {
     setEditGameForm({
       game_id: game.game_id || game.id,
       name: game.game_name || game.gamename || '',
+      image_key: game.image_key || '',
     });
     setEditGameModal(true);
   };
@@ -302,10 +313,14 @@ export default function SetupMenu({ navigation }) {
       Alert.alert('Error', 'Game name cannot be empty');
       return;
     }
-    const success = await updateGameAPI(editGameForm.game_id, editGameForm.name.trim());
+    const success = await updateGameAPI(
+      editGameForm.game_id,
+      editGameForm.name.trim(),
+      editGameForm.image_key
+    );
     if (success) {
       setEditGameModal(false);
-      setEditGameForm({ game_id: null, name: '' });
+      setEditGameForm({ game_id: null, name: '', image_key: '' });
       setGameSuccess(prev => !prev); // Trigger refresh
     }
   };
@@ -351,16 +366,23 @@ export default function SetupMenu({ navigation }) {
     }
   }
   async function addMenuAPI(form) {
-    // form should be your menuForm state: { category, name, description, price, supplier }
+    // form should be your menuForm state: { category, name, description, price, supplier, image_key }
     const token = await getAuthToken();
     try {
+      // Map image_key to imageUrl for the backend
+      const payload = {
+        ...form,
+        imageUrl: form.image_key || null,
+      };
+      delete payload.image_key;
+
       const response = await fetch(`${API_URL}/api/menu`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -372,66 +394,120 @@ export default function SetupMenu({ navigation }) {
     }
   }
 
+  // Helper to get full image URL
+  const getGameImageUrl = (imageKey) => {
+    if (!imageKey) return null;
+    return `${API_URL}/static/game-images/${encodeURIComponent(imageKey)}`;
+  };
+
+  // Helper to get full menu image URL
+  const getMenuImageUrl = (imageKey) => {
+    if (!imageKey) return null;
+    return `${API_URL}/static/menu-images/${encodeURIComponent(imageKey)}`;
+  };
+
   // --- Add Game Modal flow ---
   const AddGameFlow = (
     <>
       <Modal visible={addGameModal} transparent animationType="slide">
         <View style={styles.modalBg}>
-          <View style={styles.formCard}>
-            <TouchableOpacity style={styles.uploadImageBox}>
-              <Text style={styles.uploadImageText}>Upload table image</Text>
-            </TouchableOpacity>
-            <TextInput
-              style={styles.input}
-              placeholder="Game name"
-              value={gameForm.name}
-              onChangeText={v => setGameForm(f => ({ ...f, name: v }))}
-            />
-            <View style={styles.formBtnRow}>
-              <TouchableOpacity
-                style={styles.backBtn}
-                onPress={() => setAddGameModal(false)}
-              >
-                <Text style={styles.backBtnText}>Back</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.continueBtn}
-                onPress={async () => {
-                  await addGameAPI(gameForm);
-                  setAddGameModal(false);
-                  setAddGameConfirm(true);
-                }}
-              >
-                <Text style={styles.continueBtnText}>Continue</Text>
-              </TouchableOpacity>
+          <ScrollView
+            style={styles.formCardScroll}
+            contentContainerStyle={styles.formCardScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.formCard}>
+              <View style={styles.modalHeaderRow}>
+                <Text style={styles.modalHeaderTitle}>Add New Game</Text>
+                <TouchableOpacity
+                  style={styles.modalCloseBtn}
+                  onPress={() => {
+                    setAddGameModal(false);
+                    setGameForm(f => ({ ...f, name: '', image_key: '' }));
+                  }}
+                >
+                  <Icon name="close" size={22} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.inputLabel}>Game Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter game name (e.g., Snooker, Pool)"
+                placeholderTextColor="#999"
+                value={gameForm.name}
+                onChangeText={v => setGameForm(f => ({ ...f, name: v }))}
+              />
+
+              <ImageSelector
+                selectedImage={gameForm.image_key}
+                onSelectImage={(imageKey) => setGameForm(f => ({ ...f, image_key: imageKey }))}
+              />
+
+              <View style={styles.formBtnRow}>
+                <TouchableOpacity
+                  style={styles.backBtn}
+                  onPress={() => {
+                    setAddGameModal(false);
+                    setGameForm(f => ({ ...f, name: '', image_key: '' }));
+                  }}
+                >
+                  <Text style={styles.backBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.continueBtn,
+                    (!gameForm.name.trim() || !gameForm.image_key) && styles.continueBtnDisabled,
+                  ]}
+                  disabled={!gameForm.name.trim() || !gameForm.image_key}
+                  onPress={async () => {
+                    if (!gameForm.name.trim()) {
+                      Alert.alert('Error', 'Please enter a game name');
+                      return;
+                    }
+                    if (!gameForm.image_key) {
+                      Alert.alert('Error', 'Please select an image for the game');
+                      return;
+                    }
+                    const success = await addGameAPI(gameForm);
+                    if (success) {
+                      setAddGameModal(false);
+                      setAddGameConfirm(true);
+                    }
+                  }}
+                >
+                  <Text style={styles.continueBtnText}>Continue</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
       <Modal visible={addGameConfirm} transparent animationType="fade">
         <View style={styles.modalBg}>
           <View style={styles.popupCard}>
-            <Text style={styles.popupTitle}>Table details</Text>
-            <Image
-              style={{
-                width: 80,
-                height: 40,
-                borderRadius: 10,
-                alignSelf: 'center',
-              }}
-              source={{
-                uri: 'https://img.icons8.com/fluency/96/pool-table.png',
-              }}
-            />
-            <Text style={styles.detailRow}>Type of table: {gameForm.name}</Text>
+            <Text style={styles.popupTitle}>Game Added</Text>
+            {gameForm.image_key ? (
+              <Image
+                style={styles.confirmImage}
+                source={{ uri: getGameImageUrl(gameForm.image_key) }}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.confirmImagePlaceholder}>
+                <Icon name="image-outline" size={40} color="#CCC" />
+              </View>
+            )}
+            <Text style={styles.detailRow}>Game Type: {gameForm.name}</Text>
             <TouchableOpacity
               style={styles.confirmBtn}
               onPress={() => {
                 setAddGameConfirm(false);
                 setGameSuccess(true);
+                setGameForm(f => ({ ...f, name: '', image_key: '' }));
               }}
             >
-              <Text style={styles.confirmBtnText}>Confirm details</Text>
+              <Text style={styles.confirmBtnText}>Confirm</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -439,13 +515,15 @@ export default function SetupMenu({ navigation }) {
       <Modal visible={gameSuccess} transparent animationType="fade">
         <View style={styles.modalBg}>
           <View style={styles.popupCard}>
-            <Text style={styles.successText}>Table successfully added!</Text>
-            <TouchableOpacity onPress={() => setGameSuccess(false)}>
-              <Text
-                style={{ marginTop: 18, color: '#FF8C42', fontWeight: 'bold' }}
-              >
-                Close
-              </Text>
+            <View style={styles.successIconContainer}>
+              <Icon name="checkmark-circle" size={60} color="#4CAF50" />
+            </View>
+            <Text style={styles.successText}>Game successfully added!</Text>
+            <TouchableOpacity
+              style={styles.closeSuccessBtn}
+              onPress={() => setGameSuccess(false)}
+            >
+              <Text style={styles.closeSuccessBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -571,71 +649,142 @@ export default function SetupMenu({ navigation }) {
     <>
       <Modal visible={addMenuModal} transparent animationType="slide">
         <View style={styles.modalBg}>
-          <View style={styles.formCard}>
-            <TextInput
-              style={styles.input}
-              placeholder="Category"
-              value={menuForm.category}
-              onChangeText={v => setMenuForm(f => ({ ...f, category: v }))}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Item name"
-              value={menuForm.name}
-              onChangeText={v => setMenuForm(f => ({ ...f, name: v }))}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Description"
-              value={menuForm.description}
-              onChangeText={v => setMenuForm(f => ({ ...f, description: v }))}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Price"
-              value={menuForm.price}
-              onChangeText={v => setMenuForm(f => ({ ...f, price: v }))}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Supplier mobile"
-              value={menuForm.supplier}
-              onChangeText={v => setMenuForm(f => ({ ...f, supplier: v }))}
-            />
-            <View style={styles.formBtnRow}>
-              <TouchableOpacity
-                style={styles.backBtn}
-                onPress={() => setAddMenuModal(false)}
-              >
-                <Text style={styles.backBtnText}>Back</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.continueBtn}
-                onPress={async () => {
-                  await addMenuAPI(menuForm);
-                  setAddMenuModal(false);
-                  setAddMenuConfirm(true);
-                }}
-              >
-                <Text style={styles.continueBtnText}>Continue</Text>
-              </TouchableOpacity>
+          <ScrollView
+            style={styles.formCardScroll}
+            contentContainerStyle={styles.formCardScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.formCard}>
+              <View style={styles.modalHeaderRow}>
+                <Text style={styles.modalHeaderTitle}>Add Menu Item</Text>
+                <TouchableOpacity
+                  style={styles.modalCloseBtn}
+                  onPress={() => {
+                    setAddMenuModal(false);
+                    setMenuForm(f => ({ ...f, name: '', category: '', description: '', price: '', supplier: '', image_key: '' }));
+                  }}
+                >
+                  <Icon name="close" size={22} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.inputLabel}>Category</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., prepared, packed, cigarette"
+                placeholderTextColor="#999"
+                value={menuForm.category}
+                onChangeText={v => setMenuForm(f => ({ ...f, category: v }))}
+              />
+
+              <Text style={styles.inputLabel}>Item Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter item name"
+                placeholderTextColor="#999"
+                value={menuForm.name}
+                onChangeText={v => setMenuForm(f => ({ ...f, name: v }))}
+              />
+
+              <Text style={styles.inputLabel}>Description</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter description"
+                placeholderTextColor="#999"
+                value={menuForm.description}
+                onChangeText={v => setMenuForm(f => ({ ...f, description: v }))}
+              />
+
+              <Text style={styles.inputLabel}>Price</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter price"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+                value={menuForm.price}
+                onChangeText={v => setMenuForm(f => ({ ...f, price: v }))}
+              />
+
+              <Text style={styles.inputLabel}>Supplier Mobile</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter supplier mobile"
+                placeholderTextColor="#999"
+                keyboardType="phone-pad"
+                value={menuForm.supplier}
+                onChangeText={v => setMenuForm(f => ({ ...f, supplier: v }))}
+              />
+
+              <ImageSelector
+                selectedImage={menuForm.image_key}
+                onSelectImage={(imageKey) => setMenuForm(f => ({ ...f, image_key: imageKey }))}
+                imageType="menu"
+              />
+
+              <View style={styles.formBtnRow}>
+                <TouchableOpacity
+                  style={styles.backBtn}
+                  onPress={() => {
+                    setAddMenuModal(false);
+                    setMenuForm(f => ({ ...f, name: '', category: '', description: '', price: '', supplier: '', image_key: '' }));
+                  }}
+                >
+                  <Text style={styles.backBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.continueBtn,
+                    (!menuForm.name.trim() || !menuForm.category.trim() || !menuForm.price.trim()) && styles.continueBtnDisabled,
+                  ]}
+                  disabled={!menuForm.name.trim() || !menuForm.category.trim() || !menuForm.price.trim()}
+                  onPress={async () => {
+                    if (!menuForm.name.trim() || !menuForm.category.trim() || !menuForm.price.trim()) {
+                      Alert.alert('Error', 'Please fill in all required fields');
+                      return;
+                    }
+                    try {
+                      await addMenuAPI(menuForm);
+                      setAddMenuModal(false);
+                      setAddMenuConfirm(true);
+                    } catch (err) {
+                      Alert.alert('Error', err.message || 'Failed to add menu item');
+                    }
+                  }}
+                >
+                  <Text style={styles.continueBtnText}>Continue</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
       <Modal visible={addMenuConfirm} transparent animationType="fade">
         <View style={styles.modalBg}>
           <View style={styles.popupCard}>
-            <Text style={styles.popupTitle}>Menu details</Text>
-            <Text style={styles.detailRow}>Type: {menuForm.category}</Text>
+            <Text style={styles.popupTitle}>Menu Item Added</Text>
+            {menuForm.image_key ? (
+              <Image
+                style={styles.confirmImage}
+                source={{ uri: getMenuImageUrl(menuForm.image_key) }}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.confirmImagePlaceholder}>
+                <Icon name="fast-food-outline" size={40} color="#CCC" />
+              </View>
+            )}
+            <Text style={styles.detailRow}>Name: {menuForm.name}</Text>
+            <Text style={styles.detailRow}>Category: {menuForm.category}</Text>
+            <Text style={styles.detailRow}>Price: {menuForm.price}</Text>
             <TouchableOpacity
               style={styles.confirmBtn}
               onPress={() => {
                 setAddMenuConfirm(false);
                 setMenuSuccess(true);
+                setMenuForm(f => ({ ...f, name: '', category: '', description: '', price: '', supplier: '', image_key: '' }));
               }}
             >
-              <Text style={styles.confirmBtnText}>Confirm details</Text>
+              <Text style={styles.confirmBtnText}>Confirm</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -643,12 +792,15 @@ export default function SetupMenu({ navigation }) {
       <Modal visible={menuSuccess} transparent animationType="fade">
         <View style={styles.modalBg}>
           <View style={styles.popupCard}>
-            <Text style={styles.successText}>Menu successfully added!</Text>
-            <TouchableOpacity onPress={() => setMenuSuccess(false)}>
-              <Text
-                style={{ marginTop: 18, color: '#FF8C42', fontWeight: 'bold' }}
-              >
-                Close
+            <View style={styles.successIconContainer}>
+              <Icon name="checkmark-circle" size={60} color="#4CAF50" />
+            </View>
+            <Text style={styles.successText}>Menu item successfully added!</Text>
+            <TouchableOpacity
+              style={styles.closeSuccessBtn}
+              onPress={() => setMenuSuccess(false)}
+            >
+              <Text style={styles.closeSuccessBtnText}>Close
               </Text>
             </TouchableOpacity>
           </View>
@@ -870,9 +1022,20 @@ export default function SetupMenu({ navigation }) {
             : []
           ).map((item, idx) => (
             <View key={item.id || idx} style={styles.menuCard}>
-              <View style={styles.menuIcon}>
-                <Icon name="fast-food" size={26} color="#FF8C42" />
-              </View>
+              {item.imageUrl ? (
+                <View style={styles.menuImageContainer}>
+                  <Image
+                    source={{ uri: getMenuImageUrl(item.imageUrl) }}
+                    style={styles.menuImage}
+                    resizeMode="cover"
+                    onError={(e) => console.log('Menu image error:', e.nativeEvent.error)}
+                  />
+                </View>
+              ) : (
+                <View style={styles.menuIcon}>
+                  <Icon name="fast-food" size={26} color="#FF8C42" />
+                </View>
+              )}
               <View style={styles.menuInfo}>
                 <Text style={styles.menuName}>{item.name}</Text>
                 <Text style={styles.menuDesc}>{item.description}</Text>
@@ -929,45 +1092,75 @@ export default function SetupMenu({ navigation }) {
       {/* Edit Game Modal */}
       <Modal visible={editGameModal} transparent animationType="slide">
         <View style={styles.modalBg}>
-          <View style={styles.formCard}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalHeaderTitle}>Edit Game</Text>
-              <TouchableOpacity
-                style={styles.modalCloseBtn}
-                onPress={() => setEditGameModal(false)}
-              >
-                <Icon name="close" size={22} color="#666" />
-              </TouchableOpacity>
+          <ScrollView
+            style={styles.formCardScroll}
+            contentContainerStyle={styles.formCardScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.formCard}>
+              <View style={styles.modalHeaderRow}>
+                <Text style={styles.modalHeaderTitle}>Edit Game</Text>
+                <TouchableOpacity
+                  style={styles.modalCloseBtn}
+                  onPress={() => {
+                    setEditGameModal(false);
+                    setEditGameForm({ game_id: null, name: '', image_key: '' });
+                  }}
+                >
+                  <Icon name="close" size={22} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Current Image Preview */}
+              {editGameForm.image_key && (
+                <View style={styles.currentImagePreview}>
+                  <Text style={styles.inputLabel}>Current Image</Text>
+                  <Image
+                    source={{ uri: getGameImageUrl(editGameForm.image_key) }}
+                    style={styles.previewImage}
+                    resizeMode="cover"
+                  />
+                </View>
+              )}
+
+              <Text style={styles.inputLabel}>Game Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter game name"
+                placeholderTextColor="#999"
+                value={editGameForm.name}
+                onChangeText={v => setEditGameForm(f => ({ ...f, name: v }))}
+              />
+
+              <ImageSelector
+                selectedImage={editGameForm.image_key}
+                onSelectImage={(imageKey) => setEditGameForm(f => ({ ...f, image_key: imageKey }))}
+              />
+
+              <View style={styles.formBtnRow}>
+                <TouchableOpacity
+                  style={styles.backBtn}
+                  onPress={() => {
+                    setEditGameModal(false);
+                    setEditGameForm({ game_id: null, name: '', image_key: '' });
+                  }}
+                >
+                  <Text style={styles.backBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.continueBtn}
+                  onPress={saveEditedGame}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Text style={styles.continueBtnText}>Save Changes</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-            <Text style={styles.inputLabel}>Game Name</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter game name"
-              placeholderTextColor="#999"
-              value={editGameForm.name}
-              onChangeText={v => setEditGameForm(f => ({ ...f, name: v }))}
-              autoFocus
-            />
-            <View style={styles.formBtnRow}>
-              <TouchableOpacity
-                style={styles.backBtn}
-                onPress={() => setEditGameModal(false)}
-              >
-                <Text style={styles.backBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.continueBtn}
-                onPress={saveEditedGame}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator size="small" color="#FFF" />
-                ) : (
-                  <Text style={styles.continueBtnText}>Save Changes</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
 
@@ -1429,6 +1622,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 14,
   },
+  menuImageContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginRight: 14,
+    backgroundColor: '#F5F5F5',
+  },
+  menuImage: {
+    width: '100%',
+    height: '100%',
+  },
   menuInfo: {
     flex: 1,
   },
@@ -1581,6 +1786,62 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 18,
     textAlign: 'center',
+  },
+  formCardScroll: {
+    width: '100%',
+    maxHeight: '90%',
+  },
+  formCardScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  continueBtnDisabled: {
+    backgroundColor: '#CCCCCC',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  confirmImage: {
+    width: 120,
+    height: 80,
+    borderRadius: 12,
+    alignSelf: 'center',
+    marginBottom: 16,
+    backgroundColor: '#F5F5F5',
+  },
+  confirmImagePlaceholder: {
+    width: 120,
+    height: 80,
+    borderRadius: 12,
+    alignSelf: 'center',
+    marginBottom: 16,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successIconContainer: {
+    marginBottom: 16,
+  },
+  closeSuccessBtn: {
+    marginTop: 20,
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+  },
+  closeSuccessBtnText: {
+    color: '#FF8C42',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  currentImagePreview: {
+    marginBottom: 16,
+  },
+  previewImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: 12,
+    backgroundColor: '#F5F5F5',
+    marginTop: 8,
   },
 
   // Game Header Styles (for MANAGE TABLE GAMES)

@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 
-export default function TableCard({ table, color, onPress, onDelete }) {
+export default function TableCard({ table, color, gameImageUrl, onPress, onDelete }) {
   const [currentTime, setCurrentTime] = React.useState(Date.now());
   const isOccupied = table.status === 'occupied' || table.status === 'reserved';
   const priceText = table.price || `₹${table.pricePerHour || 200}/hr`;
@@ -70,25 +70,29 @@ export default function TableCard({ table, color, onPress, onDelete }) {
 
       {/* Table image area */}
       <View style={styles.imageWrapper}>
-        <View
-          style={[
-            styles.tableImage,
-            { backgroundColor: color || '#4A7C59' },
-            isOccupied && styles.tableImageOccupied,
-          ]}
-        >
-          {/* Table illustration */}
-          <View style={styles.tableBorder} />
-          <View style={[styles.line, { transform: [{ rotate: '-20deg' }] }]} />
-          <View style={[styles.line, { transform: [{ rotate: '30deg' }] }]} />
-
-          {/* Pool balls decoration */}
-          <View style={styles.ballsContainer}>
-            <View style={[styles.ball, styles.ballRed]} />
-            <View style={[styles.ball, styles.ballYellow]} />
-            <View style={[styles.ball, styles.ballBlue]} />
+        {gameImageUrl ? (
+          // Display actual game image from backend
+          <View style={[styles.imageContainer, isOccupied && styles.tableImageOccupied]}>
+            <Image
+              source={{ uri: gameImageUrl }}
+              style={styles.actualImage}
+              resizeMode="contain"
+              onError={(e) => console.log('TableCard image error:', e.nativeEvent.error)}
+            />
           </View>
-        </View>
+        ) : (
+          // Fallback to colored placeholder
+          <View
+            style={[
+              styles.tableImage,
+              { backgroundColor: color || '#4A7C59' },
+              isOccupied && styles.tableImageOccupied,
+            ]}
+          >
+            {/* Fallback icon when no image */}
+            <Icon name="grid-outline" size={32} color="rgba(255,255,255,0.6)" />
+          </View>
+        )}
 
         {/* Occupied overlay with timer */}
         {isOccupied && (
@@ -202,58 +206,34 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 10,
     marginTop: 4,
+    position: 'relative',
+  },
+
+  imageContainer: {
+    width: '100%',
+    aspectRatio: 1.5, // 3:2 aspect ratio for table images
+    borderRadius: 12,
+    backgroundColor: '#2D5A3D', // Dark green background to complement table images
+    overflow: 'hidden',
   },
 
   tableImage: {
-    height: 90,
+    width: '100%',
+    aspectRatio: 1.5,
     borderRadius: 12,
     backgroundColor: '#4A7C59',
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
   },
+  actualImage: {
+    width: '100%',
+    height: '100%',
+  },
   tableImageOccupied: {
-    opacity: 0.9,
+    opacity: 0.85,
   },
 
-  tableBorder: {
-    position: 'absolute',
-    top: 6,
-    bottom: 6,
-    left: 6,
-    right: 6,
-    borderWidth: 2,
-    borderColor: '#C97B43',
-    borderRadius: 8,
-  },
-
-  line: {
-    width: '60%',
-    height: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 1,
-  },
-
-  ballsContainer: {
-    position: 'absolute',
-    bottom: 12,
-    flexDirection: 'row',
-    gap: 4,
-  },
-  ball: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  ballRed: {
-    backgroundColor: '#E53935',
-  },
-  ballYellow: {
-    backgroundColor: '#FDD835',
-  },
-  ballBlue: {
-    backgroundColor: '#1E88E5',
-  },
 
   overlay: {
     position: 'absolute',

@@ -7,7 +7,7 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Header from '../components/Header';
 import ActiveBillsList from '../components/ActiveBillsList';
 import BillHistoryList from '../components/BillHistoryList';
 import BillDescriptionActive from '../components/BillDescriptionActive';
@@ -193,14 +193,15 @@ export default function BillScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+      <Header navigation={navigation} />
       <StatusBar
         barStyle="dark-content"
-        backgroundColor="#F5F5F5"
+        backgroundColor="#FFFFFF"
         translucent={false}
       />
       <View style={styles.screenWrapper}>{renderView()}</View>
-    </SafeAreaView>
+    </View>
   );
 }
 

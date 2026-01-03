@@ -371,3 +371,87 @@ export const bugsAPI = {
     return await makeRequest('/api/bugs/stats/summary');
   },
 };
+
+// Customer API
+export const customerAPI = {
+  // Get all customers
+  getAll: async () => {
+    return await makeRequest('/api/customer');
+  },
+
+  // Get customer by ID
+  getById: async id => {
+    return await makeRequest(`/api/customer/${id}`);
+  },
+
+  // Create new customer
+  create: async customerData => {
+    return await makeRequest('/api/customer', {
+      method: 'POST',
+      body: JSON.stringify(customerData),
+    });
+  },
+
+  // Update customer
+  update: async (id, customerData) => {
+    return await makeRequest(`/api/customer/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(customerData),
+    });
+  },
+
+  // Delete/deactivate customer
+  delete: async id => {
+    return await makeRequest(`/api/customer/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+// Backward compatibility - alias for getMembers
+export const getMembers = customerAPI.getAll;
+
+// Wallet API
+export const walletAPI = {
+  // Get wallet by customer ID
+  getByCustomerId: async customerId => {
+    return await makeRequest(`/api/wallets/customer/${customerId}`);
+  },
+
+  // Get all wallets (admin/owner only)
+  getAll: async () => {
+    return await makeRequest('/api/wallets');
+  },
+
+  // Create new wallet
+  create: async walletData => {
+    return await makeRequest('/api/wallets/create', {
+      method: 'POST',
+      body: JSON.stringify(walletData),
+    });
+  },
+
+  // Add balance to wallet
+  addBalance: async (walletId, amount) => {
+    return await makeRequest(`/api/wallets/${walletId}/add-balance`, {
+      method: 'POST',
+      body: JSON.stringify({ amount }),
+    });
+  },
+
+  // Deduct balance from wallet
+  deductBalance: async (walletId, amount) => {
+    return await makeRequest(`/api/wallets/${walletId}/deduct-balance`, {
+      method: 'POST',
+      body: JSON.stringify({ amount }),
+    });
+  },
+
+  // Scan QR code
+  scanQR: async qrData => {
+    return await makeRequest('/api/wallets/scan-qr', {
+      method: 'POST',
+      body: JSON.stringify({ qr_data: qrData }),
+    });
+  },
+};

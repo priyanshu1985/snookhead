@@ -1,5 +1,12 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, StatusBar } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  StatusBar,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 
@@ -7,7 +14,7 @@ export default function Header({ navigation }) {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 14 }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       {/* Logo */}
       <View style={styles.logoContainer}>
@@ -25,6 +32,7 @@ export default function Header({ navigation }) {
         <TouchableOpacity
           style={styles.iconButton}
           activeOpacity={0.7}
+          onPress={() => navigation.navigate('Notifications')}
         >
           <View style={styles.iconWrapper}>
             <Icon name="notifications-outline" size={22} color="#FF8C42" />
@@ -48,14 +56,15 @@ export default function Header({ navigation }) {
 
 const styles = StyleSheet.create({
   container: {
+    position: 'relative', // Ensure proper positioning context
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingBottom: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
+    zIndex: 1000, // Ensure header stays on top
     // Subtle shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },

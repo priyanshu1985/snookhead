@@ -37,6 +37,12 @@ export default function MenuScreen({ navigation }) {
         roles: ['owner', 'admin'],
       },
       {
+        icon: 'people-outline',
+        title: 'Member Management',
+        route: 'Member',
+        roles: ['owner', 'admin'],
+      },
+      {
         icon: 'refresh-outline',
         title: 'Upgrade subscription',
         route: 'UpgradeSubscription',

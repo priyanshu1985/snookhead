@@ -18,6 +18,7 @@ import {
   useFocusEffect,
 } from '@react-navigation/native';
 import { API_URL } from '../config';
+import Header from '../components/Header';
 import ActiveOrders from '../components/ActiveOrders';
 
 const DEFAULT_CATEGORIES = ['prepared', 'packed', 'cigarette'];
@@ -29,6 +30,12 @@ async function getAuthToken() {
     return null;
   }
 }
+
+// Helper to get full menu image URL
+const getMenuImageUrl = (imageKey) => {
+  if (!imageKey) return null;
+  return `${API_URL}/static/menu-images/${encodeURIComponent(imageKey)}`;
+};
 
 export default function OrdersScreen({ navigation }) {
   // ===== HOOKS =====
@@ -252,15 +259,7 @@ export default function OrdersScreen({ navigation }) {
   // ===== RENDER =====
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation?.goBack()}>
-          <Icon name="chevron-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Food and order</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
+      <Header navigation={navigation} />
       {/* Search + Date Row */}
       <View style={styles.searchRow}>
         <View style={styles.searchContainer}>
@@ -355,15 +354,17 @@ export default function OrdersScreen({ navigation }) {
                 style={styles.foodCard}
                 onPress={() => handleAddFood(item)}
               >
-                {item.image ? (
+                {item.imageUrl ? (
                   <Image
-                    source={{ uri: item.image }}
+                    source={{ uri: getMenuImageUrl(item.imageUrl) }}
                     style={styles.foodImage}
+                    resizeMode="cover"
+                    onError={(e) => console.log('Menu image error:', e.nativeEvent.error)}
                   />
                 ) : (
-                  <View
-                    style={[styles.foodImage, { backgroundColor: '#FFF8F0' }]}
-                  />
+                  <View style={[styles.foodImage, styles.foodImagePlaceholder]}>
+                    <Icon name="fast-food-outline" size={32} color="#FF8C42" />
+                  </View>
                 )}
                 <Text style={styles.foodName}>{item.name}</Text>
                 <Text style={styles.foodPrice}>₹ {item.price}</Text>
@@ -497,29 +498,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8F9FA',
-  },
-
-  // Header - Professional
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    letterSpacing: 0.3,
   },
 
   // Search Row
@@ -672,6 +650,11 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 12,
     marginBottom: 10,
+    backgroundColor: '#FFF8F5',
+  },
+  foodImagePlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#FFF8F5',
   },
   foodName: {

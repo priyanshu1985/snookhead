@@ -110,12 +110,18 @@ export default function ActiveBillsList({
           items: bill.items_summary || bill.itemsSummary || 'Table charges',
           mobile: bill.customer_phone || bill.mobile || '+91 XXXXXXXXXX',
           billNumber: bill.bill_number || bill.billNumber || `BILL-${bill.id}`,
-          amount: parseFloat(bill.total_amount || bill.totalAmount || bill.amount || 0),
-          amountDisplay: `₹${parseFloat(bill.total_amount || bill.totalAmount || bill.amount || 0).toFixed(2)}/-`,
+          amount: parseFloat(
+            bill.total_amount || bill.totalAmount || bill.amount || 0,
+          ),
+          amountDisplay: `₹${parseFloat(
+            bill.total_amount || bill.totalAmount || bill.amount || 0,
+          ).toFixed(2)}/-`,
           status: bill.status === 'paid' ? 'Paid' : 'Unpaid',
           detailedItems: bill.order_items || bill.orderItems || [],
-          orderAmount: bill.order_amount || bill.orderAmount || bill.total_amount || 0,
-          totalAmount: bill.total_amount || bill.totalAmount || bill.amount || 0,
+          orderAmount:
+            bill.order_amount || bill.orderAmount || bill.total_amount || 0,
+          totalAmount:
+            bill.total_amount || bill.totalAmount || bill.amount || 0,
           originalBill: bill,
         }))
         .sort((a, b) => new Date(b.rawDate) - new Date(a.rawDate));
@@ -188,21 +194,39 @@ export default function ActiveBillsList({
       activeOpacity={0.7}
     >
       {/* Status Indicator */}
-      <View style={[styles.statusIndicator, item.status === 'Paid' ? styles.statusPaid : styles.statusUnpaid]} />
+      <View
+        style={[
+          styles.statusIndicator,
+          item.status === 'Paid' ? styles.statusPaid : styles.statusUnpaid,
+        ]}
+      />
 
       <View style={styles.cardContent}>
         <View style={styles.cardLeft}>
           <Text style={styles.date}>{item.date}</Text>
-          <Text style={styles.customerName} numberOfLines={2}>{item.customerName}</Text>
-          <Text style={styles.items} numberOfLines={1}>{item.items}</Text>
+          <Text style={styles.customerName} numberOfLines={2}>
+            {item.customerName}
+          </Text>
+          <Text style={styles.items} numberOfLines={1}>
+            {item.items}
+          </Text>
           <Text style={styles.mobile}>{item.mobile}</Text>
         </View>
 
         <View style={styles.cardRight}>
           <Text style={styles.billLabel}>Bill</Text>
-          <Text style={styles.billNumber} numberOfLines={1}>{item.billNumber}</Text>
+          <Text style={styles.billNumber} numberOfLines={1}>
+            {item.billNumber}
+          </Text>
           <Text style={styles.amount}>{item.amountDisplay}</Text>
-          <View style={[styles.statusBadge, item.status === 'Paid' ? styles.statusBadgePaid : styles.statusBadgeUnpaid]}>
+          <View
+            style={[
+              styles.statusBadge,
+              item.status === 'Paid'
+                ? styles.statusBadgePaid
+                : styles.statusBadgeUnpaid,
+            ]}
+          >
             <Text style={styles.statusText}>{item.status}</Text>
           </View>
         </View>
@@ -240,7 +264,10 @@ export default function ActiveBillsList({
 
       {/* Tabs */}
       <View style={styles.tabsContainer}>
-        <TouchableOpacity style={[styles.tab, styles.activeTab]} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={[styles.tab, styles.activeTab]}
+          activeOpacity={0.8}
+        >
           <Text style={styles.activeTabText}>ACTIVE BILLS</Text>
           <View style={styles.activeTabIndicator} />
         </TouchableOpacity>
@@ -267,7 +294,10 @@ export default function ActiveBillsList({
             returnKeyType="search"
           />
           {searchText.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchText('')} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={() => setSearchText('')}
+              activeOpacity={0.7}
+            >
               <Icon name="close-circle" size={18} color="#CCCCCC" />
             </TouchableOpacity>
           )}
@@ -278,7 +308,10 @@ export default function ActiveBillsList({
         </View>
 
         <TouchableOpacity
-          style={[styles.dateSelector, filterByDate && styles.dateSelectorActive]}
+          style={[
+            styles.dateSelector,
+            filterByDate && styles.dateSelectorActive,
+          ]}
           onPress={() => setShowDatePicker(true)}
           activeOpacity={0.7}
         >
@@ -287,7 +320,12 @@ export default function ActiveBillsList({
             size={18}
             color={filterByDate ? '#FF8C42' : '#666666'}
           />
-          <Text style={[styles.dateSelectorText, filterByDate && styles.dateSelectorTextActive]}>
+          <Text
+            style={[
+              styles.dateSelectorText,
+              filterByDate && styles.dateSelectorTextActive,
+            ]}
+          >
             {formatDate(selectedDate)}
           </Text>
           {filterByDate && (
@@ -408,10 +446,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 0, // Remove vertical padding to eliminate gap
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
+    minHeight: 50, // Ensure minimum height for touch targets
   },
   headerBackButton: {
     width: 40,

@@ -19,12 +19,18 @@ import { API_URL } from '../config';
 
 const { width } = Dimensions.get('window');
 
-// Game colors for different game types
+// Game colors for different game types (fallback if no image)
 const GAME_COLORS = {
   snooker: '#4A7C59',
   pool: '#2E5F8A',
   billiards: '#8B4513',
   default: '#FF8C42',
+};
+
+// Helper to get full image URL from image_key
+const getGameImageUrl = (imageKey) => {
+  if (!imageKey) return null;
+  return `${API_URL}/static/game-images/${encodeURIComponent(imageKey)}`;
 };
 
 async function getAuthToken() {
@@ -108,6 +114,8 @@ export default function HomeScreen({ navigation }) {
         .map(game => {
           const gameId = game.game_id || game.id;
           const gameName = game.game_name || game.gamename || game.name;
+          const imageKey = game.image_key;
+          const gameImageUrl = getGameImageUrl(imageKey);
 
           // Filter tables for this game
           const gameTables = tables
@@ -158,6 +166,8 @@ export default function HomeScreen({ navigation }) {
             id: gameId,
             name: gameName,
             color: GAME_COLORS[gameName.toLowerCase()] || GAME_COLORS.default,
+            imageUrl: gameImageUrl,
+            imageKey: imageKey,
             tables: gameTables,
           };
         })
@@ -294,6 +304,7 @@ export default function HomeScreen({ navigation }) {
           <TableCard
             table={table}
             color={item.color}
+            gameImageUrl={item.imageUrl}
             onPress={(table, action) =>
               handleTablePress(table, action, item.name, item.color, item.id)
             }

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
+import Header from '../components/Header';
 
 export default function ScannerScreen({ navigation, route }) {
   const [amount, setAmount] = useState(1600);
@@ -24,15 +25,8 @@ export default function ScannerScreen({ navigation, route }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="chevron-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Scan to add amount in wallet</Text>
-      </View>
-
+    <View style={styles.container}>
+      <Header navigation={navigation} />
       {/* Content */}
       <View style={styles.content}>
         {/* QR Code */}
@@ -60,7 +54,7 @@ export default function ScannerScreen({ navigation, route }) {
           <Text style={styles.updateButtonText}>Update Wallet</Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -68,20 +62,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#FFF',
-    gap: 8,
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-    flex: 1,
+    paddingTop: 0, // Ensure header sits at the very top
   },
   content: {
     flex: 1,
