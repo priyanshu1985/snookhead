@@ -16,6 +16,8 @@ router.post("/", auth, async (req, res) => {
       onlineAmount,
       cart, // [{item: {id, name, price}, qty}]
       order_source = "table_booking",
+      session_id = null, // Link to active table session for consolidated billing
+      table_id = null, // Link to table for reference
     } = req.body;
 
     // Validate required fields
@@ -47,6 +49,8 @@ router.post("/", auth, async (req, res) => {
           : 0,
       status: "pending", // pending, completed, cancelled
       order_source,
+      session_id: session_id ? parseInt(session_id) : null,
+      table_id: table_id ? parseInt(table_id) : null,
       orderDate: new Date(),
     });
 
@@ -110,11 +114,13 @@ router.post("/", auth, async (req, res) => {
 // --------------------------------------------------
 router.get("/", auth, async (req, res) => {
   try {
-    const { page = 1, limit = 20, status, source } = req.query;
+    const { page = 1, limit = 20, status, source, session_id, table_id } = req.query;
 
     const where = {};
     if (status) where.status = status;
     if (source && source !== "all") where.order_source = source;
+    if (session_id) where.session_id = parseInt(session_id);
+    if (table_id) where.table_id = parseInt(table_id);
 
     const orders = await Order.findAll({
       where,
@@ -135,6 +141,69 @@ router.get("/", auth, async (req, res) => {
       data: orders,
     });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --------------------------------------------------
+// GET ORDERS BY SESSION ID (for billing consolidation)
+// --------------------------------------------------
+router.get("/by-session/:sessionId", auth, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const orders = await Order.findAll({
+      where: { session_id: parseInt(sessionId) },
+      include: [
+        {
+          model: OrderItem,
+          include: [MenuItem],
+        },
+      ],
+      order: [["createdAt", "ASC"]],
+    });
+
+    // Transform orders to include item details for easy billing
+    const transformedOrders = orders.map(order => {
+      const orderItems = order.OrderItems || [];
+      const items = orderItems.map(item => ({
+        id: item.menuItemId,
+        name: item.MenuItem?.name || "Unknown Item",
+        price: parseFloat(item.priceEach) || 0,
+        quantity: item.qty || 1,
+        total: (parseFloat(item.priceEach) || 0) * (item.qty || 1),
+        category: item.MenuItem?.category || "Food",
+      }));
+
+      return {
+        id: order.id,
+        personName: order.personName,
+        total: parseFloat(order.total) || 0,
+        status: order.status,
+        order_source: order.order_source,
+        items,
+        createdAt: order.createdAt,
+      };
+    });
+
+    // Calculate total of all orders for this session
+    const sessionMenuTotal = transformedOrders.reduce(
+      (sum, order) => sum + order.total,
+      0
+    );
+
+    // Flatten all items from all orders for consolidated billing
+    const allItems = transformedOrders.flatMap(order => order.items);
+
+    res.json({
+      session_id: sessionId,
+      orders: transformedOrders,
+      total_orders: transformedOrders.length,
+      session_menu_total: sessionMenuTotal,
+      consolidated_items: allItems,
+    });
+  } catch (err) {
+    console.error("Error fetching orders by session:", err);
     res.status(500).json({ error: err.message });
   }
 });
