@@ -17,11 +17,15 @@ router.get("/", auth, async (req, res) => {
       search,
       page = 1,
       limit = 50,
+      includeUnavailable, // New param to include unavailable items (for setup menu)
     } = req.query;
 
-    const where = {
-      is_available: true, // Only show available items
-    };
+    const where = {};
+
+    // Only filter by availability if not explicitly requesting all items
+    if (includeUnavailable !== 'true') {
+      where.is_available = true; // Only show available items
+    }
 
     if (category) where.category = category;
     if (minPrice || maxPrice) {
@@ -118,7 +122,7 @@ router.post("/", auth, async (req, res) => {
 // --------------------------------------------------
 // UPDATE MENU ITEM
 // --------------------------------------------------
-router.put("/:id", auth, authorize("staff", "admin"), async (req, res) => {
+router.put("/:id", auth, authorize("staff", "admin", "owner"), async (req, res) => {
   try {
     const item = await MenuItem.findByPk(req.params.id);
 
@@ -138,7 +142,7 @@ router.put("/:id", auth, authorize("staff", "admin"), async (req, res) => {
 // --------------------------------------------------
 // DELETE MENU ITEM
 // --------------------------------------------------
-router.delete("/:id", auth, authorize("admin"), async (req, res) => {
+router.delete("/:id", auth, authorize("admin", "owner"), async (req, res) => {
   try {
     const item = await MenuItem.findByPk(req.params.id);
 

@@ -149,4 +149,50 @@ router.delete("/:id", auth, authorize("admin", "owner"), async (req, res) => {
   }
 });
 
+/**
+ * ACTIVATE customer
+ * Admin / Owner / Staff
+ */
+router.patch("/:id/activate", auth, authorize("admin", "owner", "staff"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const customer = await Customer.findByPk(id);
+
+    if (!customer) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    // Always set to active, even if already active (idempotent)
+    customer.is_active = true;
+    await customer.save();
+
+    res.json({ success: true, message: "Customer activated", is_active: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * DEACTIVATE customer
+ * Admin / Owner / Staff
+ */
+router.patch("/:id/deactivate", auth, authorize("admin", "owner", "staff"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const customer = await Customer.findByPk(id);
+
+    if (!customer) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    // Always set to inactive, even if already inactive (idempotent)
+    customer.is_active = false;
+    await customer.save();
+
+    res.json({ success: true, message: "Customer deactivated", is_active: false });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

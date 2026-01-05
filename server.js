@@ -64,6 +64,8 @@ app.use("/api/wallets", require("./routes/wallets"));
 app.use("/api/customer", require("./routes/customer"));
 app.use("/api/bugs", require("./routes/bugs"));
 app.use("/api/admin/stations", require("./routes/adminStations"));
+// app.use("/api/owner", require("./routes/ownerPanel"));
+// app.use("/api/owner/dashboard", require("./routes/ownerDashboard"));
 
 // Error handler
 app.use((err, req, res, next) => {

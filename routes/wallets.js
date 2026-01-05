@@ -132,6 +132,42 @@ router.post(
 );
 
 /* =====================================================
+   ADD Money by Wallet ID
+   ===================================================== */
+router.post(
+  "/:wallet_id/add",
+  auth,
+  authorize("staff", "admin", "owner"),
+  async (req, res) => {
+    try {
+      const { wallet_id } = req.params;
+      const { amount } = req.body;
+
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: "Invalid amount" });
+      }
+
+      const wallet = await Wallet.findByPk(wallet_id);
+      if (!wallet) {
+        return res.status(404).json({ error: "Wallet not found" });
+      }
+
+      wallet.balance = Number(wallet.balance) + Number(amount);
+      wallet.last_transaction_at = new Date();
+      await wallet.save();
+
+      res.json({
+        message: "Amount added",
+        new_balance: wallet.balance,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+/* =====================================================
    DEDUCT Money
    ===================================================== */
 router.post(

@@ -114,7 +114,14 @@ router.post("/", auth, async (req, res) => {
 // --------------------------------------------------
 router.get("/", auth, async (req, res) => {
   try {
-    const { page = 1, limit = 20, status, source, session_id, table_id } = req.query;
+    const {
+      page = 1,
+      limit = 20,
+      status,
+      source,
+      session_id,
+      table_id,
+    } = req.query;
 
     const where = {};
     if (status) where.status = status;
@@ -164,9 +171,9 @@ router.get("/by-session/:sessionId", auth, async (req, res) => {
     });
 
     // Transform orders to include item details for easy billing
-    const transformedOrders = orders.map(order => {
+    const transformedOrders = orders.map((order) => {
       const orderItems = order.OrderItems || [];
-      const items = orderItems.map(item => ({
+      const items = orderItems.map((item) => ({
         id: item.menuItemId,
         name: item.MenuItem?.name || "Unknown Item",
         price: parseFloat(item.priceEach) || 0,
@@ -193,7 +200,7 @@ router.get("/by-session/:sessionId", auth, async (req, res) => {
     );
 
     // Flatten all items from all orders for consolidated billing
-    const allItems = transformedOrders.flatMap(order => order.items);
+    const allItems = transformedOrders.flatMap((order) => order.items);
 
     res.json({
       session_id: sessionId,
@@ -289,7 +296,7 @@ router.patch("/:id/status", auth, async (req, res) => {
   try {
     const { status } = req.body;
 
-    if (!["pending", "completed", "cancelled"].includes(status)) {
+    if (!["pending", "ready", "completed", "cancelled"].includes(status)) {
       return res.status(400).json({ error: "Invalid status" });
     }
 
