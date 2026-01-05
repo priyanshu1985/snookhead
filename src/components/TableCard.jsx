@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 
-export default function TableCard({ table, color, gameImageUrl, onPress, onDelete }) {
+export default function TableCard({ table, color, gameImageUrl, onPress }) {
   const [currentTime, setCurrentTime] = React.useState(Date.now());
   const isOccupied = table.status === 'occupied' || table.status === 'reserved';
   const priceText = table.price || `₹${table.pricePerHour || 200}/hr`;
@@ -26,7 +26,12 @@ export default function TableCard({ table, color, gameImageUrl, onPress, onDelet
       const remaining = Math.max(0, Math.floor((endTime - currentTime) / 1000));
 
       if (remaining <= 0) {
-        return { text: 'Expired', isExpired: true, isWarning: false, seconds: 0 };
+        return {
+          text: 'Expired',
+          isExpired: true,
+          isWarning: false,
+          seconds: 0,
+        };
       }
 
       const hours = Math.floor(remaining / 3600);
@@ -35,25 +40,34 @@ export default function TableCard({ table, color, gameImageUrl, onPress, onDelet
 
       let text;
       if (hours > 0) {
-        text = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        text = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds
+          .toString()
+          .padStart(2, '0')}`;
       } else {
-        text = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        text = `${minutes.toString().padStart(2, '0')}:${seconds
+          .toString()
+          .padStart(2, '0')}`;
       }
 
       return {
         text,
         isExpired: false,
         isWarning: remaining <= 300, // Warning when less than 5 minutes
-        seconds: remaining
+        seconds: remaining,
       };
     } else if (table.durationMinutes && table.startTime) {
       // Calculate from start time and duration
       const startTime = new Date(table.startTime).getTime();
-      const endTime = startTime + (table.durationMinutes * 60 * 1000);
+      const endTime = startTime + table.durationMinutes * 60 * 1000;
       const remaining = Math.max(0, Math.floor((endTime - currentTime) / 1000));
 
       if (remaining <= 0) {
-        return { text: 'Expired', isExpired: true, isWarning: false, seconds: 0 };
+        return {
+          text: 'Expired',
+          isExpired: true,
+          isWarning: false,
+          seconds: 0,
+        };
       }
 
       const hours = Math.floor(remaining / 3600);
@@ -62,20 +76,26 @@ export default function TableCard({ table, color, gameImageUrl, onPress, onDelet
 
       let text;
       if (hours > 0) {
-        text = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        text = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds
+          .toString()
+          .padStart(2, '0')}`;
       } else {
-        text = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        text = `${minutes.toString().padStart(2, '0')}:${seconds
+          .toString()
+          .padStart(2, '0')}`;
       }
 
       return {
         text,
         isExpired: false,
         isWarning: remaining <= 300,
-        seconds: remaining
+        seconds: remaining,
       };
     } else if (table.startTime) {
       // Fallback: show elapsed time if no end time available
-      const elapsed = Math.floor((currentTime - new Date(table.startTime).getTime()) / 1000);
+      const elapsed = Math.floor(
+        (currentTime - new Date(table.startTime).getTime()) / 1000,
+      );
       const minutes = Math.floor(elapsed / 60);
       const seconds = elapsed % 60;
       return {
@@ -83,7 +103,7 @@ export default function TableCard({ table, color, gameImageUrl, onPress, onDelet
         isExpired: false,
         isWarning: false,
         isElapsed: true,
-        seconds: elapsed
+        seconds: elapsed,
       };
     }
 
@@ -117,32 +137,30 @@ export default function TableCard({ table, color, gameImageUrl, onPress, onDelet
       onPress={handlePress}
     >
       {/* Status indicator */}
-      <View style={[styles.statusIndicator, isOccupied ? styles.statusOccupied : styles.statusAvailable]} />
-
-      {/* Delete button - only show for available tables */}
-      {!isOccupied && (
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={e => {
-            e.stopPropagation();
-            onDelete && onDelete();
-          }}
-          activeOpacity={0.7}
-        >
-          <Icon name="trash-outline" size={14} color="#FF6B6B" />
-        </TouchableOpacity>
-      )}
+      <View
+        style={[
+          styles.statusIndicator,
+          isOccupied ? styles.statusOccupied : styles.statusAvailable,
+        ]}
+      />
 
       {/* Table image area */}
       <View style={styles.imageWrapper}>
         {gameImageUrl ? (
           // Display actual game image from backend
-          <View style={[styles.imageContainer, isOccupied && styles.tableImageOccupied]}>
+          <View
+            style={[
+              styles.imageContainer,
+              isOccupied && styles.tableImageOccupied,
+            ]}
+          >
             <Image
               source={{ uri: gameImageUrl }}
               style={styles.actualImage}
               resizeMode="cover"
-              onError={(e) => console.log('TableCard image error:', e.nativeEvent.error)}
+              onError={e =>
+                console.log('TableCard image error:', e.nativeEvent.error)
+              }
             />
           </View>
         ) : (
@@ -161,24 +179,35 @@ export default function TableCard({ table, color, gameImageUrl, onPress, onDelet
 
         {/* Occupied overlay with countdown timer */}
         {isOccupied && (
-          <View style={[
-            styles.overlay,
-            timerInfo.isExpired && styles.overlayExpired,
-            timerInfo.isWarning && styles.overlayWarning
-          ]}>
-            <View style={[
-              styles.overlayPulse,
-              timerInfo.isExpired && styles.pulseExpired,
-              timerInfo.isWarning && styles.pulseWarning
-            ]} />
+          <View
+            style={[
+              styles.overlay,
+              timerInfo.isExpired && styles.overlayExpired,
+              timerInfo.isWarning && styles.overlayWarning,
+            ]}
+          >
+            <View
+              style={[
+                styles.overlayPulse,
+                timerInfo.isExpired && styles.pulseExpired,
+                timerInfo.isWarning && styles.pulseWarning,
+              ]}
+            />
             <Icon
-              name={timerInfo.isExpired ? "alert-circle" : timerInfo.isElapsed ? "time-outline" : "hourglass-outline"}
+              name={
+                timerInfo.isExpired
+                  ? 'alert-circle'
+                  : timerInfo.isElapsed
+                  ? 'time-outline'
+                  : 'hourglass-outline'
+              }
               size={14}
               color="#FFFFFF"
               style={styles.overlayIcon}
             />
             <Text style={styles.overlayText}>
-              {timerInfo.isElapsed ? '+' : ''}{timerInfo.text}
+              {timerInfo.isElapsed ? '+' : ''}
+              {timerInfo.text}
             </Text>
           </View>
         )}
@@ -197,9 +226,7 @@ export default function TableCard({ table, color, gameImageUrl, onPress, onDelet
         <View style={styles.infoRow}>
           <Text style={styles.tableName}>{table.name}</Text>
           <View style={styles.priceContainer}>
-            <Text style={styles.priceText}>
-              {priceText.split('/')[0]}
-            </Text>
+            <Text style={styles.priceText}>{priceText.split('/')[0]}</Text>
             <Text style={styles.priceUnit}>/hr</Text>
           </View>
         </View>
@@ -256,26 +283,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF8C42',
   },
 
-  deleteButton: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    zIndex: 10,
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#FFEBEE',
-  },
-
   imageWrapper: {
     borderRadius: 12,
     overflow: 'hidden',
@@ -308,7 +315,6 @@ const styles = StyleSheet.create({
   tableImageOccupied: {
     opacity: 0.85,
   },
-
 
   overlay: {
     position: 'absolute',

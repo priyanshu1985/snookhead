@@ -8,8 +8,12 @@ import {
   Alert,
   ScrollView,
   Image,
+  Switch,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
@@ -24,10 +28,40 @@ const getAuthToken = async () => {
 };
 
 export default function MemberDetails({ route, navigation }) {
-  const { member } = route.params;
+  const { member: initialMember } = route.params;
+  const [member, setMember] = useState(initialMember);
   const [wallet, setWallet] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [memberStatus, setMemberStatus] = useState(initialMember.is_active);
+  const [togglingStatus, setTogglingStatus] = useState(false);
+  const [showAddAmountModal, setShowAddAmountModal] = useState(false);
+  const [addAmount, setAddAmount] = useState('');
+  const [addingAmount, setAddingAmount] = useState(false);
+
+  // Fetch fresh member data from API
+  const fetchMemberData = async () => {
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(
+        `${API_URL}/api/customer/${initialMember.id}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      if (response.ok) {
+        const memberData = await response.json();
+        setMember(memberData);
+        setMemberStatus(memberData.is_active);
+      }
+    } catch (error) {
+      console.error('Error fetching member data:', error);
+    }
+  };
 
   // Fetch wallet information for the member
   const fetchWallet = async () => {
@@ -71,9 +105,13 @@ export default function MemberDetails({ route, navigation }) {
     }
   };
 
-  useEffect(() => {
-    fetchWallet();
-  }, [member.id]);
+  // Refresh member data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchMemberData();
+      fetchWallet();
+    }, [initialMember.id]),
+  );
 
   const handleCreateWallet = async () => {
     try {
@@ -102,6 +140,91 @@ export default function MemberDetails({ route, navigation }) {
     } catch (error) {
       console.error('Error creating wallet:', error);
       Alert.alert('Error', 'Network error. Please try again.');
+    }
+  };
+
+  // Toggle member active/inactive status
+  const handleToggleStatus = async newStatus => {
+    setTogglingStatus(true);
+    try {
+      const token = await getAuthToken();
+      const endpoint = newStatus
+        ? `${API_URL}/api/customer/${member.id}/activate`
+        : `${API_URL}/api/customer/${member.id}/deactivate`;
+
+      const response = await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        setMemberStatus(newStatus);
+        Alert.alert(
+          'Success',
+          `Member ${newStatus ? 'activated' : 'deactivated'} successfully`,
+        );
+      } else {
+        const result = await response.json();
+        Alert.alert('Error', result.error || 'Failed to update member status');
+        // Revert toggle if failed
+        setMemberStatus(!newStatus);
+      }
+    } catch (error) {
+      console.error('Error toggling member status:', error);
+      Alert.alert('Error', 'Network error. Please try again.');
+      // Revert toggle if failed
+      setMemberStatus(!newStatus);
+    } finally {
+      setTogglingStatus(false);
+    }
+  };
+
+  // Add amount to wallet
+  const handleAddAmount = async () => {
+    // Check if member is active
+    if (!memberStatus) {
+      Alert.alert('Error', 'Cannot add amount. Member is inactive.');
+      return;
+    }
+
+    const amount = parseFloat(addAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+
+    setAddingAmount(true);
+    try {
+      const token = await getAuthToken();
+
+      const response = await fetch(`${API_URL}/api/wallets/${wallet.id}/add`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          amount: amount,
+        }),
+      });
+
+      if (response.ok) {
+        Alert.alert('Success', `₹${amount.toFixed(2)} added to wallet`);
+        setShowAddAmountModal(false);
+        setAddAmount('');
+        fetchWallet(); // Refresh wallet data
+      } else {
+        const result = await response.json();
+        Alert.alert('Error', result.error || 'Failed to add amount');
+      }
+    } catch (error) {
+      console.error('Error adding amount:', error);
+      Alert.alert('Error', 'Network error. Please try again.');
+    } finally {
+      setAddingAmount(false);
     }
   };
 
@@ -143,15 +266,41 @@ export default function MemberDetails({ route, navigation }) {
                 {member.email || 'No email'}
               </Text>
             </View>
-            <View
-              style={[
-                styles.statusBadge,
-                member.is_active ? styles.activeBadge : styles.inactiveBadge,
-              ]}
-            >
-              <Text style={styles.statusText}>
-                {member.is_active ? 'ACTIVE' : 'INACTIVE'}
-              </Text>
+          </View>
+
+          {/* Status Toggle Section */}
+          <View style={styles.statusToggleSection}>
+            <View style={styles.statusToggleLeft}>
+              <Text style={styles.statusToggleLabel}>Status</Text>
+              <View
+                style={[
+                  styles.statusBadge,
+                  memberStatus ? styles.activeBadge : styles.inactiveBadge,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusText,
+                    memberStatus
+                      ? styles.activeStatusText
+                      : styles.inactiveStatusText,
+                  ]}
+                >
+                  {memberStatus ? 'ACTIVE' : 'INACTIVE'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.statusToggleRight}>
+              {togglingStatus ? (
+                <ActivityIndicator size="small" color="#ff8c1a" />
+              ) : (
+                <Switch
+                  value={memberStatus}
+                  onValueChange={handleToggleStatus}
+                  trackColor={{ false: '#e0e0e0', true: '#a5d6a7' }}
+                  thumbColor={memberStatus ? '#4CAF50' : '#f5f5f5'}
+                />
+              )}
             </View>
           </View>
 
@@ -199,6 +348,37 @@ export default function MemberDetails({ route, navigation }) {
                 <Text style={styles.balanceAmount}>
                   {formatCurrency(wallet.balance)}
                 </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.addAmountButton,
+                    !memberStatus && styles.disabledButton,
+                  ]}
+                  onPress={() => {
+                    if (!memberStatus) {
+                      Alert.alert(
+                        'Error',
+                        'Cannot add amount. Member is inactive.',
+                      );
+                      return;
+                    }
+                    setShowAddAmountModal(true);
+                  }}
+                  disabled={!memberStatus}
+                >
+                  <Icon
+                    name="add-circle"
+                    size={18}
+                    color={memberStatus ? '#fff' : '#999'}
+                  />
+                  <Text
+                    style={[
+                      styles.addAmountButtonText,
+                      !memberStatus && styles.disabledButtonText,
+                    ]}
+                  >
+                    Add Amount
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               <View style={styles.walletInfoRow}>
@@ -258,6 +438,90 @@ export default function MemberDetails({ route, navigation }) {
           ) : null}
         </View>
       </ScrollView>
+
+      {/* Add Amount Modal */}
+      <Modal
+        visible={showAddAmountModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAddAmountModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Amount to Wallet</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowAddAmountModal(false);
+                  setAddAmount('');
+                }}
+                style={styles.closeButton}
+              >
+                <Icon name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={styles.currentBalanceLabel}>Current Balance</Text>
+              <Text style={styles.currentBalanceValue}>
+                {formatCurrency(wallet?.balance)}
+              </Text>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Amount to Add (₹)</Text>
+                <TextInput
+                  style={styles.amountInput}
+                  value={addAmount}
+                  onChangeText={setAddAmount}
+                  placeholder="Enter amount"
+                  placeholderTextColor="#999"
+                  keyboardType="numeric"
+                />
+              </View>
+
+              {/* Quick amount buttons */}
+              <View style={styles.quickAmountRow}>
+                {[100, 500, 1000, 2000].map(amount => (
+                  <TouchableOpacity
+                    key={amount}
+                    style={styles.quickAmountButton}
+                    onPress={() => setAddAmount(amount.toString())}
+                  >
+                    <Text style={styles.quickAmountText}>₹{amount}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => {
+                  setShowAddAmountModal(false);
+                  setAddAmount('');
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  addingAmount && styles.disabledButton,
+                ]}
+                onPress={handleAddAmount}
+                disabled={addingAmount}
+              >
+                {addingAmount ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Add Amount</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -500,5 +764,203 @@ const styles = StyleSheet.create({
   qrImage: {
     width: 150,
     height: 150,
+  },
+
+  // Status Toggle Styles
+  statusToggleSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    marginTop: 8,
+  },
+
+  statusToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+
+  statusToggleLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+
+  statusToggleRight: {
+    minWidth: 50,
+    alignItems: 'flex-end',
+  },
+
+  activeStatusText: {
+    color: '#4CAF50',
+  },
+
+  inactiveStatusText: {
+    color: '#f44336',
+  },
+
+  // Add Amount Button Styles
+  addAmountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ff8c1a',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 16,
+    gap: 6,
+  },
+
+  addAmountButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+
+  disabledButton: {
+    backgroundColor: '#ccc',
+    opacity: 0.6,
+  },
+
+  disabledButtonText: {
+    color: '#999',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+  },
+
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+  },
+
+  closeButton: {
+    padding: 5,
+  },
+
+  modalBody: {
+    paddingVertical: 10,
+  },
+
+  currentBalanceLabel: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+
+  currentBalanceValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#ff8c1a',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+
+  inputGroup: {
+    marginBottom: 16,
+  },
+
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+
+  amountInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 18,
+    color: '#333',
+    backgroundColor: '#f9f9f9',
+    textAlign: 'center',
+  },
+
+  quickAmountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+
+  quickAmountButton: {
+    flex: 1,
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 10,
+    marginHorizontal: 4,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+
+  quickAmountText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    gap: 12,
+  },
+
+  cancelButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    alignItems: 'center',
+  },
+
+  cancelButtonText: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '600',
+  },
+
+  submitButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#ff8c1a',
+    alignItems: 'center',
+  },
+
+  submitButtonText: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '600',
+  },
+
+  disabledButton: {
+    backgroundColor: '#ccc',
   },
 });

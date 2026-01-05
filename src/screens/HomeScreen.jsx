@@ -28,7 +28,7 @@ const GAME_COLORS = {
 };
 
 // Helper to get full image URL from image_key
-const getGameImageUrl = (imageKey) => {
+const getGameImageUrl = imageKey => {
   if (!imageKey) return null;
   return `${API_URL}/static/game-images/${encodeURIComponent(imageKey)}`;
 };
@@ -142,7 +142,8 @@ export default function HomeScreen({ navigation }) {
                   ? 'occupied'
                   : table.status || 'available',
                 time: table.activeTime || null, // For occupied tables
-                sessionId: activeSession?.active_id || activeSession?.id || null,
+                sessionId:
+                  activeSession?.active_id || activeSession?.id || null,
                 startTime: activeSession?.start_time || null,
                 bookingEndTime: activeSession?.booking_end_time || null,
                 durationMinutes: activeSession?.duration_minutes || null,
@@ -224,7 +225,10 @@ export default function HomeScreen({ navigation }) {
 
     if (action === 'stop') {
       // Navigate to AfterBooking screen to show session details
-      console.log('Navigating to AfterBooking screen with session:', table.sessionId);
+      console.log(
+        'Navigating to AfterBooking screen with session:',
+        table.sessionId,
+      );
       navigation.navigate('AfterBooking', {
         table,
         session: {
@@ -277,23 +281,6 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const handleDeleteTable = (gameIndex, tableId) => {
-    Alert.alert('Delete Table', 'Are you sure you want to delete this table?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          const updatedGameData = [...gameData];
-          updatedGameData[gameIndex].tables = updatedGameData[
-            gameIndex
-          ].tables.filter(table => table.id !== tableId);
-          setGameData(updatedGameData);
-        },
-      },
-    ]);
-  };
-
   const renderGame = ({ item, index: gameIndex }) => (
     <View style={{ width, padding: 16 }}>
       <FlatList
@@ -308,7 +295,6 @@ export default function HomeScreen({ navigation }) {
             onPress={(table, action) =>
               handleTablePress(table, action, item.name, item.color, item.id)
             }
-            onDelete={() => handleDeleteTable(gameIndex, table.id)}
           />
         )}
         columnWrapperStyle={styles.row}
