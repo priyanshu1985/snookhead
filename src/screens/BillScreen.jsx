@@ -4,8 +4,6 @@ import {
   View,
   StyleSheet,
   StatusBar,
-  Animated,
-  Dimensions,
 } from 'react-native';
 import Header from '../components/Header';
 import ActiveBillsList from '../components/ActiveBillsList';
@@ -13,181 +11,90 @@ import BillHistoryList from '../components/BillHistoryList';
 import BillDescriptionActive from '../components/BillDescriptionActive';
 import BillDescriptionHistory from '../components/BillDescriptionHistory';
 
-const { width } = Dimensions.get('window');
-
 export default function BillScreen({ navigation }) {
   // State management
-  const [currentView, setCurrentView] = useState('active'); // active, history, activeBillDetails, historyBillDetails
+  const [currentView, setCurrentView] = useState('active');
   const [selectedBill, setSelectedBill] = useState(null);
-  const [fadeAnim] = useState(new Animated.Value(1));
 
-  // Navigation handlers with smooth transitions
+  // Navigation handlers
   const handleShowHistory = () => {
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 150,
-      useNativeDriver: true,
-    }).start(() => {
-      setCurrentView('history');
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 150,
-        useNativeDriver: true,
-      }).start();
-    });
+    setCurrentView('history');
   };
 
   const handleShowActive = () => {
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 150,
-      useNativeDriver: true,
-    }).start(() => {
-      setCurrentView('active');
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 150,
-        useNativeDriver: true,
-      }).start();
-    });
+    setCurrentView('active');
   };
 
   const handleActiveBillClick = bill => {
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      setSelectedBill(bill);
-      setCurrentView('activeBillDetails');
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    });
+    setSelectedBill(bill);
+    setCurrentView('activeBillDetails');
   };
 
   const handleHistoryBillClick = bill => {
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      setSelectedBill(bill);
-      setCurrentView('historyBillDetails');
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    });
+    setSelectedBill(bill);
+    setCurrentView('historyBillDetails');
   };
 
   const handleBackToActive = () => {
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      setSelectedBill(null);
-      setCurrentView('active');
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    });
+    setSelectedBill(null);
+    setCurrentView('active');
   };
 
   const handleBackToHistory = () => {
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      setSelectedBill(null);
-      setCurrentView('history');
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    });
+    setSelectedBill(null);
+    setCurrentView('history');
   };
 
   const handlePaymentComplete = () => {
-    // After payment, go back to active bills with animation
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      setSelectedBill(null);
-      setCurrentView('active');
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    });
+    setSelectedBill(null);
+    setCurrentView('active');
   };
 
-  // Render appropriate view with animation
+  // Render appropriate view
   const renderView = () => {
     switch (currentView) {
       case 'active':
         return (
-          <Animated.View style={[styles.viewContainer, { opacity: fadeAnim }]}>
-            <ActiveBillsList
-              onShowHistory={handleShowHistory}
-              onBillClick={handleActiveBillClick}
-              navigation={navigation}
-            />
-          </Animated.View>
+          <ActiveBillsList
+            onShowHistory={handleShowHistory}
+            onBillClick={handleActiveBillClick}
+            navigation={navigation}
+          />
         );
 
       case 'history':
         return (
-          <Animated.View style={[styles.viewContainer, { opacity: fadeAnim }]}>
-            <BillHistoryList
-              onShowActive={handleShowActive}
-              onBillClick={handleHistoryBillClick}
-              navigation={navigation}
-            />
-          </Animated.View>
+          <BillHistoryList
+            onShowActive={handleShowActive}
+            onBillClick={handleHistoryBillClick}
+            navigation={navigation}
+          />
         );
 
       case 'activeBillDetails':
         return (
-          <Animated.View style={[styles.viewContainer, { opacity: fadeAnim }]}>
-            <BillDescriptionActive
-              bill={selectedBill}
-              onBack={handleBackToActive}
-              onPaymentComplete={handlePaymentComplete}
-            />
-          </Animated.View>
+          <BillDescriptionActive
+            bill={selectedBill}
+            onBack={handleBackToActive}
+            onPaymentComplete={handlePaymentComplete}
+          />
         );
 
       case 'historyBillDetails':
         return (
-          <Animated.View style={[styles.viewContainer, { opacity: fadeAnim }]}>
-            <BillDescriptionHistory
-              bill={selectedBill}
-              onBack={handleBackToHistory}
-            />
-          </Animated.View>
+          <BillDescriptionHistory
+            bill={selectedBill}
+            onBack={handleBackToHistory}
+          />
         );
 
       default:
         return (
-          <Animated.View style={[styles.viewContainer, { opacity: fadeAnim }]}>
-            <ActiveBillsList
-              onShowHistory={handleShowHistory}
-              onBillClick={handleActiveBillClick}
-              navigation={navigation}
-            />
-          </Animated.View>
+          <ActiveBillsList
+            onShowHistory={handleShowHistory}
+            onBillClick={handleActiveBillClick}
+            navigation={navigation}
+          />
         );
     }
   };
@@ -212,11 +119,5 @@ const styles = StyleSheet.create({
   },
   screenWrapper: {
     flex: 1,
-    backgroundColor: 'transparent',
-  },
-  viewContainer: {
-    flex: 1,
-    width: width,
-    backgroundColor: 'transparent',
   },
 });

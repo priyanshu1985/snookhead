@@ -18,12 +18,12 @@ export default function MenuScreen({ navigation }) {
   // Define menu items based on roles
   const getMenuItems = () => {
     const allMenuItems = [
-      {
-        icon: 'id-card-outline',
-        title: 'Owners panel',
-        route: 'OwnerPanel',
-        roles: ['owner'], // Only owners can access
-      },
+      // {
+      //   icon: 'id-card-outline',
+      //   title: 'Owners panel',
+      //   route: 'OwnerPanel',
+      //   roles: ['owner'], // Only owners can access
+      // },
       {
         icon: 'settings-outline',
         title: 'Set up menu',

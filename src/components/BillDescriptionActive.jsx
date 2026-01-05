@@ -37,7 +37,10 @@ export default function BillDescriptionActive({
 
       Alert.alert(
         'Confirm Payment',
-        `Process payment of ₹${getBillDetail('totalAmount', '0')} via ${selectedPaymentMethod.toUpperCase()}?`,
+        `Process payment of ₹${getBillDetail(
+          'totalAmount',
+          '0',
+        )} via ${selectedPaymentMethod.toUpperCase()}?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -46,7 +49,9 @@ export default function BillDescriptionActive({
             onPress: async () => {
               try {
                 const response = await fetch(
-                  `${API_URL}/api/bills/${bill.originalBill?.id || bill.id}/pay`,
+                  `${API_URL}/api/bills/${
+                    bill.originalBill?.id || bill.id
+                  }/pay`,
                   {
                     method: 'POST',
                     headers: {
@@ -72,7 +77,10 @@ export default function BillDescriptionActive({
                 }
               } catch (error) {
                 console.error('Payment error:', error);
-                Alert.alert('Payment Failed', error.message || 'Please try again.');
+                Alert.alert(
+                  'Payment Failed',
+                  error.message || 'Please try again.',
+                );
               }
             },
           },
@@ -92,17 +100,25 @@ export default function BillDescriptionActive({
 
   // Get table charges
   const getTableCharges = () => {
-    return parseFloat(getBillDetail('tableCharges', getBillDetail('table_charges', '0')));
+    return parseFloat(
+      getBillDetail('tableCharges', getBillDetail('table_charges', '0')),
+    );
   };
 
   // Get menu charges
   const getMenuCharges = () => {
-    return parseFloat(getBillDetail('menuCharges', getBillDetail('menu_charges', '0')));
+    return parseFloat(
+      getBillDetail('menuCharges', getBillDetail('menu_charges', '0')),
+    );
   };
 
   // Format detailed items for display
   const formatDetailedItems = () => {
-    const items = bill.detailedItems || bill.originalBill?.order_items || bill.menuItems || [];
+    const items =
+      bill.detailedItems ||
+      bill.originalBill?.order_items ||
+      bill.menuItems ||
+      [];
     if (Array.isArray(items) && items.length > 0) {
       return items;
     }
@@ -111,7 +127,10 @@ export default function BillDescriptionActive({
 
   // Get session duration
   const getSessionDuration = () => {
-    return getBillDetail('sessionDuration', getBillDetail('session_duration', '0'));
+    return getBillDetail(
+      'sessionDuration',
+      getBillDetail('session_duration', '0'),
+    );
   };
 
   // Get table name
@@ -120,7 +139,7 @@ export default function BillDescriptionActive({
   };
 
   // Format date
-  const formatDate = (dateString) => {
+  const formatDate = dateString => {
     if (!dateString) return new Date().toLocaleDateString();
     const date = new Date(dateString);
     return date.toLocaleDateString('en-IN', {
@@ -148,7 +167,13 @@ export default function BillDescriptionActive({
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Bill Details</Text>
         <View style={styles.statusBadge}>
-          <Text style={styles.statusText}>Unpaid</Text>
+          <Icon
+            name="time-outline"
+            size={14}
+            color="#FF8C42"
+            style={{ marginRight: 4 }}
+          />
+          <Text style={styles.statusText}>Pending</Text>
         </View>
       </View>
 
@@ -179,14 +204,18 @@ export default function BillDescriptionActive({
               <Icon name="person-outline" size={20} color="#FF8C42" />
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Customer</Text>
-                <Text style={styles.infoValue}>{getBillDetail('customerName', 'Walk-in Customer')}</Text>
+                <Text style={styles.infoValue}>
+                  {getBillDetail('customerName', 'Walk-in Customer')}
+                </Text>
               </View>
             </View>
             <View style={styles.infoItem}>
               <Icon name="call-outline" size={20} color="#FF8C42" />
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Mobile</Text>
-                <Text style={styles.infoValue}>{getBillDetail('mobile', '+91 XXXXXXXXXX')}</Text>
+                <Text style={styles.infoValue}>
+                  {getBillDetail('mobile', '+91 XXXXXXXXXX')}
+                </Text>
               </View>
             </View>
           </View>
@@ -219,9 +248,13 @@ export default function BillDescriptionActive({
             <View style={styles.chargeItem}>
               <View style={styles.chargeLeft}>
                 <Text style={styles.chargeName}>{getTableName()} Session</Text>
-                <Text style={styles.chargeSubtext}>{getSessionDuration()} minutes</Text>
+                <Text style={styles.chargeSubtext}>
+                  {getSessionDuration()} minutes
+                </Text>
               </View>
-              <Text style={styles.chargeAmount}>₹{tableCharges.toFixed(2)}</Text>
+              <Text style={styles.chargeAmount}>
+                ₹{tableCharges.toFixed(2)}
+              </Text>
             </View>
           </View>
         )}
@@ -238,7 +271,11 @@ export default function BillDescriptionActive({
                 <View key={index} style={styles.menuItem}>
                   <View style={styles.menuItemIcon}>
                     <Text style={styles.menuEmoji}>
-                      {item.category === 'Beverages' ? '🥤' : item.category === 'Fast Food' ? '🍔' : '🍽️'}
+                      {item.category === 'Beverages'
+                        ? '🥤'
+                        : item.category === 'Fast Food'
+                        ? '🍔'
+                        : '🍽️'}
                     </Text>
                   </View>
                   <View style={styles.menuItemDetails}>
@@ -250,19 +287,27 @@ export default function BillDescriptionActive({
                     </Text>
                   </View>
                   <Text style={styles.menuItemPrice}>
-                    ₹{((item.price || item.amount || 0) * (item.quantity || item.qty || 1)).toFixed(2)}
+                    ₹
+                    {(
+                      (item.price || item.amount || 0) *
+                      (item.quantity || item.qty || 1)
+                    ).toFixed(2)}
                   </Text>
                 </View>
               ))
             ) : (
               <View style={styles.chargeItem}>
                 <Text style={styles.chargeName}>Food & Beverages</Text>
-                <Text style={styles.chargeAmount}>₹{menuCharges.toFixed(2)}</Text>
+                <Text style={styles.chargeAmount}>
+                  ₹{menuCharges.toFixed(2)}
+                </Text>
               </View>
             )}
             <View style={styles.subtotalRow}>
               <Text style={styles.subtotalLabel}>Menu Subtotal</Text>
-              <Text style={styles.subtotalValue}>₹{menuCharges.toFixed(2)}</Text>
+              <Text style={styles.subtotalValue}>
+                ₹{menuCharges.toFixed(2)}
+              </Text>
             </View>
           </View>
         )}
@@ -274,7 +319,9 @@ export default function BillDescriptionActive({
           {tableCharges > 0 && (
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Table Charges</Text>
-              <Text style={styles.summaryValue}>₹{tableCharges.toFixed(2)}</Text>
+              <Text style={styles.summaryValue}>
+                ₹{tableCharges.toFixed(2)}
+              </Text>
             </View>
           )}
 
@@ -309,10 +356,15 @@ export default function BillDescriptionActive({
                 size={24}
                 color={selectedPaymentMethod === 'cash' ? '#FF8C42' : '#666'}
               />
-              <Text style={[
-                styles.paymentOptionText,
-                selectedPaymentMethod === 'cash' && styles.paymentOptionTextActive,
-              ]}>Cash</Text>
+              <Text
+                style={[
+                  styles.paymentOptionText,
+                  selectedPaymentMethod === 'cash' &&
+                    styles.paymentOptionTextActive,
+                ]}
+              >
+                Cash
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -327,10 +379,15 @@ export default function BillDescriptionActive({
                 size={24}
                 color={selectedPaymentMethod === 'upi' ? '#FF8C42' : '#666'}
               />
-              <Text style={[
-                styles.paymentOptionText,
-                selectedPaymentMethod === 'upi' && styles.paymentOptionTextActive,
-              ]}>UPI</Text>
+              <Text
+                style={[
+                  styles.paymentOptionText,
+                  selectedPaymentMethod === 'upi' &&
+                    styles.paymentOptionTextActive,
+                ]}
+              >
+                UPI
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -345,16 +402,22 @@ export default function BillDescriptionActive({
                 size={24}
                 color={selectedPaymentMethod === 'card' ? '#FF8C42' : '#666'}
               />
-              <Text style={[
-                styles.paymentOptionText,
-                selectedPaymentMethod === 'card' && styles.paymentOptionTextActive,
-              ]}>Card</Text>
+              <Text
+                style={[
+                  styles.paymentOptionText,
+                  selectedPaymentMethod === 'card' &&
+                    styles.paymentOptionTextActive,
+                ]}
+              >
+                Card
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
                 styles.paymentOption,
-                selectedPaymentMethod === 'wallet' && styles.paymentOptionActive,
+                selectedPaymentMethod === 'wallet' &&
+                  styles.paymentOptionActive,
               ]}
               onPress={() => setSelectedPaymentMethod('wallet')}
             >
@@ -363,10 +426,15 @@ export default function BillDescriptionActive({
                 size={24}
                 color={selectedPaymentMethod === 'wallet' ? '#FF8C42' : '#666'}
               />
-              <Text style={[
-                styles.paymentOptionText,
-                selectedPaymentMethod === 'wallet' && styles.paymentOptionTextActive,
-              ]}>Wallet</Text>
+              <Text
+                style={[
+                  styles.paymentOptionText,
+                  selectedPaymentMethod === 'wallet' &&
+                    styles.paymentOptionTextActive,
+                ]}
+              >
+                Wallet
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -416,6 +484,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
   },
   backButton: {
     width: 40,
@@ -433,10 +506,14 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFF3E0',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
   },
   statusText: {
     fontSize: 12,

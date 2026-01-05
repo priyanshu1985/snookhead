@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,98 +6,162 @@ import {
   StyleSheet,
   ScrollView,
   Dimensions,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { ownerAPI } from '../services/api';
 
 const { width } = Dimensions.get('window');
 
+// Chart colors for games
+const CHART_COLORS = [
+  '#42A5F5', '#66BB6A', '#AB47BC', '#EC407A', '#EF7350', '#FFA726',
+  '#26A69A', '#5C6BC0', '#78909C', '#8D6E63',
+];
+
+// Game icons mapping
+const GAME_ICONS = {
+  snooker: 'grid-outline',
+  pool: 'ellipse-outline',
+  ps5: 'game-controller-outline',
+  chess: 'apps-outline',
+  carrom: 'square-outline',
+  'table tennis': 'tennisball-outline',
+  default: 'game-controller-outline',
+};
+
 export default function OwnerDashboard({ navigation }) {
   const [selectedPeriod, setSelectedPeriod] = useState('Week');
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [stats, setStats] = useState([]);
+  const [gameData, setGameData] = useState([]);
+  const [chartData, setChartData] = useState([]);
+  const [currentDate, setCurrentDate] = useState('');
 
   const periods = ['Day', 'Week', 'Month'];
 
-  // Stats data
-  const stats = [
-    {
-      id: 1,
-      title: 'Active Wallets',
-      value: '128',
-      trend: '+5.2%',
-      icon: 'wallet-outline',
-      bgColor: '#FFF3E0',
-      trendColor: '#FF8C42',
-      positive: true,
-    },
-    {
-      id: 2,
-      title: 'New Members',
-      value: '24',
-      trend: '+12.8%',
-      icon: 'people-outline',
-      bgColor: '#E8F5E9',
-      trendColor: '#4CAF50',
-      positive: true,
-    },
-    {
-      id: 3,
-      title: 'Inactive Wallets',
-      value: '7',
-      trend: 'yesterday: 5',
-      icon: 'person-remove-outline',
-      bgColor: '#F3E5F5',
-      trendColor: '#999',
-      positive: false,
-    },
-    {
-      id: 4,
-      title: 'Credit Member',
-      value: '12',
-      trend: 'Alert',
-      icon: 'alert-circle-outline',
-      bgColor: '#FFEBEE',
-      trendColor: '#FF5252',
-      positive: false,
-      isAlert: true,
-    },
-  ];
+  const getGameIcon = (gameName) => {
+    const name = gameName.toLowerCase();
+    return GAME_ICONS[name] || GAME_ICONS.default;
+  };
 
-  // Game utilization data
-  const gameData = [
-    {
-      name: 'Snooker',
-      usage: 85,
-      revenue: '$1,250',
-      status: 'High usage',
-      statusColor: '#FF8C42',
-      icon: 'grid-outline',
-    },
-    {
-      name: 'Pool',
-      usage: 72,
-      revenue: '$950',
-      status: 'Good usage',
-      statusColor: '#FFC107',
-      icon: 'ellipse-outline',
-    },
-    {
-      name: 'PS5',
-      usage: 45,
-      revenue: '$880',
-      status: 'Low usage',
-      statusColor: '#FF5252',
-      icon: 'game-controller-outline',
-    },
-  ];
+  const getUsageStatus = (usage) => {
+    if (usage >= 70) return { status: 'High usage', color: '#FF8C42' };
+    if (usage >= 40) return { status: 'Good usage', color: '#FFC107' };
+    return { status: 'Low usage', color: '#FF5252' };
+  };
 
-  // Bar chart data for game utilization
-  const chartData = [
-    { game: 'Pool', value: 92, color: '#42A5F5' },
-    { game: 'Snooker', value: 87, color: '#66BB6A' },
-    { game: 'Chess', value: 76, color: '#AB47BC' },
-    { game: 'Table Tennis', value: 64, color: '#EC407A' },
-    { game: 'PS5', value: 56, color: '#EF7350' },
-    { game: 'Carrom', value: 48, color: '#FFA726' },
-  ];
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const period = selectedPeriod.toLowerCase();
+      const [statsData, gameUtilData] = await Promise.all([
+        ownerAPI.getStats(period),
+        ownerAPI.getGameUtilization(),
+      ]);
+
+      // Format stats data
+      const formattedStats = [
+        {
+          id: 1,
+          title: 'Active Wallets',
+          value: String(statsData.activeWallets || 0),
+          trend: statsData.activeWalletsTrend || '+0%',
+          icon: 'wallet-outline',
+          bgColor: '#FFF3E0',
+          trendColor: '#FF8C42',
+          positive: true,
+        },
+        {
+          id: 2,
+          title: 'New Members',
+          value: String(statsData.newMembers || 0),
+          trend: statsData.newMembersTrend || '+0%',
+          icon: 'people-outline',
+          bgColor: '#E8F5E9',
+          trendColor: '#4CAF50',
+          positive: true,
+        },
+        {
+          id: 3,
+          title: 'Inactive Wallets',
+          value: String(statsData.inactiveWallets || 0),
+          trend: `yesterday: ${statsData.inactiveWalletsYesterday || 0}`,
+          icon: 'person-remove-outline',
+          bgColor: '#F3E5F5',
+          trendColor: '#999',
+          positive: false,
+        },
+        {
+          id: 4,
+          title: 'Credit Member',
+          value: String(statsData.creditMembers || 0),
+          trend: statsData.creditMembers > 0 ? 'Alert' : 'OK',
+          icon: 'alert-circle-outline',
+          bgColor: '#FFEBEE',
+          trendColor: statsData.creditMembers > 0 ? '#FF5252' : '#4CAF50',
+          positive: false,
+          isAlert: statsData.creditMembers > 0,
+        },
+      ];
+      setStats(formattedStats);
+
+      // Format game utilization data for chart
+      const games = gameUtilData.games || [];
+      const formattedChartData = games.map((game, index) => ({
+        game: game.name,
+        value: game.utilizationPercent || 0,
+        color: CHART_COLORS[index % CHART_COLORS.length],
+      }));
+      setChartData(formattedChartData);
+
+      // Format game revenue data
+      const formattedGameData = games.slice(0, 3).map((game) => {
+        const usageInfo = getUsageStatus(game.utilizationPercent || 0);
+        return {
+          name: game.name,
+          usage: game.utilizationPercent || 0,
+          revenue: `₹${game.revenue || 0}`,
+          status: usageInfo.status,
+          statusColor: usageInfo.color,
+          icon: getGameIcon(game.name),
+        };
+      });
+      setGameData(formattedGameData);
+
+      // Set current date
+      setCurrentDate(new Date().toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      }));
+
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      // Set default empty data on error
+      setStats([
+        { id: 1, title: 'Active Wallets', value: '0', trend: '+0%', icon: 'wallet-outline', bgColor: '#FFF3E0', trendColor: '#FF8C42', positive: true },
+        { id: 2, title: 'New Members', value: '0', trend: '+0%', icon: 'people-outline', bgColor: '#E8F5E9', trendColor: '#4CAF50', positive: true },
+        { id: 3, title: 'Inactive Wallets', value: '0', trend: 'yesterday: 0', icon: 'person-remove-outline', bgColor: '#F3E5F5', trendColor: '#999', positive: false },
+        { id: 4, title: 'Credit Member', value: '0', trend: 'OK', icon: 'alert-circle-outline', bgColor: '#FFEBEE', trendColor: '#4CAF50', positive: false, isAlert: false },
+      ]);
+      setChartData([]);
+      setGameData([]);
+      setCurrentDate(new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }));
+    }
+  }, [selectedPeriod]);
+
+  useEffect(() => {
+    setIsLoading(true);
+    fetchDashboardData().finally(() => setIsLoading(false));
+  }, [fetchDashboardData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchDashboardData();
+    setRefreshing(false);
+  }, [fetchDashboardData]);
 
   return (
     <View style={styles.container}>
@@ -117,12 +181,25 @@ export default function OwnerDashboard({ navigation }) {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#FF8C42']} />
+        }
+      >
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#FF8C42" />
+            <Text style={styles.loadingText}>Loading dashboard...</Text>
+          </View>
+        ) : (
+          <>
         {/* Date and Period Selector */}
         <View style={styles.dateSection}>
           <View style={styles.dateContainer}>
             <Icon name="calendar-outline" size={20} color="#999" />
-            <Text style={styles.dateText}>July 10, 2023</Text>
+            <Text style={styles.dateText}>{currentDate || 'Loading...'}</Text>
           </View>
           <View style={styles.periodSelector}>
             {periods.map(period => (
@@ -242,6 +319,8 @@ export default function OwnerDashboard({ navigation }) {
 
         {/* Bottom Spacing */}
         <View style={styles.bottomSpacing} />
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -469,5 +548,16 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: {
     height: 80,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 100,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#999',
   },
 });

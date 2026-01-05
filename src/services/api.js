@@ -411,6 +411,52 @@ export const customerAPI = {
 // Backward compatibility - alias for getMembers
 export const getMembers = customerAPI.getAll;
 
+// Owner Panel API
+export const ownerAPI = {
+  // Verify passcode
+  verifyPasscode: async passcode => {
+    return await makeRequest('/api/owner/verify-passcode', {
+      method: 'POST',
+      body: JSON.stringify({ passcode }),
+    });
+  },
+
+  // Change passcode
+  changePasscode: async (currentPasscode, newPasscode) => {
+    return await makeRequest('/api/owner/change-passcode', {
+      method: 'POST',
+      body: JSON.stringify({ currentPasscode, newPasscode }),
+    });
+  },
+
+  // Reset passcode (admin only)
+  resetPasscode: async () => {
+    return await makeRequest('/api/owner/reset-passcode', {
+      method: 'POST',
+    });
+  },
+
+  // Dashboard - Get stats
+  getStats: async (period = 'day') => {
+    return await makeRequest(`/api/owner/dashboard/stats?period=${period}`);
+  },
+
+  // Dashboard - Get game utilization
+  getGameUtilization: async () => {
+    return await makeRequest('/api/owner/dashboard/game-utilization');
+  },
+
+  // Dashboard - Get revenue data
+  getRevenue: async (period = 'week') => {
+    return await makeRequest(`/api/owner/dashboard/revenue?period=${period}`);
+  },
+
+  // Dashboard - Get complete summary
+  getSummary: async () => {
+    return await makeRequest('/api/owner/dashboard/summary');
+  },
+};
+
 // Wallet API
 export const walletAPI = {
   // Get wallet by customer ID

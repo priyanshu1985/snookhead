@@ -18,8 +18,8 @@ import MemberDetails from '../screens/MemberDetails';
 import Notifications from '../screens/Notifications';
 
 // Import Menu bar related screens
-import OwnerPanel from '../screens/OwnerPanel';
-import OwnerDashboard from '../screens/OwnerDashboard';
+// import OwnerPanel from '../screens/OwnerPanel';
+// import OwnerDashboard from '../screens/OwnerDashboard';
 
 import SetupMenu from '../screens/SetupMenu';
 import InventoryTracking from '../screens/InventoryTracking';
@@ -51,10 +51,9 @@ function BottomTabs() {
         tabBarActiveTintColor: '#FF8C42', // Orange color for active tab
         tabBarInactiveTintColor: '#888', // Gray for inactive tabs
         tabBarStyle: {
-          height: 75,
-          paddingBottom: 10,
-          paddingTop: 10,
-          paddingHorizontal: 8,
+          height: 65,
+          paddingBottom: 8,
+          paddingTop: 8,
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
           borderTopColor: '#E8E8E8',
@@ -63,29 +62,18 @@ function BottomTabs() {
           shadowOffset: { width: 0, height: -3 },
           shadowOpacity: 0.1,
           shadowRadius: 3,
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
         },
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: '500',
-          marginTop: 4,
-          marginBottom: 2,
-          textAlign: 'center',
+          marginTop: 2,
         },
         tabBarIconStyle: {
-          marginTop: 0,
-          marginBottom: 2,
+          marginBottom: 0,
         },
         tabBarItemStyle: {
-          paddingVertical: 8,
-          paddingHorizontal: 4,
           justifyContent: 'center',
           alignItems: 'center',
-          flex: 1,
-          minWidth: 0,
         },
       }}
     >
@@ -160,13 +148,6 @@ function BottomTabs() {
           ),
         }}
       />
-      <Tab.Screen
-        name="PaymentGateway"
-        component={PaymentGateway}
-        options={{
-          tabBarButton: () => null, // Hide from tab bar
-        }}
-      />
     </Tab.Navigator>
   );
 }
@@ -198,8 +179,8 @@ export default function AppNavigator() {
               animation: 'slide_from_left',
             }}
           />
-          <Stack.Screen name="OwnerPanel" component={OwnerPanel} />
-          <Stack.Screen name="OwnerDashboard" component={OwnerDashboard} />
+          {/* <Stack.Screen name="OwnerPanel" component={OwnerPanel} /> */}
+          {/* <Stack.Screen name="OwnerDashboard" component={OwnerDashboard} /> */}
           <Stack.Screen name="SetupMenu" component={SetupMenu} />
           <Stack.Screen
             name="InventoryTracking"
@@ -223,6 +204,7 @@ export default function AppNavigator() {
             component={TableBookingOrders}
           />
           <Stack.Screen name="AfterBooking" component={AfterBooking} />
+          <Stack.Screen name="PaymentGateway" component={PaymentGateway} />
         </Stack.Navigator>
       </NavigationContainer>
     </AuthProvider>

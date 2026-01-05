@@ -5,14 +5,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  StatusBar,
   TextInput,
   ActivityIndicator,
   Alert,
   Modal,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
@@ -101,29 +99,68 @@ export default function ActiveBillsList({
       // Filter active bills (unpaid status)
       const activeBills = billsData
         .filter(bill => bill.status !== 'paid')
-        .map(bill => ({
-          id: bill.id.toString(),
-          rawDate: bill.createdAt || bill.created_at,
-          date: formatDate(bill.createdAt || bill.created_at),
-          customerName:
-            bill.customer_name || bill.customerName || 'Walk-in Customer',
-          items: bill.items_summary || bill.itemsSummary || 'Table charges',
-          mobile: bill.customer_phone || bill.mobile || '+91 XXXXXXXXXX',
-          billNumber: bill.bill_number || bill.billNumber || `BILL-${bill.id}`,
-          amount: parseFloat(
-            bill.total_amount || bill.totalAmount || bill.amount || 0,
-          ),
-          amountDisplay: `₹${parseFloat(
-            bill.total_amount || bill.totalAmount || bill.amount || 0,
-          ).toFixed(2)}/-`,
-          status: bill.status === 'paid' ? 'Paid' : 'Unpaid',
-          detailedItems: bill.order_items || bill.orderItems || [],
-          orderAmount:
-            bill.order_amount || bill.orderAmount || bill.total_amount || 0,
-          totalAmount:
-            bill.total_amount || bill.totalAmount || bill.amount || 0,
-          originalBill: bill,
-        }))
+        .map(bill => {
+          // Get order items from various possible fields
+          const orderItems =
+            bill.order_items || bill.orderItems || bill.OrderItems || [];
+
+          // Build items summary from order items
+          let itemsSummary = bill.items_summary || bill.itemsSummary || '';
+          if (!itemsSummary && orderItems.length > 0) {
+            itemsSummary = orderItems
+              .slice(0, 3)
+              .map(item => {
+                const name =
+                  item.MenuItem?.name ||
+                  item.menu_item?.name ||
+                  item.name ||
+                  item.item_name ||
+                  'Item';
+                const qty = item.qty || item.quantity || 1;
+                return `${name} x${qty}`;
+              })
+              .join(', ');
+            if (orderItems.length > 3) {
+              itemsSummary += ` +${orderItems.length - 3} more`;
+            }
+          }
+          if (!itemsSummary) {
+            itemsSummary = 'Table charges';
+          }
+
+          return {
+            id: bill.id.toString(),
+            rawDate: bill.createdAt || bill.created_at,
+            date: formatDate(bill.createdAt || bill.created_at),
+            customerName:
+              bill.customer_name ||
+              bill.customerName ||
+              bill.user?.name ||
+              bill.User?.name ||
+              'Walk-in Customer',
+            items: itemsSummary,
+            mobile:
+              bill.customer_phone ||
+              bill.mobile ||
+              bill.user?.phone ||
+              '+91 XXXXXXXXXX',
+            billNumber:
+              bill.bill_number || bill.billNumber || `BILL-${bill.id}`,
+            amount: parseFloat(
+              bill.total_amount || bill.totalAmount || bill.amount || 0,
+            ),
+            amountDisplay: `₹${parseFloat(
+              bill.total_amount || bill.totalAmount || bill.amount || 0,
+            ).toFixed(2)}/-`,
+            status: bill.status === 'paid' ? 'Paid' : 'Unpaid',
+            detailedItems: orderItems,
+            orderAmount:
+              bill.order_amount || bill.orderAmount || bill.total_amount || 0,
+            totalAmount:
+              bill.total_amount || bill.totalAmount || bill.amount || 0,
+            originalBill: bill,
+          };
+        })
         .sort((a, b) => new Date(b.rawDate) - new Date(a.rawDate));
 
       setAllBills(activeBills);
@@ -204,13 +241,37 @@ export default function ActiveBillsList({
       <View style={styles.cardContent}>
         <View style={styles.cardLeft}>
           <Text style={styles.date}>{item.date}</Text>
-          <Text style={styles.customerName} numberOfLines={2}>
+          <Text style={styles.customerName} numberOfLines={1}>
             {item.customerName}
           </Text>
-          <Text style={styles.items} numberOfLines={1}>
-            {item.items}
-          </Text>
           <Text style={styles.mobile}>{item.mobile}</Text>
+
+          {/* Order Items */}
+          {item.detailedItems && item.detailedItems.length > 0 ? (
+            <View style={styles.orderItemsContainer}>
+              <Text style={styles.orderItemsLabel}>Order Items:</Text>
+              {item.detailedItems.slice(0, 3).map((orderItem, idx) => (
+                <Text key={idx} style={styles.orderItemText} numberOfLines={1}>
+                  •{' '}
+                  {orderItem.MenuItem?.name ||
+                    orderItem.menu_item?.name ||
+                    orderItem.name ||
+                    orderItem.item_name ||
+                    'Item'}{' '}
+                  x{orderItem.qty || orderItem.quantity || 1}
+                </Text>
+              ))}
+              {item.detailedItems.length > 3 && (
+                <Text style={styles.moreItemsText}>
+                  +{item.detailedItems.length - 3} more items
+                </Text>
+              )}
+            </View>
+          ) : (
+            <Text style={styles.items} numberOfLines={1}>
+              {item.items}
+            </Text>
+          )}
         </View>
 
         <View style={styles.cardRight}>
@@ -240,9 +301,7 @@ export default function ActiveBillsList({
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" />
-
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -301,10 +360,6 @@ export default function ActiveBillsList({
               <Icon name="close-circle" size={18} color="#CCCCCC" />
             </TouchableOpacity>
           )}
-          <View style={styles.searchDivider} />
-          <TouchableOpacity activeOpacity={0.7}>
-            <Icon name="mic-outline" size={20} color="#FF8C42" />
-          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
@@ -430,7 +485,7 @@ export default function ActiveBillsList({
           maximumDate={new Date()}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -664,13 +719,40 @@ const styles = StyleSheet.create({
   items: {
     fontSize: 13,
     color: '#666666',
-    marginBottom: 6,
+    marginTop: 6,
     lineHeight: 18,
   },
   mobile: {
     fontSize: 12,
     color: '#999999',
     fontWeight: '400',
+    marginBottom: 4,
+  },
+  orderItemsContainer: {
+    marginTop: 8,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8,
+    padding: 8,
+  },
+  orderItemsLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#666666',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  orderItemText: {
+    fontSize: 12,
+    color: '#444444',
+    marginBottom: 2,
+    lineHeight: 16,
+  },
+  moreItemsText: {
+    fontSize: 11,
+    color: '#FF8C42',
+    fontStyle: 'italic',
+    marginTop: 2,
   },
   cardRight: {
     alignItems: 'flex-end',

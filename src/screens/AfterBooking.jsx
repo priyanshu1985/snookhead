@@ -10,6 +10,7 @@ import {
   FlatList,
   Modal,
   StatusBar,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -133,8 +134,14 @@ export default function AfterBooking({ route, navigation }) {
       }
 
       const billRequest = {
-        customer_name: route.params?.customerName || sessionData?.customer_name || 'Walk-in Customer',
-        customer_phone: route.params?.customerPhone || sessionData?.customer_phone || '+91 XXXXXXXXXX',
+        customer_name:
+          route.params?.customerName ||
+          sessionData?.customer_name ||
+          'Walk-in Customer',
+        customer_phone:
+          route.params?.customerPhone ||
+          sessionData?.customer_phone ||
+          '+91 XXXXXXXXXX',
         table_id: table?.id ? parseInt(table.id) : null,
         session_id: validSessionId,
         selected_menu_items: billItems.map(item => ({
@@ -143,8 +150,14 @@ export default function AfterBooking({ route, navigation }) {
         })),
         session_duration: Math.ceil(totalDurationSeconds / 60),
         booking_time: sessionData?.start_time,
-        table_price_per_min: parseFloat(table?.pricePerMin || table?.price_per_min || 10),
-        frame_charges: timeOption === 'Select Frame' ? frameCount * parseFloat(table?.pricePerFrame || table?.price_per_frame || 100) : 0,
+        table_price_per_min: parseFloat(
+          table?.pricePerMin || table?.price_per_min || 10,
+        ),
+        frame_charges:
+          timeOption === 'Select Frame'
+            ? frameCount *
+              parseFloat(table?.pricePerFrame || table?.price_per_frame || 100)
+            : 0,
       };
 
       console.log('Silent bill generation:', billRequest);
@@ -198,7 +211,10 @@ export default function AfterBooking({ route, navigation }) {
   // Initialize with pre-selected food items from TableBookingScreen
   useEffect(() => {
     if (preSelectedFoodItems && preSelectedFoodItems.length > 0) {
-      console.log('Initializing with pre-selected food items:', preSelectedFoodItems);
+      console.log(
+        'Initializing with pre-selected food items:',
+        preSelectedFoodItems,
+      );
       const formattedItems = preSelectedFoodItems.map(item => ({
         id: item.id,
         name: item.name,
@@ -231,12 +247,15 @@ export default function AfterBooking({ route, navigation }) {
 
       console.log('Fetching existing orders for session:', sessionId);
 
-      const response = await fetch(`${API_URL}/api/orders/by-session/${sessionId}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+      const response = await fetch(
+        `${API_URL}/api/orders/by-session/${sessionId}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
         },
-      });
+      );
 
       if (response.ok) {
         const result = await response.json();
@@ -259,7 +278,9 @@ export default function AfterBooking({ route, navigation }) {
 
             // Merge quantities for items that exist in both
             const mergedItems = prevItems.map(prevItem => {
-              const matchingNew = result.consolidated_items.find(i => i.id === prevItem.id);
+              const matchingNew = result.consolidated_items.find(
+                i => i.id === prevItem.id,
+              );
               if (matchingNew) {
                 return {
                   ...prevItem,
@@ -275,7 +296,10 @@ export default function AfterBooking({ route, navigation }) {
           console.log('Added existing order items to bill');
         }
       } else {
-        console.log('No existing orders found for session or error:', response.status);
+        console.log(
+          'No existing orders found for session or error:',
+          response.status,
+        );
       }
     } catch (error) {
       console.error('Error fetching existing orders:', error);
@@ -312,7 +336,8 @@ export default function AfterBooking({ route, navigation }) {
           const pricePerFrame = parseFloat(table.pricePerFrame || 100);
           calculatedTableCharges = frameCount * pricePerFrame + frameCharge;
         } else {
-          calculatedTableCharges = bookedDurationMinutes * pricePerMin + frameCharge;
+          calculatedTableCharges =
+            bookedDurationMinutes * pricePerMin + frameCharge;
         }
 
         console.log('Calculated table charges:', calculatedTableCharges);
@@ -383,7 +408,7 @@ export default function AfterBooking({ route, navigation }) {
   };
 
   // Format countdown time display (MM:SS or HH:MM:SS)
-  const formatCountdownTime = (totalSeconds) => {
+  const formatCountdownTime = totalSeconds => {
     if (totalSeconds <= 0) return '00:00';
 
     const hours = Math.floor(totalSeconds / 3600);
@@ -463,6 +488,12 @@ export default function AfterBooking({ route, navigation }) {
     );
   };
 
+  // Helper to get full menu image URL
+  const getMenuImageUrl = imageKey => {
+    if (!imageKey) return null;
+    return `${API_URL}/static/menu-images/${encodeURIComponent(imageKey)}`;
+  };
+
   const handleUpdate = () => {
     // Navigate to update/modify session screen
     Alert.alert('Update', 'Update session functionality');
@@ -513,11 +544,19 @@ export default function AfterBooking({ route, navigation }) {
       }
 
       // For early generation, use actual time used; otherwise use total booked duration
-      const billableDuration = isEarlyGeneration ? actualTimeUsedMinutes : Math.ceil(totalDurationSeconds / 60);
+      const billableDuration = isEarlyGeneration
+        ? actualTimeUsedMinutes
+        : Math.ceil(totalDurationSeconds / 60);
 
       const billRequest = {
-        customer_name: route.params?.customerName || sessionData?.customer_name || 'Walk-in Customer',
-        customer_phone: route.params?.customerPhone || sessionData?.customer_phone || '+91 XXXXXXXXXX',
+        customer_name:
+          route.params?.customerName ||
+          sessionData?.customer_name ||
+          'Walk-in Customer',
+        customer_phone:
+          route.params?.customerPhone ||
+          sessionData?.customer_phone ||
+          '+91 XXXXXXXXXX',
         table_id: table?.id ? parseInt(table.id) : null,
         session_id: validSessionId,
         selected_menu_items: billItems.map(item => ({
@@ -526,8 +565,14 @@ export default function AfterBooking({ route, navigation }) {
         })),
         session_duration: billableDuration,
         booking_time: sessionData?.start_time,
-        table_price_per_min: parseFloat(table?.pricePerMin || table?.price_per_min || 10),
-        frame_charges: timeOption === 'Select Frame' ? frameCount * parseFloat(table?.pricePerFrame || table?.price_per_frame || 100) : 0,
+        table_price_per_min: parseFloat(
+          table?.pricePerMin || table?.price_per_min || 10,
+        ),
+        frame_charges:
+          timeOption === 'Select Frame'
+            ? frameCount *
+              parseFloat(table?.pricePerFrame || table?.price_per_frame || 100)
+            : 0,
         is_early_checkout: isEarlyGeneration,
       };
 
@@ -598,22 +643,36 @@ export default function AfterBooking({ route, navigation }) {
         </View>
 
         {/* Countdown Timer Display */}
-        <View style={[styles.timerContainer, remainingSeconds <= 60 && remainingSeconds > 0 && styles.timerContainerWarning]}>
+        <View
+          style={[
+            styles.timerContainer,
+            remainingSeconds <= 60 &&
+              remainingSeconds > 0 &&
+              styles.timerContainerWarning,
+          ]}
+        >
           <Text style={styles.timerLabel}>Time Remaining</Text>
-          <Text style={[
-            styles.timerValue,
-            remainingSeconds <= 60 && styles.timerValueWarning,
-            remainingSeconds <= 0 && styles.timerValueExpired
-          ]}>
+          <Text
+            style={[
+              styles.timerValue,
+              remainingSeconds <= 60 && styles.timerValueWarning,
+              remainingSeconds <= 0 && styles.timerValueExpired,
+            ]}
+          >
             {formatCountdownTime(remainingSeconds)}
           </Text>
           <View style={styles.timerStatus}>
             <Icon
-              name={remainingSeconds <= 0 ? "alert-circle" : "radio-button-on"}
+              name={remainingSeconds <= 0 ? 'alert-circle' : 'radio-button-on'}
               size={12}
               color={getTimerStatus().color}
             />
-            <Text style={[styles.timerStatusText, { color: getTimerStatus().color }]}>
+            <Text
+              style={[
+                styles.timerStatusText,
+                { color: getTimerStatus().color },
+              ]}
+            >
               {getTimerStatus().text}
             </Text>
           </View>
@@ -733,54 +792,104 @@ export default function AfterBooking({ route, navigation }) {
               </Text>
             </View>
           ) : (
-            getFilteredMenuItems().map((item, index) => {
-              const billItem = billItems.find(bi => bi.id === item.id);
-              return (
-                <View key={item.id || index} style={styles.foodItem}>
-                  <View style={styles.foodIcon}>
-                    <Text style={styles.foodEmoji}>
-                      {item.category === 'Beverages'
-                        ? '🥤'
-                        : item.category === 'Fast Food'
-                        ? '🍔'
-                        : '🍽️'}
-                    </Text>
-                  </View>
-                  <View style={styles.foodDetails}>
-                    <Text style={styles.foodName}>{item.name}</Text>
-                    <View style={styles.quantityContainer}>
-                      {billItem ? (
-                        <View style={styles.quantityControls}>
-                          <TouchableOpacity
-                            style={styles.quantityButton}
-                            onPress={() => handleRemoveFromBill(item.id)}
-                          >
-                            <Icon name="remove" size={16} color="#FF8C42" />
-                          </TouchableOpacity>
-                          <Text style={styles.quantityText}>
-                            {billItem.quantity}
+            <View style={styles.foodListContainer}>
+              {getFilteredMenuItems().map((item, index) => {
+                const billItem = billItems.find(bi => bi.id === item.id);
+                const imageUrl = getMenuImageUrl(item.imageUrl);
+                return (
+                  <View key={item.id || index} style={styles.foodCard}>
+                    {/* Food Image */}
+                    <View style={styles.foodImageContainer}>
+                      {imageUrl ? (
+                        <Image
+                          source={{ uri: imageUrl }}
+                          style={styles.foodImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.foodImagePlaceholder}>
+                          <Text style={styles.foodEmoji}>
+                            {item.category === 'Beverages'
+                              ? '🥤'
+                              : item.category === 'Fast Food'
+                              ? '🍔'
+                              : '🍽️'}
                           </Text>
+                        </View>
+                      )}
+                      {/* Veg/Non-veg indicator */}
+                      <View
+                        style={[
+                          styles.vegIndicator,
+                          { borderColor: '#0F8A0F' },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.vegDot,
+                            { backgroundColor: '#0F8A0F' },
+                          ]}
+                        />
+                      </View>
+                    </View>
+
+                    {/* Food Details */}
+                    <View style={styles.foodCardContent}>
+                      <View style={styles.foodCardHeader}>
+                        <Text style={styles.foodCardName} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        {item.description && (
+                          <Text
+                            style={styles.foodCardDescription}
+                            numberOfLines={2}
+                          >
+                            {item.description}
+                          </Text>
+                        )}
+                      </View>
+
+                      <View style={styles.foodCardFooter}>
+                        <Text style={styles.foodCardPrice}>
+                          ₹{item.price || 0}
+                        </Text>
+
+                        {/* Add/Quantity Controls */}
+                        {billItem ? (
+                          <View style={styles.quantityControlsCompact}>
+                            <TouchableOpacity
+                              style={styles.quantityBtnCompact}
+                              onPress={() => handleRemoveFromBill(item.id)}
+                            >
+                              <Icon name="remove" size={16} color="#FFFFFF" />
+                            </TouchableOpacity>
+                            <Text style={styles.quantityTextCompact}>
+                              {billItem.quantity}
+                            </Text>
+                            <TouchableOpacity
+                              style={styles.quantityBtnCompact}
+                              onPress={() => handleAddToBill(item)}
+                            >
+                              <Icon name="add" size={16} color="#FFFFFF" />
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
                           <TouchableOpacity
-                            style={styles.quantityButton}
+                            style={styles.addBtnCompact}
                             onPress={() => handleAddToBill(item)}
                           >
-                            <Icon name="add" size={16} color="#FF8C42" />
+                            <Text style={styles.addBtnText}>ADD</Text>
+                            <View style={styles.addBtnPlus}>
+                              <Icon name="add" size={12} color="#FF8C42" />
+                            </View>
                           </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          style={styles.addButton}
-                          onPress={() => handleAddToBill(item)}
-                        >
-                          <Text style={styles.addButtonText}>ADD</Text>
-                        </TouchableOpacity>
-                      )}
+                        )}
+                      </View>
                     </View>
                   </View>
-                  <Text style={styles.foodItemPrice}>₹{item.price || 0}</Text>
-                </View>
-              );
-            })
+                );
+              })}
+            </View>
           )}
         </View>
 
@@ -795,7 +904,8 @@ export default function AfterBooking({ route, navigation }) {
                 <Text style={styles.billSectionTitle}>Table Charges</Text>
                 <View style={styles.billItem}>
                   <Text style={styles.billItemName}>
-                    {gameType || 'Gaming'} - {table?.name} ({Math.ceil(totalDurationSeconds / 60)} min)
+                    {gameType || 'Gaming'} - {table?.name} (
+                    {Math.ceil(totalDurationSeconds / 60)} min)
                   </Text>
                   <Text style={styles.billItemPrice}>
                     ₹{tableCharges.toFixed(2)}
@@ -818,7 +928,9 @@ export default function AfterBooking({ route, navigation }) {
                         <Text style={styles.preBookingBadge}>Pre-Booked</Text>
                       )}
                       {item.fromExistingOrder && (
-                        <Text style={styles.existingOrderBadge}>Already Ordered</Text>
+                        <Text style={styles.existingOrderBadge}>
+                          Already Ordered
+                        </Text>
                       )}
                     </View>
                     <Text style={styles.billItemPrice}>
@@ -840,42 +952,26 @@ export default function AfterBooking({ route, navigation }) {
                 Total Amount: ₹{totalBill.toFixed(2)}
               </Text>
             </View>
-
-            {/* Preview Button */}
-            {totalBill > 0 && (
-              <TouchableOpacity
-                style={styles.previewButton}
-                onPress={handleShowBillPreview}
-              >
-                <Text style={styles.previewButtonText}>Preview Final Bill</Text>
-              </TouchableOpacity>
-            )}
           </View>
         )}
-
-        {/* Action Buttons */}
-        <View style={styles.buttonsContainer}>
-          <TouchableOpacity
-            style={styles.endSessionButton}
-            onPress={() => navigation.navigate('MainTabs', { screen: 'Home' })}
-          >
-            <Text style={styles.endSessionButtonText}>End Session</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.generateBillButton,
-              (totalBill <= 0 || isCalculatingBill) &&
-                styles.generateBillButtonDisabled,
-            ]}
-            onPress={totalBill > 0 ? handleGenerateBill : handleShowBillPreview}
-            disabled={isCalculatingBill}
-          >
-            <Text style={styles.generateBillButtonText}>
-              {isCalculatingBill ? 'Creating Bill...' : 'Generate & Pay Bill'}
-            </Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
+
+      {/* Fixed Bottom Button */}
+      <View style={styles.fixedBottomContainer}>
+        <TouchableOpacity
+          style={[
+            styles.generateBillButton,
+            (totalBill <= 0 || isCalculatingBill) &&
+              styles.generateBillButtonDisabled,
+          ]}
+          onPress={totalBill > 0 ? handleGenerateBill : handleShowBillPreview}
+          disabled={isCalculatingBill}
+        >
+          <Text style={styles.generateBillButtonText}>
+            {isCalculatingBill ? 'Creating Bill...' : 'Generate & Pay Bill'}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Bill Preview Modal */}
       <Modal
@@ -902,7 +998,8 @@ export default function AfterBooking({ route, navigation }) {
                   Table: {table?.name}
                 </Text>
                 <Text style={styles.billPreviewTime}>
-                  Booked Duration: {Math.ceil(totalDurationSeconds / 60)} minutes
+                  Booked Duration: {Math.ceil(totalDurationSeconds / 60)}{' '}
+                  minutes
                 </Text>
                 <Text style={styles.billPreviewTime}>
                   Time Remaining: {formatCountdownTime(remainingSeconds)}
@@ -916,7 +1013,8 @@ export default function AfterBooking({ route, navigation }) {
                   </Text>
                   <View style={styles.billPreviewItem}>
                     <Text style={styles.billPreviewItemName}>
-                      {gameType} Session ({Math.ceil(totalDurationSeconds / 60)} min)
+                      {gameType} Session ({Math.ceil(totalDurationSeconds / 60)}{' '}
+                      min)
                     </Text>
                     <Text style={styles.billPreviewItemPrice}>
                       ₹{tableCharges.toFixed(2)}
@@ -1173,90 +1271,185 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Categories - Pill Style
+  // Categories (Swiggy Style Pills)
   categoriesContainer: {
     flexDirection: 'row',
     marginBottom: 20,
+    paddingVertical: 4,
   },
   categoryButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 25,
-    backgroundColor: '#F0F0F0',
-    marginRight: 10,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   categoryButtonActive: {
-    backgroundColor: '#FF8C42',
+    backgroundColor: '#FFF5EE',
     borderColor: '#FF8C42',
   },
   categoryText: {
-    fontSize: 14,
-    color: '#666666',
-    fontWeight: '600',
+    fontSize: 13,
+    color: '#696969',
+    fontWeight: '500',
   },
   categoryTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    color: '#FF8C42',
+    fontWeight: '600',
   },
 
   // Food Items List
   foodItemsContainer: {
     marginBottom: 24,
   },
-  foodItem: {
+  // Food List Layout (Zomato/Swiggy Style)
+  foodListContainer: {
+    gap: 12,
+  },
+  foodCard: {
     flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    padding: 12,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
-    shadowRadius: 4,
+    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
-  // Food Item Styling
-  foodIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: '#FFF8F5',
+  foodImageContainer: {
+    position: 'relative',
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#F5F5F5',
+  },
+  foodImage: {
+    width: '100%',
+    height: '100%',
+  },
+  foodImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#FFF5EE',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
   },
   foodEmoji: {
-    fontSize: 26,
+    fontSize: 36,
   },
-  foodDetails: {
+  vegIndicator: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 16,
+    height: 16,
+    borderWidth: 1.5,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vegDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  foodCardContent: {
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: 'space-between',
+  },
+  foodCardHeader: {
     flex: 1,
   },
-  foodName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 6,
-  },
-  foodPrice: {
-    fontSize: 14,
-    color: '#FF8C42',
+  foodCardName: {
+    fontSize: 15,
     fontWeight: '700',
+    color: '#1C1C1C',
+    marginBottom: 4,
+    letterSpacing: 0.2,
   },
-  foodItemPrice: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1A1A1A',
+  foodCardDescription: {
+    fontSize: 12,
+    color: '#93959F',
+    lineHeight: 16,
   },
-
-  // Action Buttons Container
-  buttonsContainer: {
+  foodCardFooter: {
     flexDirection: 'row',
-    gap: 14,
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: 8,
   },
+  foodCardPrice: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1C1C1C',
+  },
+  // Compact Add Button (Swiggy Style)
+  addBtnCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FF8C42',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    position: 'relative',
+  },
+  addBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FF8C42',
+    letterSpacing: 0.5,
+  },
+  addBtnPlus: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FF8C42',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Quantity Controls (Swiggy Style)
+  quantityControlsCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF8C42',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  quantityBtnCompact: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quantityTextCompact: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    minWidth: 24,
+    textAlign: 'center',
+  },
+
+  // Update Button Styles
   updateButton: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -1272,10 +1465,9 @@ const styles = StyleSheet.create({
     color: '#FF8C42',
   },
   generateBillButton: {
-    flex: 1,
     backgroundColor: '#FF8C42',
     borderRadius: 14,
-    paddingVertical: 16,
+    paddingVertical: 18,
     alignItems: 'center',
     elevation: 3,
     shadowColor: '#FF8C42',
@@ -1292,71 +1484,137 @@ const styles = StyleSheet.create({
   // Loading & Empty States
   loadingContainer: {
     alignItems: 'center',
-    paddingVertical: 50,
+    paddingVertical: 60,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    marginVertical: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
   loadingText: {
-    marginTop: 14,
-    fontSize: 15,
+    marginTop: 16,
+    fontSize: 16,
     color: '#666666',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   emptyContainer: {
     alignItems: 'center',
-    paddingVertical: 50,
+    paddingVertical: 60,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 18,
     marginVertical: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#F5F5F5',
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 17,
     color: '#333333',
-    marginTop: 14,
-    fontWeight: '600',
+    marginTop: 16,
+    fontWeight: '700',
   },
   emptySubText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#888888',
-    marginTop: 6,
+    marginTop: 8,
+    fontWeight: '500',
   },
 
   // Quantity Controls
   quantityContainer: {
-    marginTop: 6,
+    marginTop: 10,
   },
   quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F8F9FA',
-    borderRadius: 10,
-    padding: 4,
+    borderRadius: 14,
+    padding: 6,
+    borderWidth: 1.5,
+    borderColor: '#E8E8E8',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   quantityButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E8E8E8',
+    borderWidth: 1.5,
+    borderColor: '#FF8C42',
+    elevation: 2,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
   },
   quantityText: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
     color: '#1A1A1A',
-    minWidth: 32,
+    minWidth: 40,
     textAlign: 'center',
   },
   addButton: {
     backgroundColor: '#FF8C42',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 14,
+    elevation: 3,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
   },
   addButtonText: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#FFFFFF',
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+
+  // Update Button Styles
+  updateButton: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FF8C42',
+  },
+  updateButtonText: {
+    fontSize: 15,
     fontWeight: '700',
+    color: '#FF8C42',
+  },
+  generateBillButton: {
+    backgroundColor: '#FF8C42',
+    borderRadius: 14,
+    paddingVertical: 18,
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+  },
+  generateBillButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 
   // Bill Summary Card
@@ -1447,40 +1705,21 @@ const styles = StyleSheet.create({
     color: '#333333',
     textAlign: 'right',
   },
-  previewButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 16,
-    elevation: 2,
-    shadowColor: '#4CAF50',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  previewButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-    textAlign: 'center',
+  // Fixed Bottom Container
+  fixedBottomContainer: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
 
   // Session Action Buttons
-  endSessionButton: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: 18,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FF8C42',
-    marginRight: 8,
-  },
-  endSessionButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#FF8C42',
-  },
   generateBillButtonDisabled: {
     backgroundColor: '#CCCCCC',
     elevation: 0,

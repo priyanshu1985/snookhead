@@ -9,23 +9,88 @@ export default function TableCard({ table, color, gameImageUrl, onPress, onDelet
 
   // Update timer every second for occupied tables
   React.useEffect(() => {
-    if (!isOccupied || !table.startTime) return;
+    if (!isOccupied) return;
 
     const interval = setInterval(() => {
       setCurrentTime(Date.now());
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isOccupied, table.startTime]);
+  }, [isOccupied]);
 
-  // Calculate elapsed time
-  const getElapsedTime = () => {
-    if (!table.startTime) return '0 min';
-    const elapsed = Math.floor(
-      (currentTime - new Date(table.startTime).getTime()) / (1000 * 60),
-    );
-    return `${elapsed} min`;
+  // Calculate remaining time (countdown)
+  const getRemainingTime = () => {
+    if (table.bookingEndTime) {
+      // Use booking end time for countdown
+      const endTime = new Date(table.bookingEndTime).getTime();
+      const remaining = Math.max(0, Math.floor((endTime - currentTime) / 1000));
+
+      if (remaining <= 0) {
+        return { text: 'Expired', isExpired: true, isWarning: false, seconds: 0 };
+      }
+
+      const hours = Math.floor(remaining / 3600);
+      const minutes = Math.floor((remaining % 3600) / 60);
+      const seconds = remaining % 60;
+
+      let text;
+      if (hours > 0) {
+        text = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      } else {
+        text = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      }
+
+      return {
+        text,
+        isExpired: false,
+        isWarning: remaining <= 300, // Warning when less than 5 minutes
+        seconds: remaining
+      };
+    } else if (table.durationMinutes && table.startTime) {
+      // Calculate from start time and duration
+      const startTime = new Date(table.startTime).getTime();
+      const endTime = startTime + (table.durationMinutes * 60 * 1000);
+      const remaining = Math.max(0, Math.floor((endTime - currentTime) / 1000));
+
+      if (remaining <= 0) {
+        return { text: 'Expired', isExpired: true, isWarning: false, seconds: 0 };
+      }
+
+      const hours = Math.floor(remaining / 3600);
+      const minutes = Math.floor((remaining % 3600) / 60);
+      const seconds = remaining % 60;
+
+      let text;
+      if (hours > 0) {
+        text = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      } else {
+        text = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      }
+
+      return {
+        text,
+        isExpired: false,
+        isWarning: remaining <= 300,
+        seconds: remaining
+      };
+    } else if (table.startTime) {
+      // Fallback: show elapsed time if no end time available
+      const elapsed = Math.floor((currentTime - new Date(table.startTime).getTime()) / 1000);
+      const minutes = Math.floor(elapsed / 60);
+      const seconds = elapsed % 60;
+      return {
+        text: `${minutes}:${seconds.toString().padStart(2, '0')}`,
+        isExpired: false,
+        isWarning: false,
+        isElapsed: true,
+        seconds: elapsed
+      };
+    }
+
+    return { text: '0:00', isExpired: false, isWarning: false, seconds: 0 };
   };
+
+  const timerInfo = getRemainingTime();
 
   const handlePress = () => {
     console.log('TableCard pressed:', {
@@ -76,7 +141,7 @@ export default function TableCard({ table, color, gameImageUrl, onPress, onDelet
             <Image
               source={{ uri: gameImageUrl }}
               style={styles.actualImage}
-              resizeMode="contain"
+              resizeMode="cover"
               onError={(e) => console.log('TableCard image error:', e.nativeEvent.error)}
             />
           </View>
@@ -94,17 +159,27 @@ export default function TableCard({ table, color, gameImageUrl, onPress, onDelet
           </View>
         )}
 
-        {/* Occupied overlay with timer */}
+        {/* Occupied overlay with countdown timer */}
         {isOccupied && (
-          <View style={styles.overlay}>
-            <View style={styles.overlayPulse} />
+          <View style={[
+            styles.overlay,
+            timerInfo.isExpired && styles.overlayExpired,
+            timerInfo.isWarning && styles.overlayWarning
+          ]}>
+            <View style={[
+              styles.overlayPulse,
+              timerInfo.isExpired && styles.pulseExpired,
+              timerInfo.isWarning && styles.pulseWarning
+            ]} />
             <Icon
-              name="timer-outline"
+              name={timerInfo.isExpired ? "alert-circle" : timerInfo.isElapsed ? "time-outline" : "hourglass-outline"}
               size={14}
               color="#FFFFFF"
               style={styles.overlayIcon}
             />
-            <Text style={styles.overlayText}>{getElapsedTime()}</Text>
+            <Text style={styles.overlayText}>
+              {timerInfo.isElapsed ? '+' : ''}{timerInfo.text}
+            </Text>
           </View>
         )}
 
@@ -240,11 +315,17 @@ const styles = StyleSheet.create({
     top: 8,
     left: 8,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: 'rgba(255, 140, 66, 0.95)',
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  overlayWarning: {
+    backgroundColor: 'rgba(255, 87, 34, 0.95)',
+  },
+  overlayExpired: {
+    backgroundColor: 'rgba(244, 67, 54, 0.95)',
   },
   overlayPulse: {
     position: 'absolute',
@@ -254,14 +335,21 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: '#FFFFFF',
   },
+  pulseWarning: {
+    backgroundColor: '#FFE0B2',
+  },
+  pulseExpired: {
+    backgroundColor: '#FFCDD2',
+  },
   overlayIcon: {
     marginLeft: 10,
     marginRight: 4,
   },
   overlayText: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#FFFFFF',
     fontWeight: '700',
+    letterSpacing: 0.5,
   },
 
   availableBadge: {

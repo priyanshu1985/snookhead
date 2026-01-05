@@ -48,8 +48,16 @@ export default function BillDescriptionHistory({ bill, onBack }) {
         <TouchableOpacity style={styles.headerBackButton} onPress={onBack}>
           <Icon name="chevron-back" size={24} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Bill Description</Text>
-        <View style={{ width: 40 }} />
+        <Text style={styles.headerTitle}>Bill Details</Text>
+        <View style={styles.statusBadgeCompleted}>
+          <Icon
+            name="checkmark-circle"
+            size={14}
+            color="#4CAF50"
+            style={{ marginRight: 4 }}
+          />
+          <Text style={styles.statusCompletedText}>Completed</Text>
+        </View>
       </View>
 
       <ScrollView
@@ -165,10 +173,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
+    flex: 1,
     fontSize: 18,
     fontWeight: '700',
     color: '#1A1A1A',
     letterSpacing: 0.3,
+    marginLeft: 12,
+  },
+  statusBadgeCompleted: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E8',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+  },
+  statusCompletedText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4CAF50',
   },
 
   // Content
@@ -188,9 +213,15 @@ const styles = StyleSheet.create({
   },
   billLabel: {
     fontSize: 14,
-    color: '#888888',
-    marginTop: 4,
-    fontWeight: '500',
+    fontWeight: '600',
+    color: '#4CAF50',
+    backgroundColor: '#E8F5E8',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 8,
+    textAlign: 'center',
+    overflow: 'hidden',
   },
 
   // Customer Info Card
@@ -287,11 +318,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginBottom: 20,
-    elevation: 3,
+    elevation: 4,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
   },
   detailRow: {
     flexDirection: 'row',

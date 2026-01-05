@@ -12,9 +12,16 @@ async function getAuthToken() {
   }
 }
 
-export default function ActiveOrders({ refreshKey }) {
+export default function ActiveOrders({ refreshKey, searchQuery = '' }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Filter orders by customer name
+  const filteredOrders = orders.filter(order =>
+    (order.personName || 'Guest')
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase()),
+  );
 
   const fetchActiveOrders = async () => {
     const token = await getAuthToken();
@@ -113,10 +120,14 @@ export default function ActiveOrders({ refreshKey }) {
     );
   }
 
-  if (!orders.length) {
+  if (!filteredOrders.length && !loading) {
     return (
       <View style={styles.activeOrdersContainer}>
-        <Text style={styles.infoText}>No active orders.</Text>
+        <Text style={styles.infoText}>
+          {searchQuery
+            ? 'No orders found matching your search.'
+            : 'No active orders.'}
+        </Text>
         <TouchableOpacity
           style={styles.refreshButton}
           onPress={fetchActiveOrders}
@@ -129,7 +140,7 @@ export default function ActiveOrders({ refreshKey }) {
 
   return (
     <View style={styles.activeOrdersContainer}>
-      {orders.map((order, index) => (
+      {filteredOrders.map((order, index) => (
         <View key={order.id} style={styles.orderRow}>
           <Text style={styles.orderIndex}>{index + 1}.</Text>
           <View style={styles.orderDetails}>

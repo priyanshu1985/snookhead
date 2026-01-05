@@ -12,6 +12,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -223,6 +224,12 @@ export default function TableBookingScreen({ route, navigation }) {
     );
   };
 
+  // Helper to get full menu image URL
+  const getMenuImageUrl = (imageKey) => {
+    if (!imageKey) return null;
+    return `${API_URL}/static/menu-images/${encodeURIComponent(imageKey)}`;
+  };
+
   // Calculate estimated cost based on selected options
   const calculateEstimatedCost = () => {
     let tableCharges = 0;
@@ -416,7 +423,7 @@ export default function TableBookingScreen({ route, navigation }) {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Table Badge */}
         <View style={styles.tableBadge}>
           <Text style={styles.tableName}>{safeTable.name}</Text>
@@ -553,7 +560,7 @@ export default function TableBookingScreen({ route, navigation }) {
           </ScrollView>
         </View>
 
-        {/* Food Items Grid */}
+        {/* Food Items Section */}
         <View style={styles.foodItemsContainer}>
           {loading ? (
             <View style={styles.loadingContainer}>
@@ -568,54 +575,85 @@ export default function TableBookingScreen({ route, navigation }) {
               </Text>
             </View>
           ) : (
-            getFilteredMenuItems().map((item, index) => {
-              const billItem = billItems.find(bi => bi.id === item.id);
-              return (
-                <View key={item.id || index} style={styles.foodItem}>
-                  <View style={styles.foodIcon}>
-                    <Text style={styles.foodEmoji}>
-                      {item.category === 'Beverages'
-                        ? '🥤'
-                        : item.category === 'Fast Food'
-                        ? '🍔'
-                        : '🍽️'}
-                    </Text>
-                  </View>
-                  <View style={styles.foodDetails}>
-                    <Text style={styles.foodName}>{item.name}</Text>
-                    <Text style={styles.foodPrice}>₹{item.price || 0}</Text>
-                  </View>
-                  <View style={styles.quantityContainer}>
-                    {billItem ? (
-                      <View style={styles.quantityControls}>
-                        <TouchableOpacity
-                          style={styles.quantityButton}
-                          onPress={() => handleRemoveFromBill(item.id)}
-                        >
-                          <Icon name="remove" size={16} color="#FF8C42" />
-                        </TouchableOpacity>
-                        <Text style={styles.quantityText}>
-                          {billItem.quantity}
-                        </Text>
-                        <TouchableOpacity
-                          style={styles.quantityButton}
-                          onPress={() => handleAddToBill(item)}
-                        >
-                          <Icon name="add" size={16} color="#FF8C42" />
-                        </TouchableOpacity>
+            <View style={styles.foodListContainer}>
+              {getFilteredMenuItems().map((item, index) => {
+                const billItem = billItems.find(bi => bi.id === item.id);
+                const imageUrl = getMenuImageUrl(item.imageUrl);
+                return (
+                  <View key={item.id || index} style={styles.foodCard}>
+                    {/* Food Image */}
+                    <View style={styles.foodImageContainer}>
+                      {imageUrl ? (
+                        <Image
+                          source={{ uri: imageUrl }}
+                          style={styles.foodImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.foodImagePlaceholder}>
+                          <Text style={styles.foodEmoji}>
+                            {item.category === 'Beverages'
+                              ? '🥤'
+                              : item.category === 'Fast Food'
+                              ? '🍔'
+                              : '🍽️'}
+                          </Text>
+                        </View>
+                      )}
+                      {/* Veg/Non-veg indicator */}
+                      <View style={[styles.vegIndicator, { borderColor: '#0F8A0F' }]}>
+                        <View style={[styles.vegDot, { backgroundColor: '#0F8A0F' }]} />
                       </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={() => handleAddToBill(item)}
-                      >
-                        <Text style={styles.addButtonText}>ADD</Text>
-                      </TouchableOpacity>
-                    )}
+                    </View>
+
+                    {/* Food Details */}
+                    <View style={styles.foodCardContent}>
+                      <View style={styles.foodCardHeader}>
+                        <Text style={styles.foodCardName} numberOfLines={1}>{item.name}</Text>
+                        {item.description && (
+                          <Text style={styles.foodCardDescription} numberOfLines={2}>
+                            {item.description}
+                          </Text>
+                        )}
+                      </View>
+
+                      <View style={styles.foodCardFooter}>
+                        <Text style={styles.foodCardPrice}>₹{item.price || 0}</Text>
+
+                        {/* Add/Quantity Controls */}
+                        {billItem ? (
+                          <View style={styles.quantityControlsCompact}>
+                            <TouchableOpacity
+                              style={styles.quantityBtnCompact}
+                              onPress={() => handleRemoveFromBill(item.id)}
+                            >
+                              <Icon name="remove" size={16} color="#FFFFFF" />
+                            </TouchableOpacity>
+                            <Text style={styles.quantityTextCompact}>{billItem.quantity}</Text>
+                            <TouchableOpacity
+                              style={styles.quantityBtnCompact}
+                              onPress={() => handleAddToBill(item)}
+                            >
+                              <Icon name="add" size={16} color="#FFFFFF" />
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.addBtnCompact}
+                            onPress={() => handleAddToBill(item)}
+                          >
+                            <Text style={styles.addBtnText}>ADD</Text>
+                            <View style={styles.addBtnPlus}>
+                              <Icon name="add" size={12} color="#FF8C42" />
+                            </View>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
                   </View>
-                </View>
-              );
-            })
+                );
+              })}
+            </View>
           )}
         </View>
 
@@ -654,8 +692,18 @@ export default function TableBookingScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
         )}
+      </ScrollView>
 
-        {/* Book Button */}
+      {/* Fixed Bottom Buttons */}
+      <View style={styles.fixedBottomContainer}>
+        <TouchableOpacity
+          style={styles.viewPricingButton}
+          onPress={handleShowPricingPreview}
+          disabled={isBooking}
+        >
+          <Icon name="pricetag-outline" size={18} color="#FF8C42" />
+          <Text style={styles.viewPricingButtonText}>View Pricing</Text>
+        </TouchableOpacity>
         <TouchableOpacity
           style={[styles.bookButton, isBooking && styles.bookButtonDisabled]}
           onPress={handleShowPricingPreview}
@@ -669,14 +717,13 @@ export default function TableBookingScreen({ route, navigation }) {
               </Text>
             </View>
           ) : (
-            <Text style={styles.bookButtonText}>View Pricing & Book Table</Text>
+            <>
+              <Icon name="calendar-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <Text style={styles.bookButtonText}>Book Table</Text>
+            </>
           )}
         </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => navigation.navigate('SignUpScreen')}>
-          <Text style={styles.newUserText}>New User? Sign Up</Text>
-        </TouchableOpacity>
-      </ScrollView>
+      </View>
 
       {/* Food Instructions Modal */}
       <Modal
@@ -873,74 +920,78 @@ export default function TableBookingScreen({ route, navigation }) {
       <Modal
         visible={showPricingPreview}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowPricingPreview(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View style={styles.pricingModalOverlay}>
           <View style={styles.pricingPreviewModal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Booking Summary & Pricing</Text>
-              <TouchableOpacity onPress={() => setShowPricingPreview(false)}>
-                <Icon name="close" size={24} color="#333" />
+            {/* Header */}
+            <View style={styles.pricingHeader}>
+              <Text style={styles.pricingHeaderTitle}>Booking Summary & Pricing</Text>
+              <TouchableOpacity
+                style={styles.pricingCloseBtn}
+                onPress={() => setShowPricingPreview(false)}
+              >
+                <Icon name="close" size={22} color="#666" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.pricingContent}>
+            {/* Content */}
+            <View style={styles.pricingContent}>
+              {/* Table Information */}
               <View style={styles.pricingSection}>
-                <Text style={styles.pricingSectionTitle}>
-                  Table Information
-                </Text>
-                <Text style={styles.pricingText}>Table: {safeTable.name}</Text>
-                <Text style={styles.pricingText}>Game: {safeGameType}</Text>
-                <Text style={styles.pricingText}>{getTimeDisplayText()}</Text>
+                <Text style={styles.pricingSectionTitle}>Table Information</Text>
+                <View style={styles.pricingRow}>
+                  <Text style={styles.pricingLabel}>Table:</Text>
+                  <Text style={styles.pricingValue}>{safeTable.name}</Text>
+                </View>
+                <View style={styles.pricingRow}>
+                  <Text style={styles.pricingLabel}>Game:</Text>
+                  <Text style={styles.pricingValue}>{safeGameType}</Text>
+                </View>
+                <View style={styles.pricingRow}>
+                  <Text style={styles.pricingLabel}>Duration:</Text>
+                  <Text style={styles.pricingValue}>
+                    {selectedTimeOption === 'Timer' ? `${timerDuration} min` :
+                     selectedTimeOption === 'Select Frame' ? `${selectedFrame} frame(s)` :
+                     selectedTime}
+                  </Text>
+                </View>
               </View>
 
+              {/* Estimated Charges */}
               <View style={styles.pricingSection}>
-                <Text style={styles.pricingSectionTitle}>
-                  Estimated Charges
-                </Text>
-
-                <View style={styles.pricingItem}>
-                  <Text style={styles.pricingItemName}>Table Charges</Text>
-                  <Text style={styles.pricingItemPrice}>
-                    ₹{estimatedCost.tableCharges.toFixed(2)}
-                  </Text>
+                <Text style={styles.pricingSectionTitle}>Estimated Charges</Text>
+                <View style={styles.pricingChargeRow}>
+                  <Text style={styles.pricingChargeName}>Table Charges</Text>
+                  <Text style={styles.pricingChargeAmount}>₹{estimatedCost.tableCharges.toFixed(2)}</Text>
                 </View>
 
                 {billItems.length > 0 && (
                   <>
-                    <Text style={styles.pricingSubTitle}>Menu Items:</Text>
+                    <Text style={styles.pricingMenuLabel}>Menu Items:</Text>
                     {billItems.map((item, index) => (
-                      <View key={index} style={styles.pricingItem}>
-                        <Text style={styles.pricingItemName}>
-                          {item.name} × {item.quantity}
-                        </Text>
-                        <Text style={styles.pricingItemPrice}>
-                          ₹{(item.quantity * item.price).toFixed(2)}
-                        </Text>
+                      <View key={index} style={styles.pricingChargeRow}>
+                        <Text style={styles.pricingChargeName}>{item.name} × {item.quantity}</Text>
+                        <Text style={styles.pricingChargeAmount}>₹{(item.quantity * item.price).toFixed(2)}</Text>
                       </View>
                     ))}
-                    <View style={styles.pricingItem}>
-                      <Text style={styles.pricingItemName}>Menu Subtotal</Text>
-                      <Text style={styles.pricingItemPrice}>
-                        ₹{estimatedCost.menuCharges.toFixed(2)}
-                      </Text>
+                    <View style={styles.pricingChargeRow}>
+                      <Text style={styles.pricingChargeName}>Menu Subtotal</Text>
+                      <Text style={styles.pricingChargeAmount}>₹{estimatedCost.menuCharges.toFixed(2)}</Text>
                     </View>
                   </>
                 )}
-
-                <View style={styles.pricingTotal}>
-                  <Text style={styles.pricingTotalText}>
-                    Estimated Total: ₹{estimatedCost.totalAmount.toFixed(2)}
-                  </Text>
-                </View>
               </View>
 
-              <Text style={styles.pricingNote}>
-                * Final amount may vary based on actual session duration
-              </Text>
-            </ScrollView>
+              {/* Total */}
+              <View style={styles.pricingTotalBox}>
+                <Text style={styles.pricingTotalLabel}>Estimated Total</Text>
+                <Text style={styles.pricingTotalAmount}>₹{estimatedCost.totalAmount.toFixed(2)}</Text>
+              </View>
+            </View>
 
+            {/* Actions */}
             <View style={styles.pricingActions}>
               <TouchableOpacity
                 style={styles.pricingCancelButton}
@@ -1001,7 +1052,7 @@ const styles = StyleSheet.create({
   // Content Area
   content: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 100,
   },
 
   // Table Badge
@@ -1139,32 +1190,38 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Categories
+  // Categories (Swiggy Style Pills)
   categoriesContainer: {
     flexDirection: 'row',
     marginBottom: 16,
+    paddingVertical: 4,
   },
   categoryButton: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#F0F0F0',
-    marginRight: 10,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   categoryButtonActive: {
-    backgroundColor: '#FF8C42',
+    backgroundColor: '#FFF5EE',
     borderColor: '#FF8C42',
   },
   categoryText: {
     fontSize: 13,
-    color: '#666666',
-    fontWeight: '600',
+    color: '#696969',
+    fontWeight: '500',
   },
   categoryTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    color: '#FF8C42',
+    fontWeight: '600',
   },
 
   // Food Items
@@ -1175,148 +1232,335 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    elevation: 2,
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 12,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    borderWidth: 1,
+    borderColor: '#F5F5F5',
   },
   foodIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     backgroundColor: '#FFF8F5',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
+    elevation: 1,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   foodEmoji: {
-    fontSize: 24,
+    fontSize: 28,
   },
   foodDetails: {
     flex: 1,
   },
   foodName: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#1A1A1A',
-    marginBottom: 4,
+    marginBottom: 6,
+    letterSpacing: 0.3,
   },
   foodPrice: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#FF8C42',
-    fontWeight: '700',
+    fontWeight: '800',
+    backgroundColor: '#FFF8F5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
   },
   quantityContainer: {},
   quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F8F9FA',
-    borderRadius: 10,
-    padding: 4,
-  },
-  quantityButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 12,
+    padding: 6,
     borderWidth: 1,
     borderColor: '#E8E8E8',
   },
+  quantityButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FF8C42',
+    elevation: 1,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
   quantityText: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
     color: '#1A1A1A',
-    minWidth: 28,
+    minWidth: 36,
     textAlign: 'center',
   },
   addButton: {
     backgroundColor: '#FF8C42',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
   addButtonText: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#FFFFFF',
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+
+  // Food List Layout (Zomato/Swiggy Style)
+  foodListContainer: {
+    gap: 12,
+  },
+  foodCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+  },
+  foodImageContainer: {
+    position: 'relative',
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#F5F5F5',
+  },
+  foodImage: {
+    width: '100%',
+    height: '100%',
+  },
+  foodImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#FFF5EE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  foodEmoji: {
+    fontSize: 36,
+  },
+  vegIndicator: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 16,
+    height: 16,
+    borderWidth: 1.5,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vegDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  foodCardContent: {
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: 'space-between',
+  },
+  foodCardHeader: {
+    flex: 1,
+  },
+  foodCardName: {
+    fontSize: 15,
     fontWeight: '700',
+    color: '#1C1C1C',
+    marginBottom: 4,
+    letterSpacing: 0.2,
+  },
+  foodCardDescription: {
+    fontSize: 12,
+    color: '#93959F',
+    lineHeight: 16,
+  },
+  foodCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  foodCardPrice: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1C1C1C',
+  },
+  // Compact Add Button (Swiggy Style)
+  addBtnCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FF8C42',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    position: 'relative',
+  },
+  addBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FF8C42',
+    letterSpacing: 0.5,
+  },
+  addBtnPlus: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FF8C42',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Quantity Controls (Swiggy Style)
+  quantityControlsCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF8C42',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  quantityBtnCompact: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quantityTextCompact: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    minWidth: 24,
+    textAlign: 'center',
   },
 
   // Loading & Empty
   loadingContainer: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 50,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#F5F5F5',
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 14,
+    marginTop: 16,
+    fontSize: 15,
     color: '#666666',
+    fontWeight: '600',
   },
   emptyContainer: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 50,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 18,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#F5F5F5',
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: 16,
     color: '#666',
-    marginTop: 12,
+    marginTop: 14,
+    fontWeight: '600',
   },
 
   // Bill Summary
   billSummaryContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
+    borderRadius: 18,
+    padding: 22,
     marginBottom: 20,
-    elevation: 2,
+    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
   billSummaryTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
     color: '#1A1A1A',
-    marginBottom: 14,
+    marginBottom: 16,
     textAlign: 'center',
+    letterSpacing: 0.3,
   },
   billItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F5',
+    borderBottomColor: '#F8F8F8',
   },
   billItemName: {
-    fontSize: 13,
-    color: '#666666',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333333',
+    flex: 1,
   },
   billItemPrice: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#FF8C42',
   },
   billTotal: {
-    backgroundColor: '#FFF8F5',
-    borderRadius: 10,
-    padding: 14,
     marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#FFE0CC',
+    paddingTop: 12,
+    borderTopWidth: 2,
+    borderTopColor: '#FF8C42',
   },
   billTotalText: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#FF8C42',
+    fontWeight: '800',
+    color: '#1A1A1A',
     textAlign: 'center',
   },
 
@@ -1348,14 +1592,51 @@ const styles = StyleSheet.create({
     right: 12,
   },
 
-  // Book Button
-  bookButton: {
-    backgroundColor: '#FF8C42',
-    paddingVertical: 16,
-    borderRadius: 14,
+  // Fixed Bottom Container
+  fixedBottomContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    gap: 12,
+  },
+  viewPricingButton: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 14,
-    marginTop: 10,
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#FF8C42',
+    gap: 6,
+  },
+  viewPricingButtonText: {
+    color: '#FF8C42',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  bookButton: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#FF8C42',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
     elevation: 4,
     shadowColor: '#FF8C42',
     shadowOffset: { width: 0, height: 4 },
@@ -1373,14 +1654,8 @@ const styles = StyleSheet.create({
   },
   bookButtonText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-  },
-  newUserText: {
-    color: '#999999',
-    fontSize: 13,
-    textAlign: 'center',
-    fontWeight: '500',
   },
 
   // Modal Overlay
@@ -1563,131 +1838,155 @@ const styles = StyleSheet.create({
   },
 
   // Pricing Preview Modal
+  pricingModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
   pricingPreviewModal: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '85%',
+    borderRadius: 16,
     width: '100%',
+    maxWidth: 400,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
   },
-  pricingContent: {
-    padding: 24,
-    maxHeight: 400,
-  },
-  pricingSection: {
-    marginBottom: 24,
-    backgroundColor: '#FAFAFA',
-    borderRadius: 12,
-    padding: 16,
-  },
-  pricingSectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginBottom: 16,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  pricingText: {
-    fontSize: 14,
-    color: '#666666',
-    marginBottom: 6,
-    lineHeight: 20,
-  },
-  pricingSubTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333333',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  pricingItem: {
+  pricingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  pricingItemName: {
+  pricingHeaderTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  pricingCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pricingContent: {
+    padding: 20,
+  },
+  pricingSection: {
+    marginBottom: 16,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 10,
+    padding: 14,
+  },
+  pricingSectionTitle: {
     fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8E8E8',
+  },
+  pricingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  pricingLabel: {
+    fontSize: 13,
+    color: '#888888',
+  },
+  pricingValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333333',
+  },
+  pricingChargeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  pricingChargeName: {
+    fontSize: 13,
     color: '#555555',
     flex: 1,
   },
-  pricingItemPrice: {
-    fontSize: 15,
+  pricingChargeAmount: {
+    fontSize: 14,
     fontWeight: '600',
     color: '#1A1A1A',
   },
-  pricingTotal: {
+  pricingMenuLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666666',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  pricingTotalBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: '#FFF3E0',
-    borderRadius: 12,
-    padding: 20,
-    marginTop: 16,
+    borderRadius: 10,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#FFE0B2',
-    alignItems: 'center',
   },
-  pricingTotalText: {
-    fontSize: 20,
+  pricingTotalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333333',
+  },
+  pricingTotalAmount: {
+    fontSize: 18,
     fontWeight: '700',
     color: '#FF8C42',
-    textAlign: 'center',
-  },
-  pricingNote: {
-    fontSize: 12,
-    color: '#999999',
-    textAlign: 'center',
-    marginTop: 16,
-    fontStyle: 'italic',
-    lineHeight: 16,
   },
   pricingActions: {
     flexDirection: 'row',
-    padding: 24,
-    paddingBottom: 32,
+    padding: 20,
+    paddingTop: 16,
+    gap: 12,
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
-    gap: 16,
-    backgroundColor: '#FAFAFA',
   },
   pricingCancelButton: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: 16,
+    borderRadius: 10,
+    paddingVertical: 14,
     alignItems: 'center',
     borderWidth: 1.5,
     borderColor: '#D0D0D0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
   pricingCancelText: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#666666',
     fontWeight: '600',
   },
   pricingConfirmButton: {
     flex: 2,
     backgroundColor: '#FF8C42',
-    borderRadius: 12,
-    paddingVertical: 16,
+    borderRadius: 10,
+    paddingVertical: 14,
     alignItems: 'center',
-    elevation: 4,
+    elevation: 2,
     shadowColor: '#FF8C42',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 4,
   },
   pricingConfirmText: {
     fontSize: 15,

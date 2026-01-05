@@ -6,23 +6,52 @@ import {
   StyleSheet,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { ownerAPI } from '../services/api';
 
 export default function OwnerPanel({ navigation }) {
   const [passcode, setPasscode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const correctPasscode = '1234'; // Change this to your desired passcode
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleVerify = () => {
-    if (passcode === correctPasscode) {
-      Alert.alert('Success', 'Passcode verified!', [
-        { text: 'OK', onPress: () => navigation.navigate('OwnerDashboard') },
-      ]);
+  const handleVerify = async () => {
+    if (passcode.length !== 4) {
+      Alert.alert('Error', 'Please enter a 4-digit passcode.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await ownerAPI.verifyPasscode(passcode);
+      if (response.success) {
+        Alert.alert('Success', 'Passcode verified!', [
+          { text: 'OK', onPress: () => navigation.navigate('OwnerDashboard') },
+        ]);
+        setPasscode('');
+      }
+    } catch (error) {
+      console.error('Passcode verification error:', error);
+
+      // Check if it's a network error
+      if (error.message === 'Network request failed') {
+        Alert.alert(
+          'Connection Error',
+          'Unable to connect to server. Please check if the backend is running and try again.',
+        );
+      } else if (
+        error.message.includes('401') ||
+        error.message.includes('Incorrect')
+      ) {
+        Alert.alert('Error', 'Incorrect passcode. Please try again.');
+      } else {
+        Alert.alert('Error', 'Something went wrong. Please try again.');
+      }
+
       setPasscode('');
-    } else {
-      Alert.alert('Error', 'Incorrect passcode. Try again.');
-      setPasscode('');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -69,12 +98,16 @@ export default function OwnerPanel({ navigation }) {
         <TouchableOpacity
           style={[
             styles.verifyButton,
-            { opacity: passcode.length === 4 ? 1 : 0.5 },
+            { opacity: passcode.length === 4 && !isLoading ? 1 : 0.5 },
           ]}
           onPress={handleVerify}
-          disabled={passcode.length !== 4}
+          disabled={passcode.length !== 4 || isLoading}
         >
-          <Text style={styles.verifyButtonText}>Verify Passcode</Text>
+          {isLoading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.verifyButtonText}>Verify Passcode</Text>
+          )}
         </TouchableOpacity>
 
         {/* Info Text */}

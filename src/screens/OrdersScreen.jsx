@@ -32,7 +32,7 @@ async function getAuthToken() {
 }
 
 // Helper to get full menu image URL
-const getMenuImageUrl = (imageKey) => {
+const getMenuImageUrl = imageKey => {
   if (!imageKey) return null;
   return `${API_URL}/static/menu-images/${encodeURIComponent(imageKey)}`;
 };
@@ -260,24 +260,6 @@ export default function OrdersScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <Header navigation={navigation} />
-      {/* Search + Date Row */}
-      <View style={styles.searchRow}>
-        <View style={styles.searchContainer}>
-          <Icon name="search" size={18} color="#999" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search food"
-            placeholderTextColor="#999"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-        <TouchableOpacity style={styles.dateButton}>
-          <Icon name="calendar-outline" size={18} color="#999" />
-          <Text style={styles.dateButtonText}>Select Date</Text>
-        </TouchableOpacity>
-      </View>
-
       {/* Tabs */}
       <View style={styles.tabsContainer}>
         <TouchableOpacity
@@ -314,6 +296,18 @@ export default function OrdersScreen({ navigation }) {
       {/* CONTENT */}
       {activeTab === 'FOOD' ? (
         <>
+          {/* Food Search */}
+          <View style={styles.searchContainer}>
+            <Icon name="search" size={18} color="#999" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search food items..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+
           {/* Categories from backend menu */}
           <View style={styles.categoriesSection}>
             <View style={styles.categoriesGrid}>
@@ -359,7 +353,9 @@ export default function OrdersScreen({ navigation }) {
                     source={{ uri: getMenuImageUrl(item.imageUrl) }}
                     style={styles.foodImage}
                     resizeMode="cover"
-                    onError={(e) => console.log('Menu image error:', e.nativeEvent.error)}
+                    onError={e =>
+                      console.log('Menu image error:', e.nativeEvent.error)
+                    }
                   />
                 ) : (
                   <View style={[styles.foodImage, styles.foodImagePlaceholder]}>
@@ -379,7 +375,23 @@ export default function OrdersScreen({ navigation }) {
           />
         </>
       ) : (
-        <ActiveOrders refreshKey={activeOrdersKey} />
+        <>
+          {/* Active Orders Search */}
+          <View style={styles.searchContainer}>
+            <Icon name="search" size={18} color="#999" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search by customer name..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+          <ActiveOrders
+            refreshKey={activeOrdersKey}
+            searchQuery={searchQuery}
+          />
+        </>
       )}
 
       {/* Confirm Modal */}
@@ -510,14 +522,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   searchContainer: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F8F9FA',
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    gap: 10,
+    margin: 16,
+    gap: 8,
     borderWidth: 1,
     borderColor: '#E8E8E8',
   },
@@ -526,22 +538,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1A1A1A',
     padding: 0,
-  },
-  dateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: '#E8E8E8',
-  },
-  dateButtonText: {
-    fontSize: 12,
-    color: '#666666',
-    fontWeight: '500',
   },
 
   // Tabs

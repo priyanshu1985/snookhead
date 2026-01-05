@@ -104,7 +104,10 @@ export default function SetupMenu({ navigation }) {
 
       try {
         // Always fetch games for the MANAGE TABLE GAMES tab to show game headers
-        if (activeTab === 'SET DASHBOARD' || activeTab === 'MANAGE TABLE GAMES') {
+        if (
+          activeTab === 'SET DASHBOARD' ||
+          activeTab === 'MANAGE TABLE GAMES'
+        ) {
           const gamesRes = await fetch(`${API_URL}/api/games`, {
             headers: {
               'Content-Type': 'application/json',
@@ -113,7 +116,11 @@ export default function SetupMenu({ navigation }) {
           });
 
           if (!gamesRes.ok) {
-            console.error('Games API error:', gamesRes.status, gamesRes.statusText);
+            console.error(
+              'Games API error:',
+              gamesRes.status,
+              gamesRes.statusText,
+            );
             const errorText = await gamesRes.text();
             console.error('Error response:', errorText);
           } else {
@@ -136,7 +143,11 @@ export default function SetupMenu({ navigation }) {
           });
 
           if (!tablesRes.ok) {
-            console.error('Tables API error:', tablesRes.status, tablesRes.statusText);
+            console.error(
+              'Tables API error:',
+              tablesRes.status,
+              tablesRes.statusText,
+            );
             const errorText = await tablesRes.text();
             console.error('Error response:', errorText);
           } else {
@@ -160,7 +171,11 @@ export default function SetupMenu({ navigation }) {
           });
 
           if (!menuRes.ok) {
-            console.error('Menu API error:', menuRes.status, menuRes.statusText);
+            console.error(
+              'Menu API error:',
+              menuRes.status,
+              menuRes.statusText,
+            );
           } else {
             const menuResult = await menuRes.json();
             console.log('Menu API response:', menuResult);
@@ -279,7 +294,7 @@ export default function SetupMenu({ navigation }) {
   }
 
   // Handle edit game
-  const handleEditGame = (game) => {
+  const handleEditGame = game => {
     setEditGameForm({
       game_id: game.game_id || game.id,
       name: game.game_name || game.gamename || '',
@@ -289,7 +304,7 @@ export default function SetupMenu({ navigation }) {
   };
 
   // Handle delete game confirmation
-  const handleDeleteGame = (game) => {
+  const handleDeleteGame = game => {
     setGameToDelete(game);
     setDeleteConfirmModal(true);
   };
@@ -316,7 +331,7 @@ export default function SetupMenu({ navigation }) {
     const success = await updateGameAPI(
       editGameForm.game_id,
       editGameForm.name.trim(),
-      editGameForm.image_key
+      editGameForm.image_key,
     );
     if (success) {
       setEditGameModal(false);
@@ -395,13 +410,13 @@ export default function SetupMenu({ navigation }) {
   }
 
   // Helper to get full image URL
-  const getGameImageUrl = (imageKey) => {
+  const getGameImageUrl = imageKey => {
     if (!imageKey) return null;
     return `${API_URL}/static/game-images/${encodeURIComponent(imageKey)}`;
   };
 
   // Helper to get full menu image URL
-  const getMenuImageUrl = (imageKey) => {
+  const getMenuImageUrl = imageKey => {
     if (!imageKey) return null;
     return `${API_URL}/static/menu-images/${encodeURIComponent(imageKey)}`;
   };
@@ -441,7 +456,9 @@ export default function SetupMenu({ navigation }) {
 
               <ImageSelector
                 selectedImage={gameForm.image_key}
-                onSelectImage={(imageKey) => setGameForm(f => ({ ...f, image_key: imageKey }))}
+                onSelectImage={imageKey =>
+                  setGameForm(f => ({ ...f, image_key: imageKey }))
+                }
               />
 
               <View style={styles.formBtnRow}>
@@ -457,7 +474,8 @@ export default function SetupMenu({ navigation }) {
                 <TouchableOpacity
                   style={[
                     styles.continueBtn,
-                    (!gameForm.name.trim() || !gameForm.image_key) && styles.continueBtnDisabled,
+                    (!gameForm.name.trim() || !gameForm.image_key) &&
+                      styles.continueBtnDisabled,
                   ]}
                   disabled={!gameForm.name.trim() || !gameForm.image_key}
                   onPress={async () => {
@@ -466,7 +484,10 @@ export default function SetupMenu({ navigation }) {
                       return;
                     }
                     if (!gameForm.image_key) {
-                      Alert.alert('Error', 'Please select an image for the game');
+                      Alert.alert(
+                        'Error',
+                        'Please select an image for the game',
+                      );
                       return;
                     }
                     const success = await addGameAPI(gameForm);
@@ -573,12 +594,25 @@ export default function SetupMenu({ navigation }) {
               value={tableForm.frameCharge}
               onChangeText={v => setTableForm(f => ({ ...f, frameCharge: v }))}
             />
-            <TextInput
-              style={styles.input}
-              placeholder="Game ID"
-              value={selectedGameId ? String(selectedGameId) : ''}
-              editable={false}
-            />
+            <View style={styles.immutableFieldContainer}>
+              <Text style={styles.immutableLabel}>Game ID (Auto-assigned)</Text>
+              <TextInput
+                style={[styles.input, styles.immutableInput]}
+                placeholder="Game ID (Read-only)"
+                value={
+                  selectedGameId
+                    ? String(selectedGameId)
+                    : 'Select a game first'
+                }
+                editable={false}
+              />
+              <Icon
+                name="lock-closed-outline"
+                size={16}
+                color="#999"
+                style={styles.lockIcon}
+              />
+            </View>
             <View style={styles.formBtnRow}>
               <TouchableOpacity
                 style={styles.backBtn}
@@ -661,7 +695,15 @@ export default function SetupMenu({ navigation }) {
                   style={styles.modalCloseBtn}
                   onPress={() => {
                     setAddMenuModal(false);
-                    setMenuForm(f => ({ ...f, name: '', category: '', description: '', price: '', supplier: '', image_key: '' }));
+                    setMenuForm(f => ({
+                      ...f,
+                      name: '',
+                      category: '',
+                      description: '',
+                      price: '',
+                      supplier: '',
+                      image_key: '',
+                    }));
                   }}
                 >
                   <Icon name="close" size={22} color="#666" />
@@ -717,7 +759,9 @@ export default function SetupMenu({ navigation }) {
 
               <ImageSelector
                 selectedImage={menuForm.image_key}
-                onSelectImage={(imageKey) => setMenuForm(f => ({ ...f, image_key: imageKey }))}
+                onSelectImage={imageKey =>
+                  setMenuForm(f => ({ ...f, image_key: imageKey }))
+                }
                 imageType="menu"
               />
 
@@ -726,7 +770,15 @@ export default function SetupMenu({ navigation }) {
                   style={styles.backBtn}
                   onPress={() => {
                     setAddMenuModal(false);
-                    setMenuForm(f => ({ ...f, name: '', category: '', description: '', price: '', supplier: '', image_key: '' }));
+                    setMenuForm(f => ({
+                      ...f,
+                      name: '',
+                      category: '',
+                      description: '',
+                      price: '',
+                      supplier: '',
+                      image_key: '',
+                    }));
                   }}
                 >
                   <Text style={styles.backBtnText}>Cancel</Text>
@@ -734,12 +786,26 @@ export default function SetupMenu({ navigation }) {
                 <TouchableOpacity
                   style={[
                     styles.continueBtn,
-                    (!menuForm.name.trim() || !menuForm.category.trim() || !menuForm.price.trim()) && styles.continueBtnDisabled,
+                    (!menuForm.name.trim() ||
+                      !menuForm.category.trim() ||
+                      !menuForm.price.trim()) &&
+                      styles.continueBtnDisabled,
                   ]}
-                  disabled={!menuForm.name.trim() || !menuForm.category.trim() || !menuForm.price.trim()}
+                  disabled={
+                    !menuForm.name.trim() ||
+                    !menuForm.category.trim() ||
+                    !menuForm.price.trim()
+                  }
                   onPress={async () => {
-                    if (!menuForm.name.trim() || !menuForm.category.trim() || !menuForm.price.trim()) {
-                      Alert.alert('Error', 'Please fill in all required fields');
+                    if (
+                      !menuForm.name.trim() ||
+                      !menuForm.category.trim() ||
+                      !menuForm.price.trim()
+                    ) {
+                      Alert.alert(
+                        'Error',
+                        'Please fill in all required fields',
+                      );
                       return;
                     }
                     try {
@@ -747,7 +813,10 @@ export default function SetupMenu({ navigation }) {
                       setAddMenuModal(false);
                       setAddMenuConfirm(true);
                     } catch (err) {
-                      Alert.alert('Error', err.message || 'Failed to add menu item');
+                      Alert.alert(
+                        'Error',
+                        err.message || 'Failed to add menu item',
+                      );
                     }
                   }}
                 >
@@ -781,7 +850,15 @@ export default function SetupMenu({ navigation }) {
               onPress={() => {
                 setAddMenuConfirm(false);
                 setMenuSuccess(true);
-                setMenuForm(f => ({ ...f, name: '', category: '', description: '', price: '', supplier: '', image_key: '' }));
+                setMenuForm(f => ({
+                  ...f,
+                  name: '',
+                  category: '',
+                  description: '',
+                  price: '',
+                  supplier: '',
+                  image_key: '',
+                }));
               }}
             >
               <Text style={styles.confirmBtnText}>Confirm</Text>
@@ -795,13 +872,14 @@ export default function SetupMenu({ navigation }) {
             <View style={styles.successIconContainer}>
               <Icon name="checkmark-circle" size={60} color="#4CAF50" />
             </View>
-            <Text style={styles.successText}>Menu item successfully added!</Text>
+            <Text style={styles.successText}>
+              Menu item successfully added!
+            </Text>
             <TouchableOpacity
               style={styles.closeSuccessBtn}
               onPress={() => setMenuSuccess(false)}
             >
-              <Text style={styles.closeSuccessBtnText}>Close
-              </Text>
+              <Text style={styles.closeSuccessBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -821,77 +899,79 @@ export default function SetupMenu({ navigation }) {
     );
   } else if (activeTab === 'SET DASHBOARD') {
     Content = (
-      <ScrollView
-        style={styles.dashboardScrollView}
-        contentContainerStyle={styles.dashboardScrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Section Header */}
-        <View style={styles.sectionHeader}>
-          <Icon name="game-controller-outline" size={22} color="#FF8C42" />
-          <Text style={styles.sectionHeaderText}>Manage Games</Text>
-          <View style={styles.gameCountBadge}>
-            <Text style={styles.gameCountText}>{games.length}</Text>
-          </View>
-        </View>
-
-        {/* Games List */}
-        <View style={styles.dashboardSection}>
-          {Array.isArray(games) && games.length === 0 && (
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconContainer}>
-                <Icon name="game-controller-outline" size={48} color="#FF8C42" />
-              </View>
-              <Text style={styles.emptyText}>No games added yet</Text>
-              <Text style={styles.emptySubtext}>Add your first game to get started</Text>
-            </View>
-          )}
-          {Array.isArray(games) &&
-            games.map((g, i) => (
-              <View style={styles.gameCard} key={g.game_id || g.id || i}>
-                <View style={styles.gameCardLeft}>
-                  <View style={styles.gameIndexBadge}>
-                    <Text style={styles.gameIndexText}>{i + 1}</Text>
-                  </View>
-                  <View style={styles.gameCardInfo}>
-                    <Text style={styles.gameCardName}>
-                      {g.game_name || g.gamename || 'Unknown'}
-                    </Text>
-                    <Text style={styles.gameCardMeta}>
-                      Created: {g.game_createdon ? new Date(g.game_createdon).toLocaleDateString() : 'N/A'}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.gameCardActions}>
-                  <TouchableOpacity
-                    style={styles.editButton}
-                    onPress={() => handleEditGame(g)}
-                  >
-                    <Icon name="pencil-outline" size={18} color="#FF8C42" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => handleDeleteGame(g)}
-                  >
-                    <Icon name="trash-outline" size={18} color="#FF4444" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-        </View>
-
-        {/* Add Button */}
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => setAddGameModal(true)}
+      <>
+        <ScrollView
+          style={styles.dashboardScrollView}
+          contentContainerStyle={styles.dashboardScrollContent}
+          showsVerticalScrollIndicator={false}
         >
-          <Icon name="add-circle-outline" size={22} color="#FFF" style={{ marginRight: 8 }} />
-          <Text style={styles.addBtnText}>Add New Game</Text>
-        </TouchableOpacity>
+          {/* Section Header */}
+          <View style={styles.sectionHeader}>
+            <Icon name="game-controller-outline" size={22} color="#FF8C42" />
+            <Text style={styles.sectionHeaderText}>Manage Games</Text>
+            <View style={styles.gameCountBadge}>
+              <Text style={styles.gameCountText}>{games.length}</Text>
+            </View>
+          </View>
 
-        {/* Bottom Padding */}
-        <View style={{ height: 30 }} />
-      </ScrollView>
+          {/* Games List */}
+          <View style={styles.dashboardSection}>
+            {Array.isArray(games) && games.length === 0 && (
+              <View style={styles.emptyState}>
+                <View style={styles.emptyIconContainer}>
+                  <Icon
+                    name="game-controller-outline"
+                    size={48}
+                    color="#FF8C42"
+                  />
+                </View>
+                <Text style={styles.emptyText}>No games added yet</Text>
+                <Text style={styles.emptySubtext}>
+                  Add your first game to get started
+                </Text>
+              </View>
+            )}
+            {Array.isArray(games) &&
+              games.map((g, i) => (
+                <View style={styles.gameCard} key={g.game_id || g.id || i}>
+                  <View style={styles.gameCardLeft}>
+                    <View style={styles.gameIndexBadge}>
+                      <Text style={styles.gameIndexText}>{i + 1}</Text>
+                    </View>
+                    <View style={styles.gameCardInfo}>
+                      <Text style={styles.gameCardName}>
+                        {g.game_name || g.gamename || 'Unknown'}
+                      </Text>
+                      <Text style={styles.gameCardMeta}>
+                        Created:{' '}
+                        {g.game_createdon
+                          ? new Date(g.game_createdon).toLocaleDateString()
+                          : 'N/A'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.gameCardActions}>
+                    <TouchableOpacity
+                      style={styles.editButton}
+                      onPress={() => handleEditGame(g)}
+                    >
+                      <Icon name="pencil-outline" size={18} color="#FF8C42" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() => handleDeleteGame(g)}
+                    >
+                      <Icon name="trash-outline" size={18} color="#FF4444" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+          </View>
+
+          {/* Bottom Padding for Fixed Button */}
+          <View style={{ height: 80 }} />
+        </ScrollView>
+      </>
     );
   } else if (activeTab === 'MANAGE TABLE GAMES') {
     Content = (
@@ -904,7 +984,9 @@ export default function SetupMenu({ navigation }) {
             contentContainerStyle={styles.gameHeaderScroll}
           >
             {games.length === 0 && (
-              <Text style={styles.noGamesText}>No games available. Add a game in SET DASHBOARD first.</Text>
+              <Text style={styles.noGamesText}>
+                No games available. Add a game in SET DASHBOARD first.
+              </Text>
             )}
             {games.map(g => (
               <TouchableOpacity
@@ -972,7 +1054,9 @@ export default function SetupMenu({ navigation }) {
               <View style={styles.emptyTableState}>
                 <Icon name="grid-outline" size={40} color="#CCC" />
                 <Text style={styles.emptyText}>No tables for this game</Text>
-                <Text style={styles.emptySubtext}>Add tables using the button below</Text>
+                <Text style={styles.emptySubtext}>
+                  Add tables using the button below
+                </Text>
               </View>
             }
           />
@@ -1028,7 +1112,9 @@ export default function SetupMenu({ navigation }) {
                     source={{ uri: getMenuImageUrl(item.imageUrl) }}
                     style={styles.menuImage}
                     resizeMode="cover"
-                    onError={(e) => console.log('Menu image error:', e.nativeEvent.error)}
+                    onError={e =>
+                      console.log('Menu image error:', e.nativeEvent.error)
+                    }
                   />
                 </View>
               ) : (
@@ -1069,137 +1155,173 @@ export default function SetupMenu({ navigation }) {
           <View style={{ width: 26 }} />
         </View>
         <View style={styles.tabs}>
-        {['SET DASHBOARD', 'MANAGE TABLE GAMES', 'MANAGE MENU'].map(tab => (
-          <TouchableOpacity
-            key={tab}
-            style={styles.tabBtn}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Text
-              style={activeTab === tab ? styles.activeTabText : styles.tabText}
+          {['SET DASHBOARD', 'MANAGE TABLE GAMES', 'MANAGE MENU'].map(tab => (
+            <TouchableOpacity
+              key={tab}
+              style={styles.tabBtn}
+              onPress={() => setActiveTab(tab)}
             >
-              {tab.replace('MANAGE ', '')}
-            </Text>
-            {activeTab === tab && <View style={styles.tabLine} />}
-          </TouchableOpacity>
-        ))}
-      </View>
-      {Content}
-      {AddGameFlow}
-      {AddTableFlow}
-      {AddMenuFlow}
+              <Text
+                style={
+                  activeTab === tab ? styles.activeTabText : styles.tabText
+                }
+              >
+                {tab.replace('MANAGE ', '')}
+              </Text>
+              {activeTab === tab && <View style={styles.tabLine} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.contentWithFixedButton}>
+          <View style={styles.contentArea}>{Content}</View>
 
-      {/* Edit Game Modal */}
-      <Modal visible={editGameModal} transparent animationType="slide">
-        <View style={styles.modalBg}>
-          <ScrollView
-            style={styles.formCardScroll}
-            contentContainerStyle={styles.formCardScrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.formCard}>
-              <View style={styles.modalHeaderRow}>
-                <Text style={styles.modalHeaderTitle}>Edit Game</Text>
-                <TouchableOpacity
-                  style={styles.modalCloseBtn}
-                  onPress={() => {
-                    setEditGameModal(false);
-                    setEditGameForm({ game_id: null, name: '', image_key: '' });
-                  }}
-                >
-                  <Icon name="close" size={22} color="#666" />
-                </TouchableOpacity>
-              </View>
+          {/* Fixed Bottom Button for SET DASHBOARD */}
+          {activeTab === 'SET DASHBOARD' && (
+            <View style={styles.fixedBottomButtonContainer}>
+              <TouchableOpacity
+                style={styles.fixedAddBtn}
+                onPress={() => setAddGameModal(true)}
+              >
+                <Icon
+                  name="add-circle-outline"
+                  size={22}
+                  color="#FFF"
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={styles.addBtnText}>Add New Game</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+        {AddGameFlow}
+        {AddTableFlow}
+        {AddMenuFlow}
 
-              {/* Current Image Preview */}
-              {editGameForm.image_key && (
-                <View style={styles.currentImagePreview}>
-                  <Text style={styles.inputLabel}>Current Image</Text>
-                  <Image
-                    source={{ uri: getGameImageUrl(editGameForm.image_key) }}
-                    style={styles.previewImage}
-                    resizeMode="cover"
-                  />
+        {/* Edit Game Modal */}
+        <Modal visible={editGameModal} transparent animationType="slide">
+          <View style={styles.modalBg}>
+            <ScrollView
+              style={styles.formCardScroll}
+              contentContainerStyle={styles.formCardScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.formCard}>
+                <View style={styles.modalHeaderRow}>
+                  <Text style={styles.modalHeaderTitle}>Edit Game</Text>
+                  <TouchableOpacity
+                    style={styles.modalCloseBtn}
+                    onPress={() => {
+                      setEditGameModal(false);
+                      setEditGameForm({
+                        game_id: null,
+                        name: '',
+                        image_key: '',
+                      });
+                    }}
+                  >
+                    <Icon name="close" size={22} color="#666" />
+                  </TouchableOpacity>
                 </View>
-              )}
 
-              <Text style={styles.inputLabel}>Game Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter game name"
-                placeholderTextColor="#999"
-                value={editGameForm.name}
-                onChangeText={v => setEditGameForm(f => ({ ...f, name: v }))}
-              />
+                {/* Current Image Preview */}
+                {editGameForm.image_key && (
+                  <View style={styles.currentImagePreview}>
+                    <Text style={styles.inputLabel}>Current Image</Text>
+                    <Image
+                      source={{ uri: getGameImageUrl(editGameForm.image_key) }}
+                      style={styles.previewImage}
+                      resizeMode="cover"
+                    />
+                  </View>
+                )}
 
-              <ImageSelector
-                selectedImage={editGameForm.image_key}
-                onSelectImage={(imageKey) => setEditGameForm(f => ({ ...f, image_key: imageKey }))}
-              />
+                <Text style={styles.inputLabel}>Game Name</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter game name"
+                  placeholderTextColor="#999"
+                  value={editGameForm.name}
+                  onChangeText={v => setEditGameForm(f => ({ ...f, name: v }))}
+                />
 
-              <View style={styles.formBtnRow}>
+                <ImageSelector
+                  selectedImage={editGameForm.image_key}
+                  onSelectImage={imageKey =>
+                    setEditGameForm(f => ({ ...f, image_key: imageKey }))
+                  }
+                />
+
+                <View style={styles.formBtnRow}>
+                  <TouchableOpacity
+                    style={styles.backBtn}
+                    onPress={() => {
+                      setEditGameModal(false);
+                      setEditGameForm({
+                        game_id: null,
+                        name: '',
+                        image_key: '',
+                      });
+                    }}
+                  >
+                    <Text style={styles.backBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.continueBtn}
+                    onPress={saveEditedGame}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <Text style={styles.continueBtnText}>Save Changes</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </Modal>
+
+        {/* Delete Confirmation Modal */}
+        <Modal visible={deleteConfirmModal} transparent animationType="fade">
+          <View style={styles.modalBg}>
+            <View style={styles.deleteConfirmCard}>
+              <View style={styles.deleteIconContainer}>
+                <Icon name="trash-outline" size={36} color="#FF4444" />
+              </View>
+              <Text style={styles.deleteConfirmTitle}>Delete Game?</Text>
+              <Text style={styles.deleteConfirmText}>
+                Are you sure you want to delete "
+                {gameToDelete?.game_name ||
+                  gameToDelete?.gamename ||
+                  'this game'}
+                "? This action cannot be undone.
+              </Text>
+              <View style={styles.deleteConfirmActions}>
                 <TouchableOpacity
-                  style={styles.backBtn}
+                  style={styles.cancelDeleteBtn}
                   onPress={() => {
-                    setEditGameModal(false);
-                    setEditGameForm({ game_id: null, name: '', image_key: '' });
+                    setDeleteConfirmModal(false);
+                    setGameToDelete(null);
                   }}
                 >
-                  <Text style={styles.backBtnText}>Cancel</Text>
+                  <Text style={styles.cancelDeleteText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.continueBtn}
-                  onPress={saveEditedGame}
+                  style={styles.confirmDeleteBtn}
+                  onPress={confirmDeleteGame}
                   disabled={loading}
                 >
                   {loading ? (
                     <ActivityIndicator size="small" color="#FFF" />
                   ) : (
-                    <Text style={styles.continueBtnText}>Save Changes</Text>
+                    <Text style={styles.confirmDeleteText}>Delete</Text>
                   )}
                 </TouchableOpacity>
               </View>
             </View>
-          </ScrollView>
-        </View>
-      </Modal>
-
-      {/* Delete Confirmation Modal */}
-      <Modal visible={deleteConfirmModal} transparent animationType="fade">
-        <View style={styles.modalBg}>
-          <View style={styles.deleteConfirmCard}>
-            <View style={styles.deleteIconContainer}>
-              <Icon name="trash-outline" size={36} color="#FF4444" />
-            </View>
-            <Text style={styles.deleteConfirmTitle}>Delete Game?</Text>
-            <Text style={styles.deleteConfirmText}>
-              Are you sure you want to delete "{gameToDelete?.game_name || gameToDelete?.gamename || 'this game'}"? This action cannot be undone.
-            </Text>
-            <View style={styles.deleteConfirmActions}>
-              <TouchableOpacity
-                style={styles.cancelDeleteBtn}
-                onPress={() => {
-                  setDeleteConfirmModal(false);
-                  setGameToDelete(null);
-                }}
-              >
-                <Text style={styles.cancelDeleteText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmDeleteBtn}
-                onPress={confirmDeleteGame}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator size="small" color="#FFF" />
-                ) : (
-                  <Text style={styles.confirmDeleteText}>Delete</Text>
-                )}
-              </TouchableOpacity>
-            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -1766,6 +1888,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1A1A1A',
   },
+  immutableFieldContainer: {
+    position: 'relative',
+    marginVertical: 6,
+  },
+  immutableLabel: {
+    fontSize: 12,
+    color: '#666666',
+    fontWeight: '600',
+    marginBottom: 4,
+    marginLeft: 4,
+  },
+  immutableInput: {
+    backgroundColor: '#F0F0F0',
+    borderColor: '#D0D0D0',
+    color: '#666666',
+    paddingRight: 40,
+  },
+  lockIcon: {
+    position: 'absolute',
+    right: 12,
+    top: 32,
+  },
   uploadImageBox: {
     borderWidth: 2,
     borderStyle: 'dashed',
@@ -1927,5 +2071,44 @@ const styles = StyleSheet.create({
     color: '#888888',
     marginTop: 4,
     textTransform: 'capitalize',
+  },
+
+  // Fixed Bottom Button Layout
+  contentWithFixedButton: {
+    flex: 1,
+    position: 'relative',
+  },
+  contentArea: {
+    flex: 1,
+  },
+  fixedBottomButtonContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  fixedAddBtn: {
+    backgroundColor: '#FF8C42',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    elevation: 3,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
   },
 });
