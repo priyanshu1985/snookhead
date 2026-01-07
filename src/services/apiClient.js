@@ -134,6 +134,14 @@ class ApiClient {
       return response;
     } catch (error) {
       console.error('Request failed:', error);
+      
+      // Enhanced error messages for common connection issues
+      if (error.message.includes('Network request failed') || 
+          error.message.includes('fetch') || 
+          error.message.includes('NETWORK_ERROR')) {
+        throw new Error(`Cannot connect to server at ${this.baseURL}. Please ensure:\n1. Server is running on port 4000\n2. Network connection is available\n3. Correct IP address is configured`);
+      }
+      
       throw error;
     }
   }

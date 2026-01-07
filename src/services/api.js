@@ -14,18 +14,28 @@ const getAuthToken = async () => {
 // Enhanced makeRequest using the new apiClient
 const makeRequest = async (url, options = {}) => {
   try {
+    console.log(`Making API request to: ${url}`);
     const response = await apiClient.request(url, options);
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(
-        errorData.error || `HTTP error! status: ${response.status}`,
-      );
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch (parseError) {
+        console.warn('Could not parse error response:', parseError);
+      }
+      throw new Error(errorMessage);
     }
 
     return response.json();
   } catch (error) {
-    console.error('API Request failed:', error);
+    console.error(`API Request failed for ${url}:`, error);
+    
+    if (error.message.includes('fetch')) {
+      throw new Error('Cannot connect to server. Please check if the server is running on port 4000.');
+    }
+    
     throw error;
   }
 };
@@ -510,5 +520,88 @@ export const walletAPI = {
       method: 'POST',
       body: JSON.stringify({ qr_data: qrData }),
     });
+  },
+};
+
+// Inventory API
+export const inventoryAPI = {
+  // Get all inventory items with optional filters
+  getAll: async (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    const url = queryString ? `/api/inventory?${queryString}` : '/api/inventory';
+    return await makeRequest(url);
+  },
+
+  // Get single inventory item by ID
+  getById: async id => {
+    return await makeRequest(`/api/inventory/${id}`);
+  },
+
+  // Add new inventory item
+  create: async inventoryData => {
+    return await makeRequest('/api/inventory', {
+      method: 'POST',
+      body: JSON.stringify(inventoryData),
+    });
+  },
+
+  // Update inventory item
+  update: async (id, inventoryData) => {
+    return await makeRequest(`/api/inventory/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(inventoryData),
+    });
+  },
+
+  // Update item quantity (stock in/out)
+  updateQuantity: async (id, quantityChange, operation = 'add', reason = null) => {
+    return await makeRequest(`/api/inventory/${id}/quantity`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        quantity_change: quantityChange,
+        operation,
+        reason,
+      }),
+    });
+  },
+
+  // Delete (deactivate) inventory item
+  delete: async (id, permanent = false) => {
+    const url = permanent ? `/api/inventory/${id}?permanent=true` : `/api/inventory/${id}`;
+    return await makeRequest(url, {
+      method: 'DELETE',
+    });
+  },
+
+  // Get low stock alerts
+  getLowStockItems: async () => {
+    return await makeRequest('/api/inventory/alerts/low-stock');
+  },
+
+  // Bulk operations
+  bulkUpdate: async updates => {
+    return await makeRequest('/api/inventory/bulk-update', {
+      method: 'PATCH',
+      body: JSON.stringify({ updates }),
+    });
+  },
+
+  // Search inventory
+  search: async (searchTerm, filters = {}) => {
+    return await inventoryAPI.getAll({
+      search: searchTerm,
+      ...filters,
+    });
+  },
+
+  // Get inventory by category
+  getByCategory: async category => {
+    return await inventoryAPI.getAll({ category });
+  },
+
+  // Get inventory statistics
+  getStats: async () => {
+    const response = await inventoryAPI.getAll({ limit: 1 });
+    return response.summary || {};
   },
 };

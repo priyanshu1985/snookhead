@@ -23,7 +23,9 @@ import OwnerDashboard from '../screens/OwnerDashboard';
 import OwnerPasswordSetup from '../screens/OwnerPasswordSetup';
 
 import SetupMenu from '../screens/SetupMenu';
-import InventoryTracking from '../screens/InventoryTracking';
+import InventoryDashboard from '../screens/InventoryDashboard';
+import InventoryScreen from '../screens/InventoryScreen';
+import ServerStatusScreen from '../screens/ServerStatusScreen';
 import UpgradeSubscription from '../screens/UpgradeSubscription';
 import ReportBugs from '../screens/ReportBugs';
 import PrivacyPolicy from '../screens/PrivacyPolicy';
@@ -188,8 +190,16 @@ export default function AppNavigator() {
           />
           <Stack.Screen name="SetupMenu" component={SetupMenu} />
           <Stack.Screen
-            name="InventoryTracking"
-            component={InventoryTracking}
+            name="InventoryDashboard"
+            component={InventoryDashboard}
+          />
+          <Stack.Screen
+            name="Inventory"
+            component={InventoryScreen}
+          />
+          <Stack.Screen
+            name="ServerStatus"
+            component={ServerStatusScreen}
           />
           <Stack.Screen name="Member" component={Member} />
           <Stack.Screen name="MemberDetails" component={MemberDetails} />

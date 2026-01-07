@@ -33,7 +33,7 @@ export default function MenuScreen({ navigation }) {
       {
         icon: 'stats-chart-outline',
         title: 'inventory tracking',
-        route: 'InventoryTracking',
+        route: 'InventoryDashboard',
         roles: ['owner', 'admin'],
       },
       {
