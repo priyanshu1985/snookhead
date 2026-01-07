@@ -4,6 +4,7 @@ validateEnv();
 
 const express = require("express");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 const { sequelize } = require("./config/database");
 const models = require("./models");
 const { securityHeaders } = require("./middleware/security");
@@ -12,9 +13,19 @@ const { requestLogger, logStartup } = require("./middleware/logger");
 const path = require("path");
 
 const app = express();
+
+// Configure CORS to allow credentials (for httpOnly cookies)
+const corsOptions = {
+  origin: true, // Allow all origins in development
+  credentials: true, // Enable credentials (cookies)
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
 app.use(requestLogger);
 app.use(securityHeaders);
-app.use(cors());
+app.use(cors(corsOptions));
+app.use(cookieParser()); // Add cookie parser middleware
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
@@ -59,13 +70,12 @@ app.use("/api/activeTables", require("./routes/activeTables"));
 app.use("/api/queue", require("./routes/queue"));
 app.use("/api/games", require("./routes/games"));
 app.use("/api/stock-images", require("./routes/stockImages"));
-app.use("/api/debug", require("./routes/debug"));
 app.use("/api/wallets", require("./routes/wallets"));
 app.use("/api/customer", require("./routes/customer"));
 app.use("/api/bugs", require("./routes/bugs"));
 app.use("/api/admin/stations", require("./routes/adminStations"));
-// app.use("/api/owner", require("./routes/ownerPanel"));
-// app.use("/api/owner/dashboard", require("./routes/ownerDashboard"));
+app.use("/api/owner", require("./routes/ownerPanel"));
+app.use("/api/owner/dashboard", require("./routes/ownerDashboard"));
 
 // Error handler
 app.use((err, req, res, next) => {

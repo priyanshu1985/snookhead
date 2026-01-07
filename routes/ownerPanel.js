@@ -3,145 +3,255 @@ const router = express.Router();
 const bcrypt = require("bcrypt");
 const { auth, authorize } = require("../middleware/auth");
 
-// We'll get the model from the models index after it's registered
-let OwnerSettings;
-const getModel = () => {
-  if (!OwnerSettings) {
-    const models = require("../models");
-    OwnerSettings = models.OwnerSettings;
+// Get models
+let models;
+const getModels = () => {
+  if (!models) {
+    models = require("../models");
   }
-  return OwnerSettings;
+  return models;
 };
 
-// Default passcode (hashed version of '1234')
-const DEFAULT_PASSCODE = "1234";
-
-// Helper: Get or create passcode setting
-async function getPasscodeSetting() {
-  const Model = getModel();
-  let setting = await Model.findOne({
-    where: { setting_key: "owner_passcode" },
-  });
-
-  if (!setting) {
-    // Create default passcode
-    const hashedPasscode = await bcrypt.hash(DEFAULT_PASSCODE, 10);
-    setting = await Model.create({
-      setting_key: "owner_passcode",
-      setting_value: hashedPasscode,
-    });
-  }
-
-  return setting;
-}
-
-// POST /api/owner/verify-passcode - Verify owner passcode (no auth required)
-router.post("/verify-passcode", async (req, res) => {
+// POST /api/owner/check-setup-status - Check if user has set up owner panel password
+router.post("/check-setup-status", auth, async (req, res) => {
   try {
-    const { passcode } = req.body;
+    const { User } = getModels();
+    const userId = req.user.id;
 
-    if (!passcode) {
-      return res.status(400).json({ error: "Passcode is required" });
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
     }
 
-    const setting = await getPasscodeSetting();
-    const isValid = await bcrypt.compare(passcode, setting.setting_value);
-
-    if (isValid) {
-      return res.json({
-        success: true,
-        message: "Passcode verified successfully",
-      });
-    } else {
-      return res.status(401).json({
-        success: false,
-        error: "Incorrect passcode",
-      });
-    }
+    res.json({
+      success: true,
+      needsSetup: !user.owner_panel_setup,
+      message: user.owner_panel_setup
+        ? "Owner panel password is already set up"
+        : "Owner panel password needs to be set up",
+    });
   } catch (error) {
-    console.error("Error verifying passcode:", error);
-    res.status(500).json({ error: "Server error verifying passcode" });
+    console.error("Error checking setup status:", error);
+    res.status(500).json({ error: "Server error checking setup status" });
   }
 });
 
-// POST /api/owner/change-passcode - Change owner passcode
-router.post("/change-passcode", auth, async (req, res) => {
+// POST /api/owner/setup-password - Set up owner panel password for first time
+router.post("/setup-password", auth, async (req, res) => {
   try {
-    const { currentPasscode, newPasscode } = req.body;
+    const { password, confirmPassword } = req.body;
+    const userId = req.user.id;
 
-    if (!currentPasscode || !newPasscode) {
+    // Validation
+    if (!password || !confirmPassword) {
       return res.status(400).json({
-        error: "Current passcode and new passcode are required",
+        error: "Password and confirm password are required",
       });
     }
 
-    if (newPasscode.length !== 4 || !/^\d{4}$/.test(newPasscode)) {
+    if (password !== confirmPassword) {
       return res.status(400).json({
-        error: "New passcode must be exactly 4 digits",
+        error: "Passwords do not match",
       });
     }
 
-    const Model = getModel();
-    const setting = await getPasscodeSetting();
-
-    // Verify current passcode
-    const isValid = await bcrypt.compare(
-      currentPasscode,
-      setting.setting_value
-    );
-    if (!isValid) {
-      return res.status(401).json({
-        success: false,
-        error: "Current passcode is incorrect",
+    if (password.length < 4) {
+      return res.status(400).json({
+        error: "Password must be at least 4 characters long",
       });
     }
 
-    // Hash and save new passcode
-    const hashedPasscode = await bcrypt.hash(newPasscode, 10);
-    await Model.update(
+    const { User } = getModels();
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Check if user has already set up password
+    if (user.owner_panel_setup) {
+      return res.status(400).json({
+        error: "Owner panel password has already been set up",
+      });
+    }
+
+    // Hash the password and save
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await User.update(
       {
-        setting_value: hashedPasscode,
-        updated_at: new Date(),
+        owner_panel_password: hashedPassword,
+        owner_panel_setup: true,
+        updatedAt: new Date(),
       },
-      { where: { setting_key: "owner_passcode" } }
+      { where: { id: userId } }
     );
 
     res.json({
       success: true,
-      message: "Passcode changed successfully",
+      message: "Owner panel password set up successfully",
     });
   } catch (error) {
-    console.error("Error changing passcode:", error);
-    res.status(500).json({ error: "Server error changing passcode" });
+    console.error("Error setting up password:", error);
+    res.status(500).json({ error: "Server error setting up password" });
   }
 });
 
-// POST /api/owner/reset-passcode - Reset to default (admin only)
-router.post("/reset-passcode", auth, async (req, res) => {
+// POST /api/owner/verify-password - Verify owner panel password for access
+router.post("/verify-password", auth, async (req, res) => {
   try {
+    const { password } = req.body;
+    const userId = req.user.id;
+
+    if (!password) {
+      return res.status(400).json({ error: "Password is required" });
+    }
+
+    const { User } = getModels();
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Check if user has set up password
+    if (!user.owner_panel_setup || !user.owner_panel_password) {
+      return res.status(400).json({
+        error: "Owner panel password not set up. Please set up first.",
+        needsSetup: true,
+      });
+    }
+
+    // Verify password
+    const isValid = await bcrypt.compare(password, user.owner_panel_password);
+
+    if (isValid) {
+      return res.json({
+        success: true,
+        message: "Password verified successfully",
+      });
+    } else {
+      return res.status(401).json({
+        success: false,
+        error: "Incorrect password",
+      });
+    }
+  } catch (error) {
+    console.error("Error verifying password:", error);
+    res.status(500).json({ error: "Server error verifying password" });
+  }
+});
+
+// POST /api/owner/change-password - Change owner panel password
+router.post("/change-password", auth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmNewPassword } = req.body;
+    const userId = req.user.id;
+
+    // Validation
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      return res.status(400).json({
+        error:
+          "Current password, new password, and confirm password are required",
+      });
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      return res.status(400).json({
+        error: "New passwords do not match",
+      });
+    }
+
+    if (newPassword.length < 4) {
+      return res.status(400).json({
+        error: "New password must be at least 4 characters long",
+      });
+    }
+
+    const { User } = getModels();
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Check if user has set up password
+    if (!user.owner_panel_setup || !user.owner_panel_password) {
+      return res.status(400).json({
+        error: "Owner panel password not set up. Please set up first.",
+        needsSetup: true,
+      });
+    }
+
+    // Verify current password
+    const isCurrentValid = await bcrypt.compare(
+      currentPassword,
+      user.owner_panel_password
+    );
+
+    if (!isCurrentValid) {
+      return res.status(401).json({
+        error: "Current password is incorrect",
+      });
+    }
+
+    // Hash and save new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await User.update(
+      {
+        owner_panel_password: hashedPassword,
+        updatedAt: new Date(),
+      },
+      { where: { id: userId } }
+    );
+
+    res.json({
+      success: true,
+      message: "Owner panel password changed successfully",
+    });
+  } catch (error) {
+    console.error("Error changing password:", error);
+    res.status(500).json({ error: "Server error changing password" });
+  }
+});
+
+// POST /api/owner/reset-password - Reset user's owner panel password (admin only)
+router.post("/reset-password", auth, async (req, res) => {
+  try {
+    const { targetUserId } = req.body;
+
     // Check if user is admin
     if (req.user.role !== "admin") {
       return res.status(403).json({ error: "Admin access required" });
     }
 
-    const Model = getModel();
-    const hashedPasscode = await bcrypt.hash(DEFAULT_PASSCODE, 10);
+    if (!targetUserId) {
+      return res.status(400).json({ error: "Target user ID is required" });
+    }
 
-    await Model.update(
+    const { User } = getModels();
+    const targetUser = await User.findByPk(targetUserId);
+
+    if (!targetUser) {
+      return res.status(404).json({ error: "Target user not found" });
+    }
+
+    // Reset owner panel password setup
+    await User.update(
       {
-        setting_value: hashedPasscode,
-        updated_at: new Date(),
+        owner_panel_password: null,
+        owner_panel_setup: false,
+        updatedAt: new Date(),
       },
-      { where: { setting_key: "owner_passcode" } }
+      { where: { id: targetUserId } }
     );
 
     res.json({
       success: true,
-      message: "Passcode reset to default (1234)",
+      message: `Owner panel password reset for user ${targetUser.name}. They will need to set up a new password.`,
     });
   } catch (error) {
-    console.error("Error resetting passcode:", error);
-    res.status(500).json({ error: "Server error resetting passcode" });
+    console.error("Error resetting password:", error);
+    res.status(500).json({ error: "Server error resetting password" });
   }
 });
 

@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { Op, fn, col, literal } = require("sequelize");
-const { authMiddleware } = require("../middleware/auth");
+const { auth } = require("../middleware/auth");
 
 // Get models
 let models;
@@ -42,7 +42,7 @@ function getDateRange(period) {
 }
 
 // GET /api/owner/dashboard/stats - Get dashboard statistics
-router.get("/stats", authMiddleware, async (req, res) => {
+router.get("/stats", auth, async (req, res) => {
   try {
     const { period = "week" } = req.query;
     const { startDate, endDate } = getDateRange(period);
@@ -55,37 +55,37 @@ router.get("/stats", authMiddleware, async (req, res) => {
 
     // Active wallets (wallets with balance > 0)
     const activeWallets = await Wallet.count({
-      where: { balance: { [Op.gt]: 0 } }
+      where: { balance: { [Op.gt]: 0 } },
     });
 
     const prevActiveWallets = await Wallet.count({
       where: {
         balance: { [Op.gt]: 0 },
-        createdAt: { [Op.lt]: startDate }
-      }
+        createdAt: { [Op.lt]: startDate },
+      },
     });
 
     // New members in current period
     const newMembers = await Customer.count({
       where: {
-        createdAt: { [Op.between]: [startDate, endDate] }
-      }
+        createdAt: { [Op.between]: [startDate, endDate] },
+      },
     });
 
     const prevNewMembers = await Customer.count({
       where: {
-        createdAt: { [Op.between]: [prevStartDate, prevEndDate] }
-      }
+        createdAt: { [Op.between]: [prevStartDate, prevEndDate] },
+      },
     });
 
     // Inactive wallets (wallets with balance = 0)
     const inactiveWallets = await Wallet.count({
-      where: { balance: { [Op.eq]: 0 } }
+      where: { balance: { [Op.eq]: 0 } },
     });
 
     // Credit members (wallets with negative balance or customers with pending bills)
     const creditMembers = await Wallet.count({
-      where: { balance: { [Op.lt]: 0 } }
+      where: { balance: { [Op.lt]: 0 } },
     });
 
     // Calculate trends
@@ -147,7 +147,7 @@ router.get("/stats", authMiddleware, async (req, res) => {
 });
 
 // GET /api/owner/dashboard/game-utilization - Get game utilization data
-router.get("/game-utilization", authMiddleware, async (req, res) => {
+router.get("/game-utilization", auth, async (req, res) => {
   try {
     const { period = "week" } = req.query;
     const { startDate, endDate } = getDateRange(period);
@@ -165,40 +165,45 @@ router.get("/game-utilization", authMiddleware, async (req, res) => {
         const sessionCount = await ActiveTable.count({
           where: {
             game_id: game.game_id,
-            start_time: { [Op.between]: [startDate, endDate] }
-          }
+            start_time: { [Op.between]: [startDate, endDate] },
+          },
         });
 
         // Get total sessions across all games in the period
         const totalSessions = await ActiveTable.count({
           where: {
-            start_time: { [Op.between]: [startDate, endDate] }
-          }
+            start_time: { [Op.between]: [startDate, endDate] },
+          },
         });
 
         // Calculate usage percentage
-        const usage = totalSessions > 0 ? Math.round((sessionCount / totalSessions) * 100) : 0;
+        const usage =
+          totalSessions > 0
+            ? Math.round((sessionCount / totalSessions) * 100)
+            : 0;
 
         // Calculate revenue for this game (from bills related to active sessions)
         const revenueResult = await Bill.findOne({
-          attributes: [
-            [fn("SUM", col("total_amount")), "totalRevenue"]
-          ],
-          include: [{
-            model: require("../models").Order,
-            attributes: [],
-            required: true,
-            include: [{
-              model: ActiveTable,
+          attributes: [[fn("SUM", col("total_amount")), "totalRevenue"]],
+          include: [
+            {
+              model: require("../models").Order,
               attributes: [],
               required: true,
-              where: {
-                game_id: game.game_id,
-                start_time: { [Op.between]: [startDate, endDate] }
-              }
-            }]
-          }],
-          raw: true
+              include: [
+                {
+                  model: ActiveTable,
+                  attributes: [],
+                  required: true,
+                  where: {
+                    game_id: game.game_id,
+                    start_time: { [Op.between]: [startDate, endDate] },
+                  },
+                },
+              ],
+            },
+          ],
+          raw: true,
         }).catch(() => ({ totalRevenue: 0 }));
 
         const revenue = parseFloat(revenueResult?.totalRevenue || 0);
@@ -233,7 +238,14 @@ router.get("/game-utilization", authMiddleware, async (req, res) => {
     gameData.sort((a, b) => b.usage - a.usage);
 
     // Prepare chart data (top 6 games)
-    const colors = ["#42A5F5", "#66BB6A", "#AB47BC", "#EC407A", "#EF7350", "#FFA726"];
+    const colors = [
+      "#42A5F5",
+      "#66BB6A",
+      "#AB47BC",
+      "#EC407A",
+      "#EF7350",
+      "#FFA726",
+    ];
     const chartData = gameData.slice(0, 6).map((game, idx) => ({
       game: game.name,
       value: game.usage,
@@ -243,7 +255,7 @@ router.get("/game-utilization", authMiddleware, async (req, res) => {
     res.json({
       gameData,
       chartData,
-      period
+      period,
     });
   } catch (error) {
     console.error("Error fetching game utilization:", error);
@@ -252,7 +264,7 @@ router.get("/game-utilization", authMiddleware, async (req, res) => {
 });
 
 // GET /api/owner/dashboard/revenue - Get revenue analytics
-router.get("/revenue", authMiddleware, async (req, res) => {
+router.get("/revenue", auth, async (req, res) => {
   try {
     const { period = "week" } = req.query;
     const { startDate, endDate } = getDateRange(period);
@@ -262,13 +274,13 @@ router.get("/revenue", authMiddleware, async (req, res) => {
     const revenueResult = await Bill.findOne({
       attributes: [
         [fn("SUM", col("total_amount")), "totalRevenue"],
-        [fn("COUNT", col("id")), "totalBills"]
+        [fn("COUNT", col("id")), "totalBills"],
       ],
       where: {
         createdAt: { [Op.between]: [startDate, endDate] },
-        status: "paid"
+        status: "paid",
       },
-      raw: true
+      raw: true,
     });
 
     // Previous period revenue
@@ -277,14 +289,12 @@ router.get("/revenue", authMiddleware, async (req, res) => {
     const prevEndDate = startDate;
 
     const prevRevenueResult = await Bill.findOne({
-      attributes: [
-        [fn("SUM", col("total_amount")), "totalRevenue"]
-      ],
+      attributes: [[fn("SUM", col("total_amount")), "totalRevenue"]],
       where: {
         createdAt: { [Op.between]: [prevStartDate, prevEndDate] },
-        status: "paid"
+        status: "paid",
       },
-      raw: true
+      raw: true,
     });
 
     const currentRevenue = parseFloat(revenueResult?.totalRevenue || 0);
@@ -304,15 +314,15 @@ router.get("/revenue", authMiddleware, async (req, res) => {
       attributes: [
         [fn("DATE", col("createdAt")), "date"],
         [fn("SUM", col("total_amount")), "revenue"],
-        [fn("COUNT", col("id")), "count"]
+        [fn("COUNT", col("id")), "count"],
       ],
       where: {
         createdAt: { [Op.between]: [startDate, endDate] },
-        status: "paid"
+        status: "paid",
       },
       group: [fn("DATE", col("createdAt"))],
       order: [[fn("DATE", col("createdAt")), "ASC"]],
-      raw: true
+      raw: true,
     });
 
     res.json({
@@ -321,7 +331,7 @@ router.get("/revenue", authMiddleware, async (req, res) => {
       totalBills: parseInt(revenueResult?.totalBills || 0),
       revenueTrend,
       revenueBreakdown,
-      period
+      period,
     });
   } catch (error) {
     console.error("Error fetching revenue:", error);
@@ -330,17 +340,18 @@ router.get("/revenue", authMiddleware, async (req, res) => {
 });
 
 // GET /api/owner/dashboard/summary - Get complete dashboard summary
-router.get("/summary", authMiddleware, async (req, res) => {
+router.get("/summary", auth, async (req, res) => {
   try {
     const { period = "week" } = req.query;
     const { startDate, endDate } = getDateRange(period);
-    const { Wallet, Customer, Bill, ActiveTable, Game, TableAsset, Order } = getModels();
+    const { Wallet, Customer, Bill, ActiveTable, Game, TableAsset, Order } =
+      getModels();
 
     // Current date for display
     const currentDate = new Date().toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
-      day: "numeric"
+      day: "numeric",
     });
 
     // Get previous period for comparison
@@ -358,17 +369,33 @@ router.get("/summary", authMiddleware, async (req, res) => {
       totalRevenue,
       prevTotalRevenue,
       totalSessions,
-      activeTables
+      activeTables,
     ] = await Promise.all([
       Wallet.count({ where: { balance: { [Op.gt]: 0 } } }),
-      Customer.count({ where: { createdAt: { [Op.between]: [startDate, endDate] } } }),
-      Customer.count({ where: { createdAt: { [Op.between]: [prevStartDate, prevEndDate] } } }),
+      Customer.count({
+        where: { createdAt: { [Op.between]: [startDate, endDate] } },
+      }),
+      Customer.count({
+        where: { createdAt: { [Op.between]: [prevStartDate, prevEndDate] } },
+      }),
       Wallet.count({ where: { balance: { [Op.eq]: 0 } } }),
       Wallet.count({ where: { balance: { [Op.lt]: 0 } } }),
-      Bill.sum("total_amount", { where: { createdAt: { [Op.between]: [startDate, endDate] }, status: "paid" } }),
-      Bill.sum("total_amount", { where: { createdAt: { [Op.between]: [prevStartDate, prevEndDate] }, status: "paid" } }),
-      ActiveTable.count({ where: { start_time: { [Op.between]: [startDate, endDate] } } }),
-      ActiveTable.count({ where: { status: "active" } })
+      Bill.sum("total_amount", {
+        where: {
+          createdAt: { [Op.between]: [startDate, endDate] },
+          status: "paid",
+        },
+      }),
+      Bill.sum("total_amount", {
+        where: {
+          createdAt: { [Op.between]: [prevStartDate, prevEndDate] },
+          status: "paid",
+        },
+      }),
+      ActiveTable.count({
+        where: { start_time: { [Op.between]: [startDate, endDate] } },
+      }),
+      ActiveTable.count({ where: { status: "active" } }),
     ]);
 
     // Calculate trends
@@ -432,11 +459,14 @@ router.get("/summary", authMiddleware, async (req, res) => {
         const sessionCount = await ActiveTable.count({
           where: {
             game_id: game.game_id,
-            start_time: { [Op.between]: [startDate, endDate] }
-          }
+            start_time: { [Op.between]: [startDate, endDate] },
+          },
         });
 
-        const usage = totalSessions > 0 ? Math.round((sessionCount / totalSessions) * 100) : 0;
+        const usage =
+          totalSessions > 0
+            ? Math.round((sessionCount / totalSessions) * 100)
+            : 0;
 
         // Estimate revenue based on sessions (simplified)
         const avgRevenuePerSession = 500; // Default estimate
@@ -469,7 +499,14 @@ router.get("/summary", authMiddleware, async (req, res) => {
     gameData.sort((a, b) => b.usage - a.usage);
 
     // Chart data
-    const colors = ["#42A5F5", "#66BB6A", "#AB47BC", "#EC407A", "#EF7350", "#FFA726"];
+    const colors = [
+      "#42A5F5",
+      "#66BB6A",
+      "#AB47BC",
+      "#EC407A",
+      "#EF7350",
+      "#FFA726",
+    ];
     const chartData = gameData.slice(0, 6).map((game, idx) => ({
       game: game.name,
       value: game.usage || 0,
@@ -487,8 +524,8 @@ router.get("/summary", authMiddleware, async (req, res) => {
         totalRevenueFormatted: `₹${(totalRevenue || 0).toFixed(2)}`,
         revenueTrend: calculateTrend(totalRevenue || 0, prevTotalRevenue || 0),
         totalSessions,
-        activeTables
-      }
+        activeTables,
+      },
     });
   } catch (error) {
     console.error("Error fetching dashboard summary:", error);

@@ -42,8 +42,8 @@ Order.belongsTo(User, { foreignKey: "userId" });
 // =============================================
 
 // Game ↔ TableAsset (tables belong to a game)
-Game.hasMany(TableAsset, { foreignKey: "game_id" });
-TableAsset.belongsTo(Game, { foreignKey: "game_id" });
+Game.hasMany(TableAsset, { foreignKey: "game_id", sourceKey: "game_id" });
+TableAsset.belongsTo(Game, { foreignKey: "game_id", targetKey: "game_id" });
 
 // Game ↔ ActiveTable (active sessions belong to a game)
 Game.hasMany(ActiveTable, { foreignKey: "game_id" });
@@ -112,7 +112,6 @@ StationPayment.belongsTo(Station, { foreignKey: "station_id" });
 // Station ↔ StationIssue
 Station.hasMany(StationIssue, { foreignKey: "station_id" });
 StationIssue.belongsTo(Station, { foreignKey: "station_id" });
-
 
 // =============================================
 // SYNC DATABASE (optional - remove after first run)
