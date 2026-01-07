@@ -20,6 +20,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
 import ImageSelector from '../components/ImageSelector';
+import enhancedFetch from '../services/enhancedFetch';
 const { width } = Dimensions.get('window');
 
 async function getAuthToken() {
@@ -139,12 +140,7 @@ export default function SetupMenu({ navigation }) {
           activeTab === 'SET DASHBOARD' ||
           activeTab === 'MANAGE TABLE GAMES'
         ) {
-          const gamesRes = await fetch(`${API_URL}/api/games`, {
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-          });
+          const gamesRes = await enhancedFetch('/api/games');
 
           if (!gamesRes.ok) {
             console.error(
@@ -166,12 +162,7 @@ export default function SetupMenu({ navigation }) {
         }
 
         if (activeTab === 'MANAGE TABLE GAMES') {
-          const tablesRes = await fetch(`${API_URL}/api/tables`, {
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-          });
+          const tablesRes = await enhancedFetch('/api/tables');
 
           if (!tablesRes.ok) {
             console.error(
@@ -245,12 +236,8 @@ export default function SetupMenu({ navigation }) {
     setLoading(true);
     const token = await getAuthToken();
     try {
-      const response = await fetch(`${API_URL}/api/games`, {
+      const response = await enhancedFetch('/api/games', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({
           game_name: form.name,
           image_key: form.image_key || null,
@@ -306,12 +293,8 @@ export default function SetupMenu({ navigation }) {
     setLoading(true);
     const token = await getAuthToken();
     try {
-      const response = await fetch(`${API_URL}/api/games/${gameId}`, {
+      const response = await enhancedFetch(`/api/games/${gameId}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
       });
       const data = await response.json();
       if (!response.ok) {

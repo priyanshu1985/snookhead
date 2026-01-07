@@ -61,30 +61,62 @@ export default function HomeScreen({ navigation }) {
       setLoading(true);
       setError(null);
 
-      // Fetch games
-      const gamesResponse = await fetch(`${API_URL}/api/games`, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      console.log('Fetching games and tables...');
+
+      // Add timeout for each request
+      const timeout = 15000; // 15 seconds timeout
+
+      // Fetch games with timeout
+      const gamesResponse = await Promise.race([
+        fetch(`${API_URL}/api/games`, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Games request timeout')), timeout),
+        ),
+      ]);
+
+      if (!gamesResponse.ok) {
+        throw new Error(`Games API failed: ${gamesResponse.status}`);
+      }
+
       const gamesResult = await gamesResponse.json();
       const games = Array.isArray(gamesResult)
         ? gamesResult
         : gamesResult.games || gamesResult.data || [];
 
-      // Fetch tables
-      const tablesResponse = await fetch(`${API_URL}/api/tables`, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      console.log('Games fetched successfully:', games.length);
+
+      // Fetch tables with timeout
+      const tablesResponse = await Promise.race([
+        fetch(`${API_URL}/api/tables`, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Tables request timeout')),
+            timeout,
+          ),
+        ),
+      ]);
+
+      if (!tablesResponse.ok) {
+        throw new Error(`Tables API failed: ${tablesResponse.status}`);
+      }
+
       const tablesResult = await tablesResponse.json();
       console.log('Raw tables response:', tablesResult);
       const tables = Array.isArray(tablesResult)
         ? tablesResult
         : tablesResult.data || tablesResult.tables || [];
+
+      console.log('Tables fetched successfully:', tables.length);
 
       // Fetch active sessions
       let activeSessions = [];
@@ -178,7 +210,22 @@ export default function HomeScreen({ navigation }) {
       console.log('Transformed game data:', transformedGameData);
     } catch (err) {
       console.error('Error fetching games and tables:', err);
-      setError('Failed to load games and tables');
+
+      // Provide more specific error messages
+      let errorMessage = 'Failed to load games and tables';
+      if (err.message.includes('timeout')) {
+        errorMessage =
+          'Connection timeout. Please check your network and try again.';
+      } else if (err.message.includes('Network request failed')) {
+        errorMessage = 'Network error. Please check your connection.';
+      } else if (err.message.includes('Failed to fetch')) {
+        errorMessage =
+          'Unable to connect to server. Please check if the backend is running.';
+      } else if (err.message.includes('401')) {
+        errorMessage = 'Authentication failed. Please login again.';
+      }
+
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

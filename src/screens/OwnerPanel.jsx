@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,48 +12,124 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { ownerAPI } from '../services/api';
 
 export default function OwnerPanel({ navigation }) {
-  const [passcode, setPasscode] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [checkingSetup, setCheckingSetup] = useState(true);
+
+  // Check if user needs to set up password when component mounts
+  useEffect(() => {
+    checkSetupStatus();
+  }, []);
+
+  const checkSetupStatus = async () => {
+    try {
+      setCheckingSetup(true);
+      const response = await ownerAPI.checkSetupStatus();
+
+      if (response.success) {
+        if (response.needsSetup) {
+          // User needs to set up password first
+          navigation.replace('OwnerPasswordSetup');
+          return;
+        }
+        // User has already set up password, proceed with verification screen
+      }
+    } catch (error) {
+      console.error('Error checking setup status:', error);
+      // If there's an error checking, show password setup screen as fallback
+      Alert.alert('Error', 'Unable to check setup status. Please try again.', [
+        { text: 'Retry', onPress: checkSetupStatus },
+        { text: 'Go Back', onPress: () => navigation.goBack() },
+      ]);
+    } finally {
+      setCheckingSetup(false);
+    }
+  };
 
   const handleVerify = async () => {
-    if (passcode.length !== 4) {
-      Alert.alert('Error', 'Please enter a 4-digit passcode.');
+    if (password.length < 4) {
+      Alert.alert(
+        'Error',
+        'Please enter a password with at least 4 characters.',
+      );
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await ownerAPI.verifyPasscode(passcode);
+      const response = await ownerAPI.verifyPassword(password);
       if (response.success) {
-        Alert.alert('Success', 'Passcode verified!', [
+        Alert.alert('Success', 'Password verified!', [
           { text: 'OK', onPress: () => navigation.navigate('OwnerDashboard') },
         ]);
-        setPasscode('');
+        setPassword('');
       }
     } catch (error) {
-      console.error('Passcode verification error:', error);
+      console.error('Password verification error:', error);
+
+      let errorMessage = 'Something went wrong. Please try again.';
 
       // Check if it's a network error
       if (error.message === 'Network request failed') {
+        errorMessage =
+          'Unable to connect to server. Please check if the backend is running and try again.';
+      } else if (error.message.includes('not set up')) {
+        // User needs to set up password
         Alert.alert(
-          'Connection Error',
-          'Unable to connect to server. Please check if the backend is running and try again.',
+          'Setup Required',
+          'Owner panel password not set up. Please set up your password first.',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.replace('OwnerPasswordSetup'),
+            },
+          ],
         );
+        return;
       } else if (
         error.message.includes('401') ||
         error.message.includes('Incorrect')
       ) {
-        Alert.alert('Error', 'Incorrect passcode. Please try again.');
-      } else {
-        Alert.alert('Error', 'Something went wrong. Please try again.');
+        errorMessage = 'Incorrect password. Please try again.';
       }
 
-      setPasscode('');
+      Alert.alert('Error', errorMessage);
+      setPassword('');
     } finally {
       setIsLoading(false);
     }
   };
+
+  const handleForgotPassword = () => {
+    Alert.alert(
+      'Forgot Password',
+      'To reset your owner panel password, please contact your administrator or use the admin panel.',
+      [
+        { text: 'OK' },
+        {
+          text: 'Contact Admin',
+          onPress: () => {
+            // You can implement admin contact functionality here
+            Alert.alert(
+              'Info',
+              'Please contact your system administrator for password reset.',
+            );
+          },
+        },
+      ],
+    );
+  };
+
+  // Show loading screen while checking setup status
+  if (checkingSetup) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF8C42" />
+        <Text style={styles.loadingText}>Checking setup status...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -63,7 +139,11 @@ export default function OwnerPanel({ navigation }) {
           <Icon name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Owner's Panel</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity
+          onPress={() => navigation.navigate('OwnerPasswordSetup')}
+        >
+          <Icon name="settings-outline" size={24} color="#666" />
+        </TouchableOpacity>
       </View>
 
       {/* Content */}
@@ -71,19 +151,18 @@ export default function OwnerPanel({ navigation }) {
         <Icon name="lock-closed-outline" size={60} color="#FF8C42" />
         <Text style={styles.title}>Secure Access</Text>
         <Text style={styles.description}>
-          Enter your passcode to access the owner's panel
+          Enter your owner panel password to access the analytics dashboard
         </Text>
 
-        {/* Passcode Input */}
+        {/* Password Input */}
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
-            placeholder="Enter 4-digit passcode"
+            placeholder="Enter your password"
             secureTextEntry={!showPassword}
-            keyboardType="numeric"
-            value={passcode}
-            onChangeText={setPasscode}
-            maxLength={4}
+            value={password}
+            onChangeText={setPassword}
+            placeholderTextColor="#999"
           />
           <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
             <Icon
@@ -98,16 +177,24 @@ export default function OwnerPanel({ navigation }) {
         <TouchableOpacity
           style={[
             styles.verifyButton,
-            { opacity: passcode.length === 4 && !isLoading ? 1 : 0.5 },
+            { opacity: password.length >= 4 && !isLoading ? 1 : 0.5 },
           ]}
           onPress={handleVerify}
-          disabled={passcode.length !== 4 || isLoading}
+          disabled={password.length < 4 || isLoading}
         >
           {isLoading ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
-            <Text style={styles.verifyButtonText}>Verify Passcode</Text>
+            <Text style={styles.verifyButtonText}>Access Dashboard</Text>
           )}
+        </TouchableOpacity>
+
+        {/* Forgot Password */}
+        <TouchableOpacity
+          style={styles.forgotButton}
+          onPress={handleForgotPassword}
+        >
+          <Text style={styles.forgotText}>Forgot Password?</Text>
         </TouchableOpacity>
 
         {/* Info Text */}
@@ -123,6 +210,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
   },
   header: {
     flexDirection: 'row',
@@ -157,6 +255,7 @@ const styles = StyleSheet.create({
     color: '#888',
     textAlign: 'center',
     marginBottom: 32,
+    lineHeight: 20,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -168,13 +267,17 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     backgroundColor: '#fff',
     width: '100%',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   input: {
     flex: 1,
     paddingVertical: 16,
-    fontSize: 18,
-    letterSpacing: 2,
-    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#333',
   },
   verifyButton: {
     backgroundColor: '#FF8C42',
@@ -183,14 +286,28 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     width: '100%',
     alignItems: 'center',
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
   verifyButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
+  forgotButton: {
+    paddingVertical: 8,
+    marginBottom: 24,
+  },
+  forgotText: {
+    color: '#FF8C42',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   infoText: {
-    marginTop: 24,
     fontSize: 13,
     color: '#999',
     textAlign: 'center',

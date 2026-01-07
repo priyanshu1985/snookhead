@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,45 +6,155 @@ import {
   TouchableOpacity,
   FlatList,
   StatusBar,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import QueueSuccessModal from './QueueSuccessModal';
+import { API_URL } from '../config';
 
-const reservationsData = [
-  {
-    id: '1',
-    tableNumber: 'T2 S0176',
-    billNumber: 'Bill 1',
-    game: 'Snooker',
-    date: '22/08/25',
-    timings: '07:00 pm-09:00 PM',
-    status: 'Prepaid',
-    customerName: 'Amit sharma',
-    mobile: '+91 9999999999',
-    members: '08',
-    timeSpan: '2 Hour',
-    fullDate: '02/08/2025',
-  },
-  {
-    id: '2',
-    tableNumber: 'T2 S0176',
-    billNumber: 'Bill 1',
-    game: 'Snooker',
-    date: '22/08/25',
-    timings: '07:00 pm-09:00 PM',
-    status: 'Prepaid',
-    customerName: 'Rahul Verma',
-    mobile: '+91 8888888888',
-    members: '06',
-    timeSpan: '1.5 Hour',
-    fullDate: '02/08/2025',
-  },
-];
+// Helper function to get auth token
+const getAuthToken = async () => {
+  try {
+    return await AsyncStorage.getItem('authToken');
+  } catch {
+    return null;
+  }
+};
 
 export default function UpcomingReservationList({ onAddReservation, onBack }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState(null);
+  const [reservations, setReservations] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch reservations from API
+  const fetchReservations = async () => {
+    try {
+      setLoading(true);
+
+      const token = await getAuthToken();
+      if (!token) {
+        Alert.alert('Authentication Error', 'Please log in again');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/reservations`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        // Handle empty array
+        if (!Array.isArray(data)) {
+          setReservations([]);
+          return;
+        }
+
+        // Transform API data to match component structure
+        const transformedData = data.map(reservation => ({
+          id: reservation.id.toString(),
+          tableNumber:
+            reservation.TableAsset?.name || `Table ${reservation.tableId}`,
+          billNumber: `RES ${reservation.id}`,
+          game:
+            reservation.TableAsset?.Game?.game_name ||
+            reservation.TableAsset?.type ||
+            'Unknown',
+          date: new Date(reservation.fromTime).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: '2-digit',
+          }),
+          timings: `${new Date(reservation.fromTime).toLocaleTimeString(
+            'en-US',
+            {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+            },
+          )} - ${new Date(reservation.toTime).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })}`,
+          status:
+            reservation.status === 'pending' ? 'Upcoming' : reservation.status,
+          customerName: reservation.customerName || 'Walk-in',
+          mobile: reservation.customerPhone || 'Not provided',
+          members: '1', // Default for now
+          timeSpan: `${Math.round(
+            (new Date(reservation.toTime) - new Date(reservation.fromTime)) /
+              60000,
+          )} min`,
+          fullDate: new Date(reservation.fromTime).toLocaleDateString('en-GB'),
+          rawReservation: reservation, // Keep original data
+        }));
+        setReservations(transformedData);
+      } else {
+        const errorText = await response.text();
+
+        if (response.status === 401) {
+          Alert.alert(
+            'Authentication Error',
+            'Your session has expired. Please log in again.',
+          );
+        } else if (response.status === 500) {
+          // Handle database schema issues
+          if (
+            errorText.includes('column') ||
+            errorText.includes('customerName') ||
+            errorText.includes('customerPhone')
+          ) {
+            Alert.alert(
+              'Database Update Required',
+              'The reservations table needs customer fields. Please run this SQL command:\n\nALTER TABLE reservations ADD COLUMN customerName VARCHAR(100) NULL, ADD COLUMN customerPhone VARCHAR(20) NULL;',
+              [{ text: 'OK' }, { text: 'Retry', onPress: fetchReservations }],
+            );
+          } else {
+            Alert.alert(
+              'Server Error',
+              'The server is experiencing issues. Please try again later.',
+            );
+          }
+        } else {
+          Alert.alert(
+            'Error',
+            `Failed to load reservations. Status: ${response.status}`,
+          );
+        }
+      }
+    } catch (error) {
+      if (error.message.includes('Network request failed')) {
+        Alert.alert(
+          'Connection Error',
+          'Cannot connect to server. Please check if the backend is running and your network connection.',
+          [
+            { text: 'Retry', onPress: fetchReservations },
+            { text: 'Cancel', style: 'cancel' },
+          ],
+        );
+      } else {
+        Alert.alert('Error', `Network error: ${error.message}`);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchReservations();
+    }, []),
+  );
 
   const handleCardPress = item => {
     setSelectedReservation(item);
@@ -105,17 +215,34 @@ export default function UpcomingReservationList({ onAddReservation, onBack }) {
       </View>
 
       {/* Reservations List */}
-      <FlatList
-        data={reservationsData}
-        keyExtractor={item => item.id}
-        renderItem={renderReservation}
-        contentContainerStyle={styles.listContent}
-      />
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF8C42" />
+          <Text style={styles.loadingText}>Loading reservations...</Text>
+        </View>
+      ) : reservations.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Icon name="calendar-outline" size={64} color="#ccc" />
+          <Text style={styles.emptyTitle}>No Reservations</Text>
+          <Text style={styles.emptySubtitle}>
+            There are no upcoming reservations yet.
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={reservations}
+          keyExtractor={item => item.id}
+          renderItem={renderReservation}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
 
       {/* Add Reservation Button */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity style={styles.addButton} onPress={onAddReservation}>
-          <Text style={styles.addButtonText}>Add Reservation</Text>
+          <Icon name="add" size={20} color="#fff" />
+          <Text style={styles.addButtonText}>Add Manual Reservation</Text>
         </TouchableOpacity>
       </View>
 
@@ -271,6 +398,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 25,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
   addButtonText: {
     fontSize: 16,

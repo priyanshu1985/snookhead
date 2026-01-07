@@ -18,8 +18,9 @@ import MemberDetails from '../screens/MemberDetails';
 import Notifications from '../screens/Notifications';
 
 // Import Menu bar related screens
-// import OwnerPanel from '../screens/OwnerPanel';
-// import OwnerDashboard from '../screens/OwnerDashboard';
+import OwnerPanel from '../screens/OwnerPanel';
+import OwnerDashboard from '../screens/OwnerDashboard';
+import OwnerPasswordSetup from '../screens/OwnerPasswordSetup';
 
 import SetupMenu from '../screens/SetupMenu';
 import InventoryTracking from '../screens/InventoryTracking';
@@ -179,8 +180,12 @@ export default function AppNavigator() {
               animation: 'slide_from_left',
             }}
           />
-          {/* <Stack.Screen name="OwnerPanel" component={OwnerPanel} /> */}
-          {/* <Stack.Screen name="OwnerDashboard" component={OwnerDashboard} /> */}
+          <Stack.Screen name="OwnerPanel" component={OwnerPanel} />
+          <Stack.Screen name="OwnerDashboard" component={OwnerDashboard} />
+          <Stack.Screen
+            name="OwnerPasswordSetup"
+            component={OwnerPasswordSetup}
+          />
           <Stack.Screen name="SetupMenu" component={SetupMenu} />
           <Stack.Screen
             name="InventoryTracking"

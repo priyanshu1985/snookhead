@@ -8,6 +8,7 @@ import {
   StatusBar,
   Alert,
   ScrollView,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -21,6 +22,14 @@ export default function SignUpScreen({ navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [role, setRole] = useState('customer'); // Default role
+  const [showRoleModal, setShowRoleModal] = useState(false);
+
+  const roleOptions = [
+    { label: 'Customer', value: 'customer' },
+    { label: 'Owner', value: 'owner' },
+    { label: 'Staff Member', value: 'staff' },
+  ];
 
   const handleSignUp = async () => {
     if (!email || !name || !number || !password || !confirmPassword) {
@@ -40,11 +49,18 @@ export default function SignUpScreen({ navigation }) {
           name,
           phone: number,
           password,
+          role, // Include selected role
         }),
       });
       const data = await res.json();
       if (res.ok) {
-        Alert.alert('Success', 'Account created', [
+        const roleMessage =
+          role === 'customer'
+            ? 'Account created successfully!'
+            : role === 'owner'
+            ? 'Owner account created! You can now access the owner panel.'
+            : 'Staff member account created! You can now access staff features.';
+        Alert.alert('Success', roleMessage, [
           { text: 'OK', onPress: () => navigation.navigate('MainTabs') },
         ]);
       } else {
@@ -118,6 +134,24 @@ export default function SignUpScreen({ navigation }) {
           />
         </View>
 
+        <Text style={styles.label}>Account Type</Text>
+        <TouchableOpacity
+          style={styles.inputWrapper}
+          onPress={() => setShowRoleModal(true)}
+        >
+          <Icon
+            name="person-circle-outline"
+            size={18}
+            color="#999"
+            style={styles.inputIcon}
+          />
+          <Text style={styles.dropdownText}>
+            {roleOptions.find(option => option.value === role)?.label ||
+              'Select Role'}
+          </Text>
+          <Icon name="chevron-down-outline" size={18} color="#999" />
+        </TouchableOpacity>
+
         <Text style={styles.label}>Password</Text>
         <View style={styles.inputWrapper}>
           <Icon
@@ -187,6 +221,73 @@ export default function SignUpScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Role Selection Modal */}
+      <Modal
+        visible={showRoleModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowRoleModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Account Type</Text>
+              <TouchableOpacity
+                onPress={() => setShowRoleModal(false)}
+                style={styles.closeButton}
+              >
+                <Icon name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            {roleOptions.map(option => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.roleOption,
+                  role === option.value && styles.selectedRole,
+                ]}
+                onPress={() => {
+                  setRole(option.value);
+                  setShowRoleModal(false);
+                }}
+              >
+                <Icon
+                  name={
+                    option.value === 'customer'
+                      ? 'person-outline'
+                      : option.value === 'owner'
+                      ? 'business-outline'
+                      : 'people-outline'
+                  }
+                  size={20}
+                  color={role === option.value ? '#FF8C42' : '#666'}
+                />
+                <Text
+                  style={[
+                    styles.roleOptionText,
+                    role === option.value && styles.selectedRoleText,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+                {role === option.value && (
+                  <Icon name="checkmark-circle" size={20} color="#FF8C42" />
+                )}
+              </TouchableOpacity>
+            ))}
+
+            <Text style={styles.roleDescription}>
+              {role === 'customer'
+                ? 'Access games, bookings, and wallet features'
+                : role === 'owner'
+                ? 'Access owner panel, analytics, and full management'
+                : 'Access staff features and customer management'}
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -255,6 +356,81 @@ const styles = StyleSheet.create({
   eyeBtn: {
     padding: 8,
     marginLeft: 4,
+  },
+  dropdownText: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: '#1A1A1A',
+    letterSpacing: 0.2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    margin: 20,
+    padding: 20,
+    width: '80%',
+    maxWidth: 320,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  roleOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: '#E8E8E8',
+    backgroundColor: '#F8F9FA',
+  },
+  selectedRole: {
+    borderColor: ORANGE,
+    backgroundColor: '#FFF3E0',
+  },
+  roleOptionText: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 16,
+    color: '#1A1A1A',
+    fontWeight: '600',
+  },
+  selectedRoleText: {
+    color: ORANGE,
+  },
+  roleDescription: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E8E8E8',
+    lineHeight: 16,
   },
   createBtn: {
     backgroundColor: ORANGE,

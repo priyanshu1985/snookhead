@@ -45,6 +45,8 @@ const getNextDates = () => {
       id: i,
       label:
         i === 0 ? 'Today' : `${date.getDate()} ${monthNames[date.getMonth()]}`,
+      dateValue: date.toISOString().split('T')[0], // YYYY-MM-DD format
+      isToday: i === 0,
     });
   }
   return dates;
@@ -66,6 +68,13 @@ export default function TableBookingScreen({ route, navigation }) {
     tableCharges: 0,
     menuCharges: 0,
     totalAmount: 0,
+  });
+
+  // Customer details for future reservations
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [customerDetails, setCustomerDetails] = useState({
+    name: '',
+    phone: '',
   });
 
   // Menu items state (similar to AfterBooking)
@@ -225,7 +234,7 @@ export default function TableBookingScreen({ route, navigation }) {
   };
 
   // Helper to get full menu image URL
-  const getMenuImageUrl = (imageKey) => {
+  const getMenuImageUrl = imageKey => {
     if (!imageKey) return null;
     return `${API_URL}/static/menu-images/${encodeURIComponent(imageKey)}`;
   };
@@ -321,78 +330,19 @@ export default function TableBookingScreen({ route, navigation }) {
         return;
       }
 
-      // Calculate duration in minutes based on selected time option
-      let durationMinutes = null;
-      if (selectedTimeOption === 'Timer') {
-        durationMinutes = parseInt(timerDuration) || 60;
-      } else if (selectedTimeOption === 'Set Time') {
-        durationMinutes = 60;
+      // Check if this is a future booking or immediate booking
+      const selectedDateInfo = dates.find(d => d.id === selectedDate);
+      const isFutureBooking = !selectedDateInfo?.isToday;
+
+      if (isFutureBooking) {
+        // Future booking - show customer details modal first
+        setIsBooking(false);
+        setShowCustomerModal(true);
+        return;
       }
 
-      // Prepare booking data
-      const bookingData = {
-        table_id: safeTable.id,
-        game_id: safeTable.game_id || safeTable.gameid || 1,
-        user_id: null,
-        duration_minutes: durationMinutes,
-      };
-
-      console.log('Booking table with data:', bookingData);
-
-      // Start active table session
-      const response = await fetch(`${API_URL}/api/activeTables/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(bookingData),
-      });
-
-      const responseText = await response.text();
-      let result;
-      try {
-        result = JSON.parse(responseText);
-      } catch (parseError) {
-        throw new Error(`Server returned invalid response`);
-      }
-
-      if (!response.ok) {
-        let errorMessage =
-          result.error || result.message || 'Failed to book table';
-
-        if (
-          errorMessage.includes('not available') ||
-          errorMessage.includes('not found')
-        ) {
-          errorMessage =
-            'This table is currently not available. It may be occupied or under maintenance.';
-        } else if (
-          errorMessage.includes('reserved') ||
-          errorMessage.includes('occupied')
-        ) {
-          errorMessage =
-            'This table is already occupied. Please select another table.';
-        }
-
-        throw new Error(errorMessage);
-      }
-
-      console.log('Table booked successfully:', result);
-
-      // Navigate to AfterBooking with selected food items
-      navigation.navigate('AfterBooking', {
-        table: safeTable,
-        session: result.session || result.activeTable,
-        gameType: safeGameType,
-        timeOption: selectedTimeOption,
-        timeDetails: {
-          selectedTime,
-          timerDuration,
-          selectedFrame,
-        },
-        preSelectedFoodItems: billItems, // Pass pre-selected food items
-      });
+      // Immediate booking - continue with existing logic
+      await processImmediateBooking(token);
     } catch (error) {
       console.error('Booking error:', error);
       const errorMessage =
@@ -412,6 +362,147 @@ export default function TableBookingScreen({ route, navigation }) {
     }
   };
 
+  const processImmediateBooking = async token => {
+    // Calculate duration in minutes based on selected time option
+    let durationMinutes = null;
+    if (selectedTimeOption === 'Timer') {
+      durationMinutes = parseInt(timerDuration) || 60;
+    } else if (selectedTimeOption === 'Set Time') {
+      durationMinutes = 60;
+    }
+
+    // Prepare booking data
+    const bookingData = {
+      table_id: safeTable.id,
+      game_id: safeTable.game_id || safeTable.gameid || 1,
+      user_id: null,
+      duration_minutes: durationMinutes,
+    };
+
+    console.log('Booking table with data:', bookingData);
+
+    // Start active table session
+    const response = await fetch(`${API_URL}/api/activeTables/start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(bookingData),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Booking failed');
+    }
+
+    Alert.alert('Table Booked!', 'Table has been booked successfully.', [
+      {
+        text: 'Continue',
+        onPress: () => {
+          navigation.navigate('AfterBooking', {
+            table: safeTable,
+            session: result.session || result.activeTable,
+            gameType: safeGameType,
+            timeOption: selectedTimeOption,
+            timeDetails: {
+              selectedTime,
+              timerDuration,
+              selectedFrame,
+            },
+            preSelectedFoodItems: billItems, // Pass pre-selected food items
+          });
+        },
+      },
+    ]);
+  };
+
+  const processFutureReservation = async () => {
+    try {
+      setIsBooking(true);
+
+      // Validate customer details
+      if (!customerDetails.name.trim() || !customerDetails.phone.trim()) {
+        Alert.alert('Error', 'Please enter customer name and phone number');
+        return;
+      }
+
+      const token = await AsyncStorage.getItem('authToken');
+      const selectedDateInfo = dates.find(d => d.id === selectedDate);
+
+      // Calculate duration
+      let durationMinutes = 60; // default
+      if (selectedTimeOption === 'Timer') {
+        durationMinutes = parseInt(timerDuration) || 60;
+      }
+
+      // Convert 12-hour time to 24-hour format for API
+      const convertTo24Hour = time12h => {
+        const [time, modifier] = time12h.split(' ');
+        let [hours, minutes] = time.split(':');
+        if (hours === '12') {
+          hours = '00';
+        }
+        if (modifier === 'PM') {
+          hours = parseInt(hours, 10) + 12;
+        }
+        return `${hours.padStart(2, '0')}:${minutes}:00`;
+      };
+
+      const reservationData = {
+        table_id: safeTable.id,
+        game_id: safeTable.game_id || safeTable.gameid || 1,
+        customer_name: customerDetails.name,
+        customer_phone: customerDetails.phone,
+        reservation_date: selectedDateInfo.dateValue,
+        start_time: convertTo24Hour(selectedTime),
+        duration_minutes: durationMinutes,
+        notes: `Table: ${safeTable.name}, Game: ${safeGameType}`,
+      };
+
+      console.log('Creating reservation with data:', reservationData);
+
+      const response = await fetch(`${API_URL}/api/reservations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(reservationData),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Reservation failed');
+      }
+
+      Alert.alert(
+        'Reservation Created!',
+        `Reservation has been created for ${customerDetails.name} on ${selectedDateInfo.label} at ${selectedTime}.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setShowCustomerModal(false);
+              setCustomerDetails({ name: '', phone: '' });
+              navigation.goBack();
+            },
+          },
+        ],
+      );
+    } catch (error) {
+      console.error('Reservation error:', error);
+      Alert.alert(
+        'Reservation Failed',
+        error.message || 'Could not create reservation. Please try again.',
+      );
+    } finally {
+      setIsBooking(false);
+    }
+  };
+
   // ===== RENDER =====
   return (
     <SafeAreaView style={styles.container}>
@@ -423,7 +514,10 @@ export default function TableBookingScreen({ route, navigation }) {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Table Badge */}
         <View style={styles.tableBadge}>
           <Text style={styles.tableName}>{safeTable.name}</Text>
@@ -601,24 +695,41 @@ export default function TableBookingScreen({ route, navigation }) {
                         </View>
                       )}
                       {/* Veg/Non-veg indicator */}
-                      <View style={[styles.vegIndicator, { borderColor: '#0F8A0F' }]}>
-                        <View style={[styles.vegDot, { backgroundColor: '#0F8A0F' }]} />
+                      <View
+                        style={[
+                          styles.vegIndicator,
+                          { borderColor: '#0F8A0F' },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.vegDot,
+                            { backgroundColor: '#0F8A0F' },
+                          ]}
+                        />
                       </View>
                     </View>
 
                     {/* Food Details */}
                     <View style={styles.foodCardContent}>
                       <View style={styles.foodCardHeader}>
-                        <Text style={styles.foodCardName} numberOfLines={1}>{item.name}</Text>
+                        <Text style={styles.foodCardName} numberOfLines={1}>
+                          {item.name}
+                        </Text>
                         {item.description && (
-                          <Text style={styles.foodCardDescription} numberOfLines={2}>
+                          <Text
+                            style={styles.foodCardDescription}
+                            numberOfLines={2}
+                          >
                             {item.description}
                           </Text>
                         )}
                       </View>
 
                       <View style={styles.foodCardFooter}>
-                        <Text style={styles.foodCardPrice}>₹{item.price || 0}</Text>
+                        <Text style={styles.foodCardPrice}>
+                          ₹{item.price || 0}
+                        </Text>
 
                         {/* Add/Quantity Controls */}
                         {billItem ? (
@@ -629,7 +740,9 @@ export default function TableBookingScreen({ route, navigation }) {
                             >
                               <Icon name="remove" size={16} color="#FFFFFF" />
                             </TouchableOpacity>
-                            <Text style={styles.quantityTextCompact}>{billItem.quantity}</Text>
+                            <Text style={styles.quantityTextCompact}>
+                              {billItem.quantity}
+                            </Text>
                             <TouchableOpacity
                               style={styles.quantityBtnCompact}
                               onPress={() => handleAddToBill(item)}
@@ -718,7 +831,12 @@ export default function TableBookingScreen({ route, navigation }) {
             </View>
           ) : (
             <>
-              <Icon name="calendar-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <Icon
+                name="calendar-outline"
+                size={18}
+                color="#FFFFFF"
+                style={{ marginRight: 8 }}
+              />
               <Text style={styles.bookButtonText}>Book Table</Text>
             </>
           )}
@@ -927,7 +1045,9 @@ export default function TableBookingScreen({ route, navigation }) {
           <View style={styles.pricingPreviewModal}>
             {/* Header */}
             <View style={styles.pricingHeader}>
-              <Text style={styles.pricingHeaderTitle}>Booking Summary & Pricing</Text>
+              <Text style={styles.pricingHeaderTitle}>
+                Booking Summary & Pricing
+              </Text>
               <TouchableOpacity
                 style={styles.pricingCloseBtn}
                 onPress={() => setShowPricingPreview(false)}
@@ -940,7 +1060,9 @@ export default function TableBookingScreen({ route, navigation }) {
             <View style={styles.pricingContent}>
               {/* Table Information */}
               <View style={styles.pricingSection}>
-                <Text style={styles.pricingSectionTitle}>Table Information</Text>
+                <Text style={styles.pricingSectionTitle}>
+                  Table Information
+                </Text>
                 <View style={styles.pricingRow}>
                   <Text style={styles.pricingLabel}>Table:</Text>
                   <Text style={styles.pricingValue}>{safeTable.name}</Text>
@@ -952,19 +1074,25 @@ export default function TableBookingScreen({ route, navigation }) {
                 <View style={styles.pricingRow}>
                   <Text style={styles.pricingLabel}>Duration:</Text>
                   <Text style={styles.pricingValue}>
-                    {selectedTimeOption === 'Timer' ? `${timerDuration} min` :
-                     selectedTimeOption === 'Select Frame' ? `${selectedFrame} frame(s)` :
-                     selectedTime}
+                    {selectedTimeOption === 'Timer'
+                      ? `${timerDuration} min`
+                      : selectedTimeOption === 'Select Frame'
+                      ? `${selectedFrame} frame(s)`
+                      : selectedTime}
                   </Text>
                 </View>
               </View>
 
               {/* Estimated Charges */}
               <View style={styles.pricingSection}>
-                <Text style={styles.pricingSectionTitle}>Estimated Charges</Text>
+                <Text style={styles.pricingSectionTitle}>
+                  Estimated Charges
+                </Text>
                 <View style={styles.pricingChargeRow}>
                   <Text style={styles.pricingChargeName}>Table Charges</Text>
-                  <Text style={styles.pricingChargeAmount}>₹{estimatedCost.tableCharges.toFixed(2)}</Text>
+                  <Text style={styles.pricingChargeAmount}>
+                    ₹{estimatedCost.tableCharges.toFixed(2)}
+                  </Text>
                 </View>
 
                 {billItems.length > 0 && (
@@ -972,13 +1100,21 @@ export default function TableBookingScreen({ route, navigation }) {
                     <Text style={styles.pricingMenuLabel}>Menu Items:</Text>
                     {billItems.map((item, index) => (
                       <View key={index} style={styles.pricingChargeRow}>
-                        <Text style={styles.pricingChargeName}>{item.name} × {item.quantity}</Text>
-                        <Text style={styles.pricingChargeAmount}>₹{(item.quantity * item.price).toFixed(2)}</Text>
+                        <Text style={styles.pricingChargeName}>
+                          {item.name} × {item.quantity}
+                        </Text>
+                        <Text style={styles.pricingChargeAmount}>
+                          ₹{(item.quantity * item.price).toFixed(2)}
+                        </Text>
                       </View>
                     ))}
                     <View style={styles.pricingChargeRow}>
-                      <Text style={styles.pricingChargeName}>Menu Subtotal</Text>
-                      <Text style={styles.pricingChargeAmount}>₹{estimatedCost.menuCharges.toFixed(2)}</Text>
+                      <Text style={styles.pricingChargeName}>
+                        Menu Subtotal
+                      </Text>
+                      <Text style={styles.pricingChargeAmount}>
+                        ₹{estimatedCost.menuCharges.toFixed(2)}
+                      </Text>
                     </View>
                   </>
                 )}
@@ -987,7 +1123,9 @@ export default function TableBookingScreen({ route, navigation }) {
               {/* Total */}
               <View style={styles.pricingTotalBox}>
                 <Text style={styles.pricingTotalLabel}>Estimated Total</Text>
-                <Text style={styles.pricingTotalAmount}>₹{estimatedCost.totalAmount.toFixed(2)}</Text>
+                <Text style={styles.pricingTotalAmount}>
+                  ₹{estimatedCost.totalAmount.toFixed(2)}
+                </Text>
               </View>
             </View>
 
@@ -1014,6 +1152,89 @@ export default function TableBookingScreen({ route, navigation }) {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* Customer Details Modal for Future Reservations */}
+      <Modal
+        visible={showCustomerModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCustomerModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Customer Details</Text>
+              <TouchableOpacity onPress={() => setShowCustomerModal(false)}>
+                <Icon name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSubtitle}>
+              Enter customer details for the reservation
+            </Text>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Customer Name*</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Enter customer name"
+                placeholderTextColor="#999"
+                value={customerDetails.name}
+                onChangeText={text =>
+                  setCustomerDetails(prev => ({ ...prev, name: text }))
+                }
+                autoFocus
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Phone Number*</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Enter phone number"
+                placeholderTextColor="#999"
+                value={customerDetails.phone}
+                onChangeText={text =>
+                  setCustomerDetails(prev => ({ ...prev, phone: text }))
+                }
+                keyboardType="phone-pad"
+              />
+            </View>
+
+            <View style={styles.reservationSummary}>
+              <Text style={styles.summaryTitle}>Reservation Summary</Text>
+              <Text style={styles.summaryText}>Table: {safeTable.name}</Text>
+              <Text style={styles.summaryText}>Game: {safeGameType}</Text>
+              <Text style={styles.summaryText}>
+                Date: {dates.find(d => d.id === selectedDate)?.label}
+              </Text>
+              <Text style={styles.summaryText}>Time: {selectedTime}</Text>
+              <Text style={styles.summaryText}>
+                Duration:{' '}
+                {selectedTimeOption === 'Timer'
+                  ? `${timerDuration} min`
+                  : '60 min'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.saveButton,
+                isBooking && styles.saveButtonDisabled,
+              ]}
+              onPress={processFutureReservation}
+              disabled={isBooking}
+            >
+              <Text style={styles.saveButtonText}>
+                {isBooking ? 'Creating Reservation...' : 'Create Reservation'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -1992,5 +2213,39 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+
+  // Customer Details Modal Styles
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  reservationSummary: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 12,
+  },
+  summaryText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  saveButtonDisabled: {
+    backgroundColor: '#ccc',
+    opacity: 0.6,
   },
 });

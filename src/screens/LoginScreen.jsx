@@ -32,37 +32,36 @@ export default function LoginScreen({ navigation }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
+        credentials: 'include', // Important for httpOnly cookies
       });
 
       const data = await res.json();
 
-      if (res.ok && data.accessToken) {
-        // Save auth data using AuthContext
-        await login(data.accessToken, data.user);
+      if (res.ok && data.success && data.accessToken) {
+        // Save auth data using AuthContext with refresh token
+        await login(data.accessToken, data.refreshToken, data.user);
 
         Alert.alert('Login Success', 'Logged in successfully!');
 
         // Navigate based on user role
         const userRole = data.user.role;
-        switch (userRole) {
-          case 'admin':
-            navigation.replace('AdminDashboard');
-            break;
-          case 'staff':
-            navigation.replace('StaffMember');
-            break;
-          case 'owner':
-          case 'customer':
-          default:
-            navigation.replace('MainTabs');
-            break;
+        if (userRole === 'admin') {
+          navigation.replace('AdminDashboard');
+        } else if (userRole === 'staff') {
+          navigation.replace('StaffMember');
+        } else {
+          // owner, customer, or other roles go to main tabs
+          navigation.replace('MainTabs');
         }
       } else {
         Alert.alert('Login Failed', data.error || 'Invalid credentials');
       }
-    } catch (err) {
-      console.error('Login error:', err);
-      Alert.alert('Network Error', 'Please try again.');
+    } catch (error) {
+      console.error('Login error:', error);
+      Alert.alert(
+        'Connection Error',
+        'Unable to connect to server. Please check your connection and try again.',
+      );
     } finally {
       setIsLoading(false);
     }

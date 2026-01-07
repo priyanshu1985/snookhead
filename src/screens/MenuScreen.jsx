@@ -18,12 +18,12 @@ export default function MenuScreen({ navigation }) {
   // Define menu items based on roles
   const getMenuItems = () => {
     const allMenuItems = [
-      // {
-      //   icon: 'id-card-outline',
-      //   title: 'Owners panel',
-      //   route: 'OwnerPanel',
-      //   roles: ['owner'], // Only owners can access
-      // },
+      {
+        icon: 'id-card-outline',
+        title: "Owner's Panel",
+        route: 'OwnerPanel',
+        roles: ['owner', 'admin'], // Owners and admins can access
+      },
       {
         icon: 'settings-outline',
         title: 'Set up menu',
@@ -82,11 +82,25 @@ export default function MenuScreen({ navigation }) {
         text: 'Logout',
         style: 'destructive',
         onPress: async () => {
-          await logout();
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'LoginScreen' }],
-          });
+          try {
+            console.log('Starting logout process...');
+            await logout();
+            console.log('Logout function completed, navigating to login...');
+
+            // Navigate to login screen and reset navigation stack
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'LoginScreen' }],
+            });
+
+            console.log('Navigation reset completed');
+          } catch (error) {
+            console.error('Error during logout process:', error);
+            Alert.alert(
+              'Logout Error',
+              'There was an issue logging out. Please try again.',
+            );
+          }
         },
       },
     ]);

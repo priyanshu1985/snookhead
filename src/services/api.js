@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import apiClient from './apiClient';
 import { API_URL } from '../config';
 
-// Helper function to get auth token
+// Helper function to get auth token (backward compatibility)
 const getAuthToken = async () => {
   try {
     return await AsyncStorage.getItem('authToken');
@@ -10,65 +11,55 @@ const getAuthToken = async () => {
   }
 };
 
-// Helper function to make authenticated requests
+// Enhanced makeRequest using the new apiClient
 const makeRequest = async (url, options = {}) => {
-  const token = await getAuthToken();
-  const defaultOptions = {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-    },
-  };
+  try {
+    const response = await apiClient.request(url, options);
 
-  const response = await fetch(`${API_URL}${url}`, {
-    ...defaultOptions,
-    ...options,
-    headers: {
-      ...defaultOptions.headers,
-      ...options.headers,
-    },
-  });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`,
+      );
+    }
 
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    return response.json();
+  } catch (error) {
+    console.error('API Request failed:', error);
+    throw error;
   }
-
-  return response.json();
 };
 
 // Orders API
 export const ordersAPI = {
   // Get all orders
   getAll: async () => {
-    return await makeRequest('/api/orders');
+    return await apiClient.get('/api/orders');
   },
 
   // Get order by ID
   getById: async id => {
-    return await makeRequest(`/api/orders/${id}`);
+    return await apiClient.get(`/api/orders/${id}`);
   },
 
   // Create new order
   create: async orderData => {
-    return await makeRequest('/api/orders', {
-      method: 'POST',
-      body: JSON.stringify(orderData),
-    });
+    return await apiClient.post('/api/orders', orderData);
   },
 
-  // Update order status
-  updateStatus: async (orderId, status) => {
-    return await makeRequest(`/api/orders/${orderId}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status }),
-    });
+  // Update order
+  update: async (id, orderData) => {
+    return await apiClient.put(`/api/orders/${id}`, orderData);
   },
 
   // Delete order
   delete: async id => {
-    return await makeRequest(`/api/orders/${id}`, {
-      method: 'DELETE',
-    });
+    return await apiClient.delete(`/api/orders/${id}`);
+  },
+
+  // Update order status
+  updateStatus: async (id, status) => {
+    return await apiClient.put(`/api/orders/${id}/status`, { status });
   },
 };
 
@@ -76,7 +67,7 @@ export const ordersAPI = {
 export const tablesAPI = {
   // Get all tables
   getAll: async () => {
-    return await makeRequest('/api/tables');
+    return await apiClient.get('/api/tables');
   },
 
   // Get table by ID
@@ -413,26 +404,46 @@ export const getMembers = customerAPI.getAll;
 
 // Owner Panel API
 export const ownerAPI = {
-  // Verify passcode
-  verifyPasscode: async passcode => {
-    return await makeRequest('/api/owner/verify-passcode', {
+  // Check setup status for current user
+  checkSetupStatus: async () => {
+    return await makeRequest('/api/owner/check-setup-status', {
       method: 'POST',
-      body: JSON.stringify({ passcode }),
     });
   },
 
-  // Change passcode
-  changePasscode: async (currentPasscode, newPasscode) => {
-    return await makeRequest('/api/owner/change-passcode', {
+  // Setup password for first time
+  setupPassword: async (password, confirmPassword) => {
+    return await makeRequest('/api/owner/setup-password', {
       method: 'POST',
-      body: JSON.stringify({ currentPasscode, newPasscode }),
+      body: JSON.stringify({ password, confirmPassword }),
     });
   },
 
-  // Reset passcode (admin only)
-  resetPasscode: async () => {
-    return await makeRequest('/api/owner/reset-passcode', {
+  // Verify password for access
+  verifyPassword: async password => {
+    return await makeRequest('/api/owner/verify-password', {
       method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+  },
+
+  // Change password
+  changePassword: async (currentPassword, newPassword, confirmNewPassword) => {
+    return await makeRequest('/api/owner/change-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        currentPassword,
+        newPassword,
+        confirmNewPassword,
+      }),
+    });
+  },
+
+  // Reset password (admin only)
+  resetPassword: async targetUserId => {
+    return await makeRequest('/api/owner/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ targetUserId }),
     });
   },
 
