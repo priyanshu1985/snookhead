@@ -1,103 +1,110 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const { Op } = require('sequelize');
-const { auth } = require('../middleware/auth');
+const { Op } = require("sequelize");
+const { auth } = require("../middleware/auth");
 const {
   validateRequired,
   validateNumeric,
   validateEnum,
-} = require('../middleware/validation');
+} = require("../middleware/validation");
 
 // Get models
 let models;
 const getModels = () => {
   if (!models) {
-    models = require('../models');
+    models = require("../models");
   }
   return models;
 };
 
 // Validation middleware for inventory items
 const validateInventoryItem = (req, res, next) => {
-  const { item_name, category, current_quantity, minimum_threshold, unit } = req.body;
-  
+  const { item_name, category, current_quantity, minimum_threshold, unit } =
+    req.body;
+
   const errors = [];
-  
+
   if (!item_name || item_name.trim().length === 0) {
-    errors.push('Item name is required');
+    errors.push("Item name is required");
   }
-  
+
   if (!category) {
-    errors.push('Category is required');
+    errors.push("Category is required");
   }
-  
-  if (current_quantity !== undefined && (isNaN(current_quantity) || current_quantity < 0)) {
-    errors.push('Current quantity must be a non-negative number');
+
+  if (
+    current_quantity !== undefined &&
+    (isNaN(current_quantity) || current_quantity < 0)
+  ) {
+    errors.push("Current quantity must be a non-negative number");
   }
-  
-  if (minimum_threshold !== undefined && (isNaN(minimum_threshold) || minimum_threshold < 0)) {
-    errors.push('Minimum threshold must be a non-negative number');
+
+  if (
+    minimum_threshold !== undefined &&
+    (isNaN(minimum_threshold) || minimum_threshold < 0)
+  ) {
+    errors.push("Minimum threshold must be a non-negative number");
   }
-  
+
   if (!unit || unit.trim().length === 0) {
-    errors.push('Unit is required');
+    errors.push("Unit is required");
   }
-  
+
   if (errors.length > 0) {
     return res.status(400).json({
-      error: 'Validation failed',
+      error: "Validation failed",
       details: errors,
     });
   }
-  
+
   next();
 };
 
 // Test endpoint to check if routes are working
-router.get('/test', (req, res) => {
-  res.json({ 
-    message: 'Inventory routes are working!', 
-    timestamp: new Date().toISOString() 
+router.get("/test", (req, res) => {
+  res.json({
+    message: "Inventory routes are working!",
+    timestamp: new Date().toISOString(),
   });
 });
 
 // GET /api/inventory - List all inventory items
-router.get('/', async (req, res) => {
+router.get("/", async (req, res) => {
   try {
-    console.log('GET /api/inventory - Starting request...');
-    
+    console.log("GET /api/inventory - Starting request...");
+
     const models = getModels();
-    console.log('Models loaded:', Object.keys(models));
-    
+    console.log("Models loaded:", Object.keys(models));
+
     const { Inventory } = models;
     if (!Inventory) {
-      throw new Error('Inventory model not found');
+      throw new Error("Inventory model not found");
     }
-    
-    console.log('Inventory model found, executing query...');
-    
+
+    console.log("Inventory model found, executing query...");
+
     const {
       category,
       status,
       search,
-      sort_by = 'item_name',
-      sort_order = 'asc',
+      sort_by = "item_name",
+      sort_order = "asc",
       page = 1,
       limit = 50,
-      include_inactive = 'false',
+      include_inactive = "false",
     } = req.query;
 
     // Build where clause
     const whereClause = {};
-    
-    if (include_inactive !== 'true') {
+
+    if (include_inactive !== "true") {
       whereClause.is_active = true;
     }
-    
+
     if (category) {
       whereClause.category = category;
     }
-    
+
     if (search) {
       whereClause[Op.or] = [
         { item_name: { [Op.like]: `%${search}%` } },
@@ -123,26 +130,40 @@ router.get('/', async (req, res) => {
     // Filter by status if requested
     let filteredRows = rows;
     if (status) {
-      if (status === 'low_stock') {
-        filteredRows = rows.filter(item => item.current_quantity <= item.minimum_threshold);
-      } else if (status === 'out_of_stock') {
-        filteredRows = rows.filter(item => item.current_quantity === 0);
-      } else if (status === 'in_stock') {
-        filteredRows = rows.filter(item => item.current_quantity > item.minimum_threshold);
+      if (status === "low_stock") {
+        filteredRows = rows.filter(
+          (item) => item.current_quantity <= item.minimum_threshold
+        );
+      } else if (status === "out_of_stock") {
+        filteredRows = rows.filter((item) => item.current_quantity === 0);
+      } else if (status === "in_stock") {
+        filteredRows = rows.filter(
+          (item) => item.current_quantity > item.minimum_threshold
+        );
       }
     }
 
     // Calculate summary statistics
     const summary = {
       total_items: count,
-      active_items: rows.filter(item => item.is_active).length,
-      low_stock_items: filteredRows.filter(item => item.current_quantity <= item.minimum_threshold).length,
-      out_of_stock_items: filteredRows.filter(item => item.current_quantity === 0).length,
-      total_value: filteredRows.reduce((sum, item) => sum + ((item.cost_per_unit || 0) * item.current_quantity), 0),
+      active_items: rows.filter((item) => item.is_active).length,
+      low_stock_items: filteredRows.filter(
+        (item) => item.current_quantity <= item.minimum_threshold
+      ).length,
+      out_of_stock_items: filteredRows.filter(
+        (item) => item.current_quantity === 0
+      ).length,
+      total_value: filteredRows.reduce(
+        (sum, item) => sum + (item.cost_per_unit || 0) * item.current_quantity,
+        0
+      ),
       categories: await Inventory.findAll({
-        attributes: ['category', [Inventory.sequelize.fn('COUNT', '*'), 'count']],
+        attributes: [
+          "category",
+          [Inventory.sequelize.fn("COUNT", "*"), "count"],
+        ],
         where: { is_active: true },
-        group: ['category'],
+        group: ["category"],
         raw: true,
       }),
     };
@@ -159,16 +180,16 @@ router.get('/', async (req, res) => {
       summary,
     });
   } catch (error) {
-    console.error('Error fetching inventory:', error);
+    console.error("Error fetching inventory:", error);
     res.status(500).json({
-      error: 'Failed to fetch inventory items',
+      error: "Failed to fetch inventory items",
       details: error.message,
     });
   }
 });
 
 // GET /api/inventory/:id - Get single inventory item
-router.get('/:id', auth, async (req, res) => {
+router.get("/:id", auth, async (req, res) => {
   try {
     const { Inventory } = getModels();
     const { id } = req.params;
@@ -177,7 +198,7 @@ router.get('/:id', auth, async (req, res) => {
 
     if (!item) {
       return res.status(404).json({
-        error: 'Inventory item not found',
+        error: "Inventory item not found",
       });
     }
 
@@ -186,16 +207,16 @@ router.get('/:id', auth, async (req, res) => {
       data: item,
     });
   } catch (error) {
-    console.error('Error fetching inventory item:', error);
+    console.error("Error fetching inventory item:", error);
     res.status(500).json({
-      error: 'Failed to fetch inventory item',
+      error: "Failed to fetch inventory item",
       details: error.message,
     });
   }
 });
 
 // POST /api/inventory - Add new inventory item
-router.post('/', auth, validateInventoryItem, async (req, res) => {
+router.post("/", auth, validateInventoryItem, async (req, res) => {
   try {
     const { Inventory } = getModels();
     const {
@@ -217,8 +238,8 @@ router.post('/', auth, validateInventoryItem, async (req, res) => {
 
     if (existingItem) {
       return res.status(409).json({
-        error: 'Inventory item already exists',
-        suggestion: 'Use PUT /api/inventory/:id to update existing item',
+        error: "Inventory item already exists",
+        suggestion: "Use PUT /api/inventory/:id to update existing item",
       });
     }
 
@@ -241,28 +262,28 @@ router.post('/', auth, validateInventoryItem, async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Inventory item created successfully',
+      message: "Inventory item created successfully",
       data: itemWithVirtuals,
     });
   } catch (error) {
-    console.error('Error creating inventory item:', error);
-    
-    if (error.name === 'SequelizeValidationError') {
+    console.error("Error creating inventory item:", error);
+
+    if (error.name === "SequelizeValidationError") {
       return res.status(400).json({
-        error: 'Validation failed',
-        details: error.errors.map(err => err.message),
+        error: "Validation failed",
+        details: error.errors.map((err) => err.message),
       });
     }
-    
+
     res.status(500).json({
-      error: 'Failed to create inventory item',
+      error: "Failed to create inventory item",
       details: error.message,
     });
   }
 });
 
 // PUT /api/inventory/:id - Update inventory item
-router.put('/:id', auth, async (req, res) => {
+router.put("/:id", auth, async (req, res) => {
   try {
     const { Inventory } = getModels();
     const { id } = req.params;
@@ -271,7 +292,7 @@ router.put('/:id', auth, async (req, res) => {
     const item = await Inventory.findByPk(id);
     if (!item) {
       return res.status(404).json({
-        error: 'Inventory item not found',
+        error: "Inventory item not found",
       });
     }
 
@@ -291,50 +312,50 @@ router.put('/:id', auth, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Inventory item updated successfully',
+      message: "Inventory item updated successfully",
       data: updatedItem,
     });
   } catch (error) {
-    console.error('Error updating inventory item:', error);
-    
-    if (error.name === 'SequelizeValidationError') {
+    console.error("Error updating inventory item:", error);
+
+    if (error.name === "SequelizeValidationError") {
       return res.status(400).json({
-        error: 'Validation failed',
-        details: error.errors.map(err => err.message),
+        error: "Validation failed",
+        details: error.errors.map((err) => err.message),
       });
     }
-    
+
     res.status(500).json({
-      error: 'Failed to update inventory item',
+      error: "Failed to update inventory item",
       details: error.message,
     });
   }
 });
 
 // PATCH /api/inventory/:id/quantity - Update item quantity (stock in/out)
-router.patch('/:id/quantity', auth, async (req, res) => {
+router.patch("/:id/quantity", auth, async (req, res) => {
   try {
     const { Inventory } = getModels();
     const { id } = req.params;
-    const { quantity_change, operation = 'add', reason } = req.body;
+    const { quantity_change, operation = "add", reason } = req.body;
 
     if (!quantity_change || isNaN(quantity_change) || quantity_change <= 0) {
       return res.status(400).json({
-        error: 'Valid quantity_change is required',
+        error: "Valid quantity_change is required",
       });
     }
 
     const item = await Inventory.findByPk(id);
     if (!item) {
       return res.status(404).json({
-        error: 'Inventory item not found',
+        error: "Inventory item not found",
       });
     }
 
     let newQuantity;
-    if (operation === 'add') {
+    if (operation === "add") {
       newQuantity = item.current_quantity + parseInt(quantity_change);
-    } else if (operation === 'subtract') {
+    } else if (operation === "subtract") {
       newQuantity = item.current_quantity - parseInt(quantity_change);
     } else {
       return res.status(400).json({
@@ -344,7 +365,7 @@ router.patch('/:id/quantity', auth, async (req, res) => {
 
     if (newQuantity < 0) {
       return res.status(400).json({
-        error: 'Insufficient stock. Current quantity would become negative.',
+        error: "Insufficient stock. Current quantity would become negative.",
         current_quantity: item.current_quantity,
         requested_change: quantity_change,
       });
@@ -354,8 +375,8 @@ router.patch('/:id/quantity', auth, async (req, res) => {
     const updateData = {
       current_quantity: newQuantity,
     };
-    
-    if (operation === 'add') {
+
+    if (operation === "add") {
       updateData.last_restocked = new Date();
     }
 
@@ -377,16 +398,16 @@ router.patch('/:id/quantity', auth, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error updating inventory quantity:', error);
+    console.error("Error updating inventory quantity:", error);
     res.status(500).json({
-      error: 'Failed to update inventory quantity',
+      error: "Failed to update inventory quantity",
       details: error.message,
     });
   }
 });
 
 // DELETE /api/inventory/:id - Delete (deactivate) inventory item
-router.delete('/:id', auth, async (req, res) => {
+router.delete("/:id", auth, async (req, res) => {
   try {
     const { Inventory } = getModels();
     const { id } = req.params;
@@ -395,52 +416,55 @@ router.delete('/:id', auth, async (req, res) => {
     const item = await Inventory.findByPk(id);
     if (!item) {
       return res.status(404).json({
-        error: 'Inventory item not found',
+        error: "Inventory item not found",
       });
     }
 
-    if (permanent === 'true') {
+    if (permanent === "true") {
       await item.destroy();
       res.json({
         success: true,
-        message: 'Inventory item permanently deleted',
+        message: "Inventory item permanently deleted",
       });
     } else {
       await item.update({ is_active: false });
       res.json({
         success: true,
-        message: 'Inventory item deactivated',
+        message: "Inventory item deactivated",
         data: item,
       });
     }
   } catch (error) {
-    console.error('Error deleting inventory item:', error);
+    console.error("Error deleting inventory item:", error);
     res.status(500).json({
-      error: 'Failed to delete inventory item',
+      error: "Failed to delete inventory item",
       details: error.message,
     });
   }
 });
 
 // GET /api/inventory/low-stock - Get items running low
-router.get('/alerts/low-stock', async (req, res) => {
+router.get("/alerts/low-stock", async (req, res) => {
   try {
     const { Inventory } = getModels();
-    
+
     const lowStockItems = await Inventory.findAll({
       where: {
         is_active: true,
         current_quantity: {
-          [Op.lte]: Inventory.sequelize.col('minimum_threshold'),
+          [Op.lte]: Inventory.sequelize.col("minimum_threshold"),
         },
       },
-      order: [['current_quantity', 'ASC']],
-
+      order: [["current_quantity", "ASC"]],
     });
 
-    const outOfStockItems = lowStockItems.filter(item => item.current_quantity === 0);
+    const outOfStockItems = lowStockItems.filter(
+      (item) => item.current_quantity === 0
+    );
     const criticallyLowItems = lowStockItems.filter(
-      item => item.current_quantity > 0 && item.current_quantity <= (item.minimum_threshold * 0.5)
+      (item) =>
+        item.current_quantity > 0 &&
+        item.current_quantity <= item.minimum_threshold * 0.5
     );
 
     res.json({
@@ -457,9 +481,9 @@ router.get('/alerts/low-stock', async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error fetching low stock items:', error);
+    console.error("Error fetching low stock items:", error);
     res.status(500).json({
-      error: 'Failed to fetch low stock items',
+      error: "Failed to fetch low stock items",
       details: error.message,
     });
   }

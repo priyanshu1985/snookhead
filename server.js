@@ -57,11 +57,11 @@ async function createAdmin() {
 }
 
 // Test endpoint
-app.get('/api/test', (req, res) => {
-  res.json({ 
-    message: 'Server is running!', 
+app.get("/api/test", (req, res) => {
+  res.json({
+    message: "Server is running!",
     timestamp: new Date().toISOString(),
-    port: process.env.PORT || 4000
+    port: process.env.PORT || 4000,
   });
 });
 
@@ -113,8 +113,12 @@ function startAt(port) {
     .on("error", (err) => {
       if (err.code === "EADDRINUSE") {
         logStartup.error(`❌ Port ${port} is already in use!`);
-        logStartup.error(`Please stop the process using port ${port} and try again.`);
-        logStartup.error(`You can find the process with: netstat -ano | findstr :${port}`);
+        logStartup.error(
+          `Please stop the process using port ${port} and try again.`
+        );
+        logStartup.error(
+          `You can find the process with: netstat -ano | findstr :${port}`
+        );
         process.exit(1);
       } else {
         logStartup.error(`Server error: ${err.message}`);
