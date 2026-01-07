@@ -193,14 +193,8 @@ export default function AppNavigator() {
             name="InventoryDashboard"
             component={InventoryDashboard}
           />
-          <Stack.Screen
-            name="Inventory"
-            component={InventoryScreen}
-          />
-          <Stack.Screen
-            name="ServerStatus"
-            component={ServerStatusScreen}
-          />
+          <Stack.Screen name="Inventory" component={InventoryScreen} />
+          <Stack.Screen name="ServerStatus" component={ServerStatusScreen} />
           <Stack.Screen name="Member" component={Member} />
           <Stack.Screen name="MemberDetails" component={MemberDetails} />
           <Stack.Screen name="Notifications" component={Notifications} />
@@ -220,6 +214,7 @@ export default function AppNavigator() {
           />
           <Stack.Screen name="AfterBooking" component={AfterBooking} />
           <Stack.Screen name="PaymentGateway" component={PaymentGateway} />
+          <Stack.Screen name="ScannerScreen" component={ScannerScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </AuthProvider>

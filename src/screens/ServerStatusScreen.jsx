@@ -126,7 +126,7 @@ const ServerStatusScreen = ({ navigation }) => {
     setTesting(false);
   };
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = status => {
     if (status === null) return { name: 'help', color: '#95a5a6' };
     if (status?.success) return { name: 'check-circle', color: '#27ae60' };
     return { name: 'error', color: '#e74c3c' };
@@ -134,7 +134,7 @@ const ServerStatusScreen = ({ navigation }) => {
 
   const StatusCard = ({ title, status, description }) => {
     const icon = getStatusIcon(status);
-    
+
     return (
       <View style={styles.statusCard}>
         <View style={styles.statusHeader}>
@@ -159,10 +159,7 @@ const ServerStatusScreen = ({ navigation }) => {
     Alert.alert(
       'Start Server',
       `To start the server manually:\n\n1. Open Command Prompt or Terminal\n2. Navigate to: SNOOKHEAD folder\n3. Run: node server.js\n4. Server should start on port 4000\n\nCurrent API URL: ${API_URL}`,
-      [
-        { text: 'OK' },
-        { text: 'Test Again', onPress: testConnection },
-      ]
+      [{ text: 'OK' }, { text: 'Test Again', onPress: testConnection }],
     );
   };
 
@@ -173,7 +170,7 @@ const ServerStatusScreen = ({ navigation }) => {
       Alert.alert(
         'Server Not Ready',
         'Please fix server connection issues before accessing inventory.',
-        [{ text: 'OK' }]
+        [{ text: 'OK' }],
       );
     }
   };
@@ -197,7 +194,10 @@ const ServerStatusScreen = ({ navigation }) => {
           <Text style={styles.infoTitle}>Connection Details</Text>
           <Text style={styles.infoText}>API URL: {API_URL}</Text>
           <Text style={styles.infoText}>
-            Last Check: {serverStatus.lastCheck ? new Date(serverStatus.lastCheck).toLocaleTimeString() : 'Never'}
+            Last Check:{' '}
+            {serverStatus.lastCheck
+              ? new Date(serverStatus.lastCheck).toLocaleTimeString()
+              : 'Never'}
           </Text>
         </View>
 
@@ -222,7 +222,7 @@ const ServerStatusScreen = ({ navigation }) => {
 
         {/* Actions */}
         <View style={styles.actionsContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.actionButton, styles.testButton]}
             onPress={testConnection}
             disabled={testing}
@@ -237,7 +237,7 @@ const ServerStatusScreen = ({ navigation }) => {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.actionButton, styles.helpButton]}
             onPress={showServerStartInstructions}
           >
@@ -245,10 +245,12 @@ const ServerStatusScreen = ({ navigation }) => {
             <Text style={styles.actionButtonText}>Server Help</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.actionButton, 
-              serverStatus.inventory?.success ? styles.successButton : styles.disabledButton
+              styles.actionButton,
+              serverStatus.inventory?.success
+                ? styles.successButton
+                : styles.disabledButton,
             ]}
             onPress={navigateToInventory}
             disabled={!serverStatus.inventory?.success}
@@ -262,11 +264,10 @@ const ServerStatusScreen = ({ navigation }) => {
         <View style={styles.troubleshootCard}>
           <Text style={styles.troubleshootTitle}>Troubleshooting</Text>
           <Text style={styles.troubleshootText}>
-            • Make sure the server is running: node server.js{'\n'}
-            • Check if port 4000 is available{'\n'}
-            • Verify network connection{'\n'}
-            • Check if database is connected{'\n'}
-            • Ensure inventory routes are registered
+            • Make sure the server is running: node server.js{'\n'}• Check if
+            port 4000 is available{'\n'}• Verify network connection{'\n'}• Check
+            if database is connected{'\n'}• Ensure inventory routes are
+            registered
           </Text>
         </View>
       </ScrollView>

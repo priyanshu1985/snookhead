@@ -4,56 +4,550 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
+  Alert,
+  PermissionsAndroid,
+  Platform,
+  TextInput,
+  Modal,
   StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Header from '../components/Header';
+import { API_URL } from '../config';
 
 export default function ScannerScreen({ navigation, route }) {
-  const [amount, setAmount] = useState(1600);
+  const [hasPermission, setHasPermission] = useState(null);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualInput, setManualInput] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
 
-  // You can pass QR image from backend or use a placeholder
-  const qrCodeImage = require('../Assets/image1.png'); // Replace with your QR code image
+  // Get payment context from navigation params
+  const paymentContext = route?.params?.paymentContext;
+  const isPaymentMode = !!paymentContext;
 
-  const handleUpdateWallet = () => {
-    // Handle payment confirmation
-    console.log('Payment of ₹', amount);
-    // Navigate to success screen or payment gateway
-    navigation.navigate('PaymentSuccess', { amount });
+  useEffect(() => {
+    requestCameraPermission();
+  }, []);
+
+  const requestCameraPermission = async () => {
+    try {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          {
+            title: 'Camera Permission',
+            message: 'This app needs camera permission to scan QR codes',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          },
+        );
+
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          setHasPermission(true);
+        } else {
+          setHasPermission(false);
+        }
+      } else {
+        setHasPermission(true);
+      }
+    } catch (err) {
+      console.warn(err);
+      setHasPermission(false);
+    }
   };
+
+  const generateTestQRData = () => {
+    // Generate test QR data for development
+    const testQRData = JSON.stringify({
+      type: 'WALLET',
+      wallet_id: 'test-wallet-123',
+      customer_id: 1,
+    });
+    return testQRData;
+  };
+
+  const handleStartScanning = () => {
+    if (hasPermission === false) {
+      Alert.alert(
+        'Camera Permission Required',
+        'Please allow camera access to scan QR codes',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Try Again', onPress: requestCameraPermission },
+        ],
+      );
+      return;
+    }
+
+    setIsScanning(true);
+
+    // Simulate camera opening and scanning process
+    setTimeout(() => {
+      Alert.alert(
+        'Camera Ready',
+        'Camera interface would open here. For now, use manual entry to test the functionality.',
+        [
+          {
+            text: 'Manual Entry',
+            onPress: () => {
+              setIsScanning(false);
+              setShowManualEntry(true);
+            },
+          },
+          {
+            text: 'Test QR Code',
+            onPress: () => {
+              setIsScanning(false);
+              const testQRData = generateTestQRData();
+              handleQRCodeProcessed(testQRData);
+            },
+          },
+          {
+            text: 'Close',
+            onPress: () => setIsScanning(false),
+            style: 'cancel',
+          },
+        ],
+      );
+    }, 1000);
+  };
+
+  const handleManualEntry = () => {
+    if (manualInput.trim()) {
+      handleQRCodeProcessed(manualInput.trim());
+    } else {
+      Alert.alert('Error', 'Please enter a valid QR code');
+    }
+  };
+
+  const handleQRCodeProcessed = async qrData => {
+    setShowManualEntry(false);
+    setManualInput('');
+    setIsScanning(false);
+
+    try {
+      // Show loading
+      Alert.alert('Processing...', 'Validating QR code...');
+
+      // Get auth token
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) {
+        Alert.alert('Error', 'Please login first');
+        return;
+      }
+
+      // Validate QR code with backend
+      const response = await fetch(`${API_URL}/api/wallets/scan`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          qr_data: qrData,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.wallet && result.customer) {
+        // Check if this is a payment request from bill screen
+        if (isPaymentMode && paymentContext) {
+          const billAmount = parseFloat(paymentContext.amount);
+          const walletBalance = parseFloat(result.wallet.balance);
+
+          if (walletBalance < billAmount) {
+            Alert.alert(
+              'Insufficient Balance',
+              `Wallet Balance: ₹${walletBalance.toFixed(
+                2,
+              )}\nRequired: ₹${billAmount.toFixed(2)}\nShortfall: ₹${(
+                billAmount - walletBalance
+              ).toFixed(2)}`,
+              [
+                {
+                  text: 'Try Another QR',
+                  onPress: () => setShowManualEntry(true),
+                },
+                {
+                  text: 'Cancel',
+                  onPress: () => navigation.goBack(),
+                  style: 'cancel',
+                },
+              ],
+            );
+            return;
+          }
+
+          // Process wallet payment
+          Alert.alert(
+            'Confirm Payment',
+            `Deduct ₹${billAmount.toFixed(2)} from ${
+              result.customer.name
+            }'s wallet?\nWallet Balance: ₹${walletBalance.toFixed(
+              2,
+            )}\nRemaining: ₹${(walletBalance - billAmount).toFixed(2)}`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Confirm Payment',
+                onPress: () => processWalletPayment(result, billAmount),
+              },
+            ],
+          );
+        } else {
+          // Normal QR scan - show customer/wallet information
+          Alert.alert(
+            'QR Code Valid!',
+            `Customer: ${
+              result.customer?.name || 'Unknown'
+            }\nWallet Balance: ₹${result.wallet?.balance || 0}\nWallet ID: ${
+              result.wallet?.id
+            }`,
+            [
+              { text: 'Scan Another', onPress: () => setShowManualEntry(true) },
+              {
+                text: 'View Details',
+                onPress: () => {
+                  navigation.navigate('MemberDetails', {
+                    member: result.customer,
+                    wallet: result.wallet,
+                  });
+                },
+              },
+              {
+                text: 'Make Transaction',
+                onPress: () => {
+                  navigation.navigate('PaymentGateway', {
+                    customer: result.customer,
+                    wallet: result.wallet,
+                  });
+                },
+              },
+            ],
+          );
+        }
+      } else {
+        Alert.alert(
+          'Invalid QR Code',
+          result.error || 'QR code could not be validated',
+          [
+            { text: 'Try Again', onPress: () => setShowManualEntry(true) },
+            { text: 'Cancel', style: 'cancel' },
+          ],
+        );
+      }
+    } catch (error) {
+      console.error('QR validation error:', error);
+      Alert.alert(
+        'Connection Error',
+        'Failed to validate QR code. Please check your connection.',
+        [
+          { text: 'Retry', onPress: () => handleQRCodeProcessed(qrData) },
+          { text: 'Manual Entry', onPress: () => setShowManualEntry(true) },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      );
+    }
+  };
+
+  // Process wallet payment
+  const processWalletPayment = async (scanResult, billAmount) => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+
+      // First deduct money from wallet
+      const deductResponse = await fetch(
+        `${API_URL}/api/wallets/deduct-money`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            customer_id: scanResult.customer.id,
+            amount: billAmount,
+          }),
+        },
+      );
+
+      const deductResult = await deductResponse.json();
+
+      if (!deductResponse.ok) {
+        throw new Error(deductResult.error || 'Failed to deduct from wallet');
+      }
+
+      // Then mark the bill as paid
+      const billPayResponse = await fetch(
+        `${API_URL}/api/bills/${
+          paymentContext.bill.originalBill?.id || paymentContext.bill.id
+        }/pay`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            payment_method: 'wallet',
+          }),
+        },
+      );
+
+      const billPayResult = await billPayResponse.json();
+
+      if (billPayResponse.ok) {
+        Alert.alert(
+          'Payment Successful!',
+          `₹${billAmount.toFixed(2)} has been deducted from ${
+            scanResult.customer.name
+          }'s wallet.\\nBill #${
+            paymentContext.bill.billNumber || paymentContext.bill.id
+          } has been paid successfully.\\nNew wallet balance: ₹${
+            deductResult.new_balance ||
+            (scanResult.wallet.balance - billAmount).toFixed(2)
+          }`,
+          [
+            {
+              text: 'Done',
+              onPress: () => {
+                // Navigate back to bill screen and call payment complete
+                navigation.goBack();
+                if (paymentContext.onPaymentComplete) {
+                  paymentContext.onPaymentComplete();
+                }
+              },
+            },
+          ],
+        );
+      } else {
+        // If bill payment fails, we should refund the wallet (compensation transaction)
+        Alert.alert(
+          'Bill Payment Failed',
+          'Wallet was deducted but bill payment failed. Please contact support.',
+          [{ text: 'OK' }],
+        );
+      }
+    } catch (error) {
+      console.error('Wallet payment error:', error);
+      Alert.alert(
+        'Payment Failed',
+        error.message || 'Failed to process wallet payment. Please try again.',
+        [
+          {
+            text: 'Retry',
+            onPress: () => processWalletPayment(scanResult, billAmount),
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      );
+    }
+  };
+
+  if (hasPermission === null) {
+    return (
+      <View style={styles.container}>
+        <Header navigation={navigation} />
+        <View style={styles.centerContainer}>
+          <Icon name="camera" size={80} color="#666" />
+          <Text style={styles.messageText}>
+            Requesting camera permission...
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (isScanning) {
+    return (
+      <View style={styles.scanningContainer}>
+        <StatusBar backgroundColor="#000" barStyle="light-content" />
+
+        <View style={styles.scanningHeader}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setIsScanning(false)}
+          >
+            <Icon name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.scanningTitle}>Scanning QR Code</Text>
+          <View style={styles.placeholder} />
+        </View>
+
+        <View style={styles.scanningContent}>
+          <View style={styles.scanningArea}>
+            <Icon name="qr-code-outline" size={120} color="#FF8C42" />
+            <Text style={styles.scanningText}>Point camera at QR code</Text>
+            <View style={styles.scanningIndicator}>
+              <Icon name="scan" size={40} color="#FF8C42" />
+            </View>
+          </View>
+
+          <View style={styles.scanningControls}>
+            <TouchableOpacity
+              style={styles.manualEntryButton}
+              onPress={() => {
+                setIsScanning(false);
+                setShowManualEntry(true);
+              }}
+            >
+              <Icon name="create-outline" size={24} color="#fff" />
+              <Text style={styles.buttonText}>Manual Entry</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <Header navigation={navigation} />
-      {/* Content */}
+
       <View style={styles.content}>
-        {/* QR Code */}
-        <View style={styles.qrContainer}>
-          <Image
-            source={qrCodeImage}
-            style={styles.qrImage}
-            resizeMode="contain"
-          />
+        {/* Scanner Icon */}
+        <View style={styles.iconContainer}>
+          <Icon name="qr-code" size={100} color="#1a237e" />
         </View>
 
-        {/* Total Amount */}
-        <View style={styles.amountContainer}>
-          <Text style={styles.amountLabel}>Total Amount:</Text>
-          <Text style={styles.amountValue}>
-            ₹{amount.toLocaleString('en-IN')}/-
-          </Text>
-        </View>
+        {/* Title and Description */}
+        <Text style={styles.title}>
+          {isPaymentMode ? 'Wallet Payment' : 'QR Code Scanner'}
+        </Text>
+        <Text style={styles.description}>
+          {isPaymentMode
+            ? `Scan customer's wallet QR code to deduct ₹${
+                paymentContext?.amount || '0'
+              } for bill payment`
+            : 'Scan QR codes to process payments, access customer wallets, or validate tokens'}
+        </Text>
 
-        {/* Update Wallet Button */}
+        {/* Payment Context Info */}
+        {isPaymentMode && paymentContext && (
+          <View style={styles.paymentInfoCard}>
+            <Text style={styles.paymentInfoTitle}>Payment Details</Text>
+            <Text style={styles.paymentInfoText}>
+              Bill #: {paymentContext.bill.billNumber || paymentContext.bill.id}
+            </Text>
+            <Text style={styles.paymentInfoAmount}>
+              Amount: ₹{paymentContext.amount}
+            </Text>
+          </View>
+        )}
+
+        {/* Action Buttons */}
         <TouchableOpacity
-          style={styles.updateButton}
-          onPress={handleUpdateWallet}
+          style={[
+            styles.scanButton,
+            hasPermission === false && styles.disabledButton,
+          ]}
+          onPress={handleStartScanning}
+          disabled={hasPermission === false}
         >
-          <Text style={styles.updateButtonText}>Update Wallet</Text>
+          <Icon name="camera" size={24} color="#fff" />
+          <Text style={styles.scanButtonText}>
+            {hasPermission === false
+              ? 'Camera Access Required'
+              : 'Start Scanning'}
+          </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.manualButton}
+          onPress={() => setShowManualEntry(true)}
+        >
+          <Icon name="create" size={24} color="#1a237e" />
+          <Text style={styles.manualButtonText}>Manual Entry</Text>
+        </TouchableOpacity>
+
+        {/* Cancel Payment Button (only in payment mode) */}
+        {isPaymentMode && (
+          <TouchableOpacity
+            style={styles.cancelPaymentButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Icon name="arrow-back" size={24} color="#666" />
+            <Text style={styles.cancelPaymentButtonText}>Back to Bill</Text>
+          </TouchableOpacity>
+        )}
+
+        {hasPermission === false && (
+          <TouchableOpacity
+            style={styles.permissionButton}
+            onPress={requestCameraPermission}
+          >
+            <Icon name="settings" size={20} color="#666" />
+            <Text style={styles.permissionButtonText}>
+              Grant Camera Permission
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
+
+      {/* Manual Entry Modal */}
+      <Modal
+        visible={showManualEntry}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowManualEntry(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Manual QR Entry</Text>
+              <TouchableOpacity
+                onPress={() => setShowManualEntry(false)}
+                style={styles.closeButton}
+              >
+                <Icon name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalDescription}>
+              Enter the QR code data manually if scanning is not available
+            </Text>
+
+            <TouchableOpacity
+              style={styles.testDataButton}
+              onPress={() => setManualInput(generateTestQRData())}
+            >
+              <Icon name="clipboard" size={16} color="#1a237e" />
+              <Text style={styles.testDataButtonText}>Use Test QR Data</Text>
+            </TouchableOpacity>
+
+            <TextInput
+              style={styles.textInput}
+              placeholder="Enter QR code data..."
+              value={manualInput}
+              onChangeText={setManualInput}
+              multiline
+              numberOfLines={4}
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.cancelModalButton}
+                onPress={() => {
+                  setShowManualEntry(false);
+                  setManualInput('');
+                }}
+              >
+                <Text style={styles.cancelModalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.processButton}
+                onPress={handleManualEntry}
+              >
+                <Text style={styles.processButtonText}>Process</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -62,59 +556,318 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
-    paddingTop: 0, // Ensure header sits at the very top
   },
   content: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     padding: 20,
   },
-  qrContainer: {
-    width: 240,
-    height: 240,
-    backgroundColor: '#FFF',
-    borderRadius: 16,
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     padding: 20,
-    marginBottom: 60,
-    elevation: 2,
+  },
+  messageText: {
+    fontSize: 18,
+    color: '#666',
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  iconContainer: {
+    backgroundColor: '#fff',
+    padding: 30,
+    borderRadius: 50,
+    marginBottom: 30,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1a237e',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  description: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 40,
+    lineHeight: 24,
+    paddingHorizontal: 20,
+  },
+  scanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF8C42',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 25,
+    marginBottom: 20,
+    elevation: 4,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    minWidth: 200,
+    justifyContent: 'center',
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
+    shadowColor: '#ccc',
+  },
+  scanButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 10,
+  },
+  manualButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#1a237e',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 25,
+    marginBottom: 20,
+    minWidth: 200,
+    justifyContent: 'center',
+  },
+  manualButtonText: {
+    color: '#1a237e',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 10,
+  },
+  permissionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 20,
+    marginTop: 10,
+  },
+  permissionButtonText: {
+    color: '#666',
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  // Scanning screen styles
+  scanningContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  scanningHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingTop: 50,
+  },
+  backButton: {
+    padding: 8,
+  },
+  scanningTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  placeholder: {
+    width: 40,
+  },
+  scanningContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  scanningArea: {
+    alignItems: 'center',
+    marginBottom: 80,
+  },
+  scanningText: {
+    color: '#fff',
+    fontSize: 18,
+    textAlign: 'center',
+    marginVertical: 20,
+  },
+  scanningIndicator: {
+    marginTop: 20,
+  },
+  scanningControls: {
+    position: 'absolute',
+    bottom: 50,
+    alignSelf: 'center',
+  },
+  manualEntryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF8C42',
+    paddingHorizontal: 25,
+    paddingVertical: 15,
+    borderRadius: 25,
+    elevation: 4,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#1a237e',
+  },
+  closeButton: {
+    padding: 5,
+  },
+  modalDescription: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    padding: 15,
+    fontSize: 16,
+    textAlignVertical: 'top',
+    marginBottom: 20,
+    minHeight: 100,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  cancelModalButton: {
+    flex: 1,
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 15,
+    borderRadius: 10,
+    marginRight: 10,
+  },
+  cancelModalButtonText: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  processButton: {
+    flex: 1,
+    backgroundColor: '#FF8C42',
+    paddingVertical: 15,
+    borderRadius: 10,
+    marginLeft: 10,
+  },
+  processButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  testDataButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#1a237e',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 15,
+    alignSelf: 'flex-start',
+  },
+  testDataButtonText: {
+    color: '#1a237e',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 5,
+  },
+  paymentInfoCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 20,
+    marginBottom: 20,
+    elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF8C42',
   },
-  qrImage: {
-    width: '100%',
-    height: '100%', // Orange color for QR code
+  paymentInfoTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
   },
-  amountContainer: {
-    marginBottom: 32,
-    alignItems: 'center',
-  },
-  amountLabel: {
+  paymentInfoText: {
     fontSize: 14,
     color: '#666',
     marginBottom: 4,
   },
-  amountValue: {
-    fontSize: 24,
+  paymentInfoAmount: {
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FF8C42',
   },
-  updateButton: {
-    backgroundColor: '#FF9500',
-    paddingVertical: 16,
-    paddingHorizontal: 80,
+  cancelPaymentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
     borderRadius: 25,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    marginBottom: 20,
+    minWidth: 200,
+    justifyContent: 'center',
   },
-  updateButtonText: {
-    color: '#FFF',
+  cancelPaymentButtonText: {
+    color: '#666',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    marginLeft: 10,
   },
 });

@@ -31,11 +31,13 @@ const makeRequest = async (url, options = {}) => {
     return response.json();
   } catch (error) {
     console.error(`API Request failed for ${url}:`, error);
-    
+
     if (error.message.includes('fetch')) {
-      throw new Error('Cannot connect to server. Please check if the server is running on port 4000.');
+      throw new Error(
+        'Cannot connect to server. Please check if the server is running on port 4000.',
+      );
     }
-    
+
     throw error;
   }
 };
@@ -528,7 +530,9 @@ export const inventoryAPI = {
   // Get all inventory items with optional filters
   getAll: async (params = {}) => {
     const queryString = new URLSearchParams(params).toString();
-    const url = queryString ? `/api/inventory?${queryString}` : '/api/inventory';
+    const url = queryString
+      ? `/api/inventory?${queryString}`
+      : '/api/inventory';
     return await makeRequest(url);
   },
 
@@ -554,7 +558,12 @@ export const inventoryAPI = {
   },
 
   // Update item quantity (stock in/out)
-  updateQuantity: async (id, quantityChange, operation = 'add', reason = null) => {
+  updateQuantity: async (
+    id,
+    quantityChange,
+    operation = 'add',
+    reason = null,
+  ) => {
     return await makeRequest(`/api/inventory/${id}/quantity`, {
       method: 'PATCH',
       body: JSON.stringify({
@@ -567,7 +576,9 @@ export const inventoryAPI = {
 
   // Delete (deactivate) inventory item
   delete: async (id, permanent = false) => {
-    const url = permanent ? `/api/inventory/${id}?permanent=true` : `/api/inventory/${id}`;
+    const url = permanent
+      ? `/api/inventory/${id}?permanent=true`
+      : `/api/inventory/${id}`;
     return await makeRequest(url, {
       method: 'DELETE',
     });

@@ -186,12 +186,14 @@ const InventoryScreen = ({ navigation }) => {
         selectedItem.id,
         quantity,
         quantityUpdate.operation,
-        quantityUpdate.reason.trim() || null
+        quantityUpdate.reason.trim() || null,
       );
 
       Alert.alert(
         'Success',
-        `Stock ${quantityUpdate.operation === 'add' ? 'added' : 'removed'} successfully`
+        `Stock ${
+          quantityUpdate.operation === 'add' ? 'added' : 'removed'
+        } successfully`,
       );
       setShowQuantityModal(false);
       resetQuantityForm();
@@ -205,7 +207,7 @@ const InventoryScreen = ({ navigation }) => {
     }
   };
 
-  const handleDeleteItem = (item) => {
+  const handleDeleteItem = item => {
     Alert.alert(
       'Confirm Delete',
       `Are you sure you want to delete "${item.item_name}"?`,
@@ -229,7 +231,7 @@ const InventoryScreen = ({ navigation }) => {
             }
           },
         },
-      ]
+      ],
     );
   };
 
@@ -256,7 +258,7 @@ const InventoryScreen = ({ navigation }) => {
     setSelectedItem(null);
   };
 
-  const openEditModal = (item) => {
+  const openEditModal = item => {
     setSelectedItem(item);
     setFormData({
       item_name: item.item_name,
@@ -271,58 +273,66 @@ const InventoryScreen = ({ navigation }) => {
     setShowEditModal(true);
   };
 
-  const openQuantityModal = (item) => {
+  const openQuantityModal = item => {
     setSelectedItem(item);
     setShowQuantityModal(true);
   };
 
-  const getStockStatus = (item) => {
-    if (item.current_quantity <= 0) return { text: 'Out of Stock', color: '#e74c3c' };
-    if (item.current_quantity <= item.minimum_threshold) return { text: 'Low Stock', color: '#f39c12' };
+  const getStockStatus = item => {
+    if (item.current_quantity <= 0)
+      return { text: 'Out of Stock', color: '#e74c3c' };
+    if (item.current_quantity <= item.minimum_threshold)
+      return { text: 'Low Stock', color: '#f39c12' };
     return { text: 'In Stock', color: '#27ae60' };
   };
 
   const renderInventoryItem = ({ item }) => {
     const stockStatus = getStockStatus(item);
-    
+
     return (
       <View style={styles.itemCard}>
         <View style={styles.itemHeader}>
           <Text style={styles.itemName}>{item.item_name}</Text>
-          <View style={[styles.stockBadge, { backgroundColor: stockStatus.color }]}>
+          <View
+            style={[styles.stockBadge, { backgroundColor: stockStatus.color }]}
+          >
             <Text style={styles.stockText}>{stockStatus.text}</Text>
           </View>
         </View>
-        
+
         <View style={styles.itemDetails}>
-          <Text style={styles.itemInfo}>Category: {item.category.replace('_', ' ')}</Text>
+          <Text style={styles.itemInfo}>
+            Category: {item.category.replace('_', ' ')}
+          </Text>
           <Text style={styles.itemInfo}>
             Quantity: {item.current_quantity} {item.unit}
           </Text>
-          <Text style={styles.itemInfo}>Min. Threshold: {item.minimum_threshold}</Text>
+          <Text style={styles.itemInfo}>
+            Min. Threshold: {item.minimum_threshold}
+          </Text>
           {item.supplier && (
             <Text style={styles.itemInfo}>Supplier: {item.supplier}</Text>
           )}
         </View>
 
         <View style={styles.itemActions}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.actionButton, styles.editButton]}
             onPress={() => openEditModal(item)}
           >
             <Icon name="edit" size={20} color="#fff" />
             <Text style={styles.actionButtonText}>Edit</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={[styles.actionButton, styles.quantityButton]}
             onPress={() => openQuantityModal(item)}
           >
             <Icon name="inventory" size={20} color="#fff" />
             <Text style={styles.actionButtonText}>Stock</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={[styles.actionButton, styles.deleteButton]}
             onPress={() => handleDeleteItem(item)}
           >
@@ -340,14 +350,18 @@ const InventoryScreen = ({ navigation }) => {
         style={styles.input}
         placeholder="Item Name *"
         value={formData.item_name}
-        onChangeText={(text) => setFormData(prev => ({ ...prev, item_name: text }))}
+        onChangeText={text =>
+          setFormData(prev => ({ ...prev, item_name: text }))
+        }
       />
-      
+
       <View style={styles.pickerContainer}>
         <Text style={styles.label}>Category:</Text>
         <Picker
           selectedValue={formData.category}
-          onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
+          onValueChange={value =>
+            setFormData(prev => ({ ...prev, category: value }))
+          }
           style={styles.picker}
         >
           {categories.slice(1).map(cat => (
@@ -361,14 +375,18 @@ const InventoryScreen = ({ navigation }) => {
           style={[styles.input, styles.halfInput]}
           placeholder="Current Quantity"
           value={formData.current_quantity}
-          onChangeText={(text) => setFormData(prev => ({ ...prev, current_quantity: text }))}
+          onChangeText={text =>
+            setFormData(prev => ({ ...prev, current_quantity: text }))
+          }
           keyboardType="numeric"
         />
         <TextInput
           style={[styles.input, styles.halfInput]}
           placeholder="Min. Threshold"
           value={formData.minimum_threshold}
-          onChangeText={(text) => setFormData(prev => ({ ...prev, minimum_threshold: text }))}
+          onChangeText={text =>
+            setFormData(prev => ({ ...prev, minimum_threshold: text }))
+          }
           keyboardType="numeric"
         />
       </View>
@@ -377,11 +395,17 @@ const InventoryScreen = ({ navigation }) => {
         <Text style={styles.label}>Unit:</Text>
         <Picker
           selectedValue={formData.unit}
-          onValueChange={(value) => setFormData(prev => ({ ...prev, unit: value }))}
+          onValueChange={value =>
+            setFormData(prev => ({ ...prev, unit: value }))
+          }
           style={styles.picker}
         >
           {units.map(unit => (
-            <Picker.Item key={unit.value} label={unit.label} value={unit.value} />
+            <Picker.Item
+              key={unit.value}
+              label={unit.label}
+              value={unit.value}
+            />
           ))}
         </Picker>
       </View>
@@ -390,7 +414,9 @@ const InventoryScreen = ({ navigation }) => {
         style={styles.input}
         placeholder="Cost per Unit"
         value={formData.cost_per_unit}
-        onChangeText={(text) => setFormData(prev => ({ ...prev, cost_per_unit: text }))}
+        onChangeText={text =>
+          setFormData(prev => ({ ...prev, cost_per_unit: text }))
+        }
         keyboardType="decimal-pad"
       />
 
@@ -398,14 +424,18 @@ const InventoryScreen = ({ navigation }) => {
         style={styles.input}
         placeholder="Supplier"
         value={formData.supplier}
-        onChangeText={(text) => setFormData(prev => ({ ...prev, supplier: text }))}
+        onChangeText={text =>
+          setFormData(prev => ({ ...prev, supplier: text }))
+        }
       />
 
       <TextInput
         style={[styles.input, styles.textArea]}
         placeholder="Description"
         value={formData.description}
-        onChangeText={(text) => setFormData(prev => ({ ...prev, description: text }))}
+        onChangeText={text =>
+          setFormData(prev => ({ ...prev, description: text }))
+        }
         multiline
         numberOfLines={3}
       />
@@ -417,7 +447,7 @@ const InventoryScreen = ({ navigation }) => {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Inventory Management</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.addButton}
           onPress={() => setShowAddModal(true)}
         >
@@ -450,7 +480,11 @@ const InventoryScreen = ({ navigation }) => {
             style={styles.categoryPicker}
           >
             {categories.map(cat => (
-              <Picker.Item key={cat.value} label={cat.label} value={cat.value} />
+              <Picker.Item
+                key={cat.value}
+                label={cat.label}
+                value={cat.value}
+              />
             ))}
           </Picker>
         </View>
@@ -465,7 +499,7 @@ const InventoryScreen = ({ navigation }) => {
       ) : (
         <FlatList
           data={inventory}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={item => item.id.toString()}
           renderItem={renderInventoryItem}
           contentContainerStyle={styles.listContainer}
           refreshControl={
@@ -475,7 +509,7 @@ const InventoryScreen = ({ navigation }) => {
             <View style={styles.emptyContainer}>
               <Icon name="inventory" size={64} color="#bdc3c7" />
               <Text style={styles.emptyText}>No inventory items found</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.addFirstItemButton}
                 onPress={() => setShowAddModal(true)}
               >
@@ -487,7 +521,7 @@ const InventoryScreen = ({ navigation }) => {
       )}
 
       {/* Floating Action Button for Quick Add */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.floatingActionButton}
         onPress={() => setShowAddModal(true)}
       >
@@ -499,19 +533,27 @@ const InventoryScreen = ({ navigation }) => {
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Add New Item</Text>
-            <TouchableOpacity onPress={() => { setShowAddModal(false); resetForm(); }}>
+            <TouchableOpacity
+              onPress={() => {
+                setShowAddModal(false);
+                resetForm();
+              }}
+            >
               <Icon name="close" size={24} color="#2c3e50" />
             </TouchableOpacity>
           </View>
           {renderForm()}
           <View style={styles.modalActions}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.modalButton, styles.cancelButton]}
-              onPress={() => { setShowAddModal(false); resetForm(); }}
+              onPress={() => {
+                setShowAddModal(false);
+                resetForm();
+              }}
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.modalButton, styles.saveButton]}
               onPress={handleAddItem}
               disabled={loading}
@@ -529,19 +571,27 @@ const InventoryScreen = ({ navigation }) => {
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Edit Item</Text>
-            <TouchableOpacity onPress={() => { setShowEditModal(false); resetForm(); }}>
+            <TouchableOpacity
+              onPress={() => {
+                setShowEditModal(false);
+                resetForm();
+              }}
+            >
               <Icon name="close" size={24} color="#2c3e50" />
             </TouchableOpacity>
           </View>
           {renderForm()}
           <View style={styles.modalActions}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.modalButton, styles.cancelButton]}
-              onPress={() => { setShowEditModal(false); resetForm(); }}
+              onPress={() => {
+                setShowEditModal(false);
+                resetForm();
+              }}
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.modalButton, styles.saveButton]}
               onPress={handleEditItem}
               disabled={loading}
@@ -559,17 +609,25 @@ const InventoryScreen = ({ navigation }) => {
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Update Stock</Text>
-            <TouchableOpacity onPress={() => { setShowQuantityModal(false); resetQuantityForm(); }}>
+            <TouchableOpacity
+              onPress={() => {
+                setShowQuantityModal(false);
+                resetQuantityForm();
+              }}
+            >
               <Icon name="close" size={24} color="#2c3e50" />
             </TouchableOpacity>
           </View>
-          
+
           <ScrollView style={styles.formContainer}>
             {selectedItem && (
               <View style={styles.itemSummary}>
-                <Text style={styles.itemSummaryTitle}>{selectedItem.item_name}</Text>
+                <Text style={styles.itemSummaryTitle}>
+                  {selectedItem.item_name}
+                </Text>
                 <Text style={styles.itemSummaryText}>
-                  Current Stock: {selectedItem.current_quantity} {selectedItem.unit}
+                  Current Stock: {selectedItem.current_quantity}{' '}
+                  {selectedItem.unit}
                 </Text>
               </View>
             )}
@@ -578,11 +636,16 @@ const InventoryScreen = ({ navigation }) => {
               <Text style={styles.label}>Operation:</Text>
               <Picker
                 selectedValue={quantityUpdate.operation}
-                onValueChange={(value) => setQuantityUpdate(prev => ({ ...prev, operation: value }))}
+                onValueChange={value =>
+                  setQuantityUpdate(prev => ({ ...prev, operation: value }))
+                }
                 style={styles.picker}
               >
                 <Picker.Item label="Add Stock (Stock In)" value="add" />
-                <Picker.Item label="Remove Stock (Stock Out)" value="subtract" />
+                <Picker.Item
+                  label="Remove Stock (Stock Out)"
+                  value="subtract"
+                />
               </Picker>
             </View>
 
@@ -590,7 +653,9 @@ const InventoryScreen = ({ navigation }) => {
               style={styles.input}
               placeholder="Quantity *"
               value={quantityUpdate.quantity}
-              onChangeText={(text) => setQuantityUpdate(prev => ({ ...prev, quantity: text }))}
+              onChangeText={text =>
+                setQuantityUpdate(prev => ({ ...prev, quantity: text }))
+              }
               keyboardType="numeric"
             />
 
@@ -598,20 +663,25 @@ const InventoryScreen = ({ navigation }) => {
               style={[styles.input, styles.textArea]}
               placeholder="Reason (optional)"
               value={quantityUpdate.reason}
-              onChangeText={(text) => setQuantityUpdate(prev => ({ ...prev, reason: text }))}
+              onChangeText={text =>
+                setQuantityUpdate(prev => ({ ...prev, reason: text }))
+              }
               multiline
               numberOfLines={2}
             />
           </ScrollView>
 
           <View style={styles.modalActions}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.modalButton, styles.cancelButton]}
-              onPress={() => { setShowQuantityModal(false); resetQuantityForm(); }}
+              onPress={() => {
+                setShowQuantityModal(false);
+                resetQuantityForm();
+              }}
             >
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.modalButton, styles.saveButton]}
               onPress={handleUpdateQuantity}
               disabled={loading}

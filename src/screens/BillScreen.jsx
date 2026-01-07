@@ -1,10 +1,6 @@
 // BillScreen.js
 import React, { useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  StatusBar,
-} from 'react-native';
+import { View, StyleSheet, StatusBar } from 'react-native';
 import Header from '../components/Header';
 import ActiveBillsList from '../components/ActiveBillsList';
 import BillHistoryList from '../components/BillHistoryList';
@@ -77,6 +73,7 @@ export default function BillScreen({ navigation }) {
             bill={selectedBill}
             onBack={handleBackToActive}
             onPaymentComplete={handlePaymentComplete}
+            navigation={navigation}
           />
         );
 

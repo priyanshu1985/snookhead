@@ -32,7 +32,7 @@ const InventoryDashboard = ({ navigation }) => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      
+
       // Load all inventory data
       const [allItemsResponse, lowStockResponse] = await Promise.all([
         inventoryAPI.getAll({ limit: 1000 }), // Get all items for calculations
@@ -49,7 +49,9 @@ const InventoryDashboard = ({ navigation }) => {
         return sum + itemValue;
       }, 0);
 
-      const outOfStockItems = allItems.filter(item => item.current_quantity <= 0);
+      const outOfStockItems = allItems.filter(
+        item => item.current_quantity <= 0,
+      );
 
       // Category breakdown
       const categoryMap = {};
@@ -58,14 +60,17 @@ const InventoryDashboard = ({ navigation }) => {
           categoryMap[item.category] = { count: 0, value: 0 };
         }
         categoryMap[item.category].count++;
-        categoryMap[item.category].value += (item.cost_per_unit || 0) * item.current_quantity;
+        categoryMap[item.category].value +=
+          (item.cost_per_unit || 0) * item.current_quantity;
       });
 
-      const categoryBreakdown = Object.entries(categoryMap).map(([category, data]) => ({
-        category: category.replace('_', ' '),
-        count: data.count,
-        value: data.value,
-      }));
+      const categoryBreakdown = Object.entries(categoryMap).map(
+        ([category, data]) => ({
+          category: category.replace('_', ' '),
+          count: data.count,
+          value: data.value,
+        }),
+      );
 
       setDashboardData({
         totalItems,
@@ -74,7 +79,6 @@ const InventoryDashboard = ({ navigation }) => {
         outOfStockItems,
         categoryBreakdown,
       });
-
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       Alert.alert('Error', 'Failed to load dashboard data');
@@ -89,7 +93,7 @@ const InventoryDashboard = ({ navigation }) => {
     setRefreshing(false);
   }, []);
 
-  const formatCurrency = (amount) => {
+  const formatCurrency = amount => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
@@ -98,20 +102,20 @@ const InventoryDashboard = ({ navigation }) => {
     }).format(amount || 0);
   };
 
-  const getStockStatusColor = (item) => {
+  const getStockStatusColor = item => {
     if (item.current_quantity <= 0) return '#e74c3c';
     if (item.current_quantity <= item.minimum_threshold) return '#FF8C42';
     return '#27ae60';
   };
 
-  const getStockStatusText = (item) => {
+  const getStockStatusText = item => {
     if (item.current_quantity <= 0) return 'OUT OF STOCK';
     if (item.current_quantity <= item.minimum_threshold) return 'LOW STOCK';
     return 'IN STOCK';
   };
 
   const StatsCard = ({ title, value, icon, color, onPress, subtitle }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={[styles.statsCard, { borderLeftColor: color }]}
       onPress={onPress}
       activeOpacity={0.7}
@@ -136,7 +140,7 @@ const InventoryDashboard = ({ navigation }) => {
           <Icon name="inventory" size={20} color="#fff" />
         </View>
       </View>
-      
+
       <View style={styles.itemContent}>
         <Text style={styles.itemTitle}>
           {item.item_name}
@@ -144,24 +148,26 @@ const InventoryDashboard = ({ navigation }) => {
             <Text style={styles.itemUnit}> ({item.unit})</Text>
           )}
         </Text>
-        
+
         <Text style={styles.stockInfo}>
-          In Stock: {item.current_quantity} | Threshold: {item.minimum_threshold}
+          In Stock: {item.current_quantity} | Threshold:{' '}
+          {item.minimum_threshold}
         </Text>
-        
+
         <Text style={styles.mrpText}>
-          MRP: ₹{item.cost_per_unit ? parseFloat(item.cost_per_unit).toFixed(0) : '0'}
+          MRP: ₹
+          {item.cost_per_unit ? parseFloat(item.cost_per_unit).toFixed(0) : '0'}
         </Text>
-        
+
         <View style={styles.itemButtonsRow}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.restockBtn}
             onPress={() => onRestock(item)}
           >
             <Text style={styles.restockBtnText}>Restock item</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.supplierBtn}
             onPress={() => handleCallSupplier(item)}
           >
@@ -172,27 +178,30 @@ const InventoryDashboard = ({ navigation }) => {
     </View>
   );
 
-  const handleRestock = (item) => {
+  const handleRestock = item => {
     navigation.navigate('Inventory', { action: 'restock', item });
   };
 
-  const handleViewDetails = (item) => {
+  const handleViewDetails = item => {
     navigation.navigate('Inventory', { action: 'view', item });
   };
 
-  const handleCallSupplier = (item) => {
+  const handleCallSupplier = item => {
     if (item.supplier) {
       Alert.alert(
         'Contact Supplier',
         `Call ${item.supplier} for ${item.item_name}?`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Call', onPress: () => {
-            // Here you could integrate with phone functionality
-            // Linking.openURL(`tel:${supplierPhone}`);
-            Alert.alert('Feature', 'Phone integration not implemented yet');
-          }}
-        ]
+          {
+            text: 'Call',
+            onPress: () => {
+              // Here you could integrate with phone functionality
+              // Linking.openURL(`tel:${supplierPhone}`);
+              Alert.alert('Feature', 'Phone integration not implemented yet');
+            },
+          },
+        ],
       );
     } else {
       Alert.alert('No Supplier', 'No supplier contact available for this item');
@@ -212,14 +221,14 @@ const InventoryDashboard = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.title}>Inventory Overview</Text>
           <Text style={styles.subtitle}>Manage your stock efficiently</Text>
         </View>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.headerButton}
           onPress={() => navigation.navigate('Inventory')}
         >
@@ -227,10 +236,12 @@ const InventoryDashboard = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
         {/* Stats Overview */}
         <View style={styles.section}>
@@ -255,7 +266,9 @@ const InventoryDashboard = ({ navigation }) => {
               value={dashboardData.lowStockItems.length.toString()}
               icon="warning"
               color="#FF8C42"
-              onPress={() => navigation.navigate('Inventory', { filter: 'lowStock' })}
+              onPress={() =>
+                navigation.navigate('Inventory', { filter: 'lowStock' })
+              }
               subtitle="Items need attention"
             />
             <StatsCard
@@ -263,7 +276,9 @@ const InventoryDashboard = ({ navigation }) => {
               value={dashboardData.outOfStockItems.length.toString()}
               icon="error"
               color="#e74c3c"
-              onPress={() => navigation.navigate('Inventory', { filter: 'outOfStock' })}
+              onPress={() =>
+                navigation.navigate('Inventory', { filter: 'outOfStock' })
+              }
               subtitle="Urgent restocking"
             />
           </View>
@@ -277,23 +292,30 @@ const InventoryDashboard = ({ navigation }) => {
               <Text style={styles.viewAllText}>View All</Text>
             </TouchableOpacity>
           </View>
-          
-          {[...dashboardData.outOfStockItems, ...dashboardData.lowStockItems].slice(0, 3).map((item, index) => (
-            <InventoryItemCard
-              key={index}
-              item={item}
-              onRestock={handleRestock}
-              onViewDetails={handleViewDetails}
-            />
-          ))}
-          
-          {dashboardData.lowStockItems.length === 0 && dashboardData.outOfStockItems.length === 0 && (
-            <View style={styles.noIssuesContainer}>
-              <Icon name="check-circle" size={48} color="#27ae60" />
-              <Text style={styles.noIssuesText}>All items are properly stocked!</Text>
-              <Text style={styles.noIssuesSubtext}>Keep up the good work</Text>
-            </View>
-          )}
+
+          {[...dashboardData.outOfStockItems, ...dashboardData.lowStockItems]
+            .slice(0, 3)
+            .map((item, index) => (
+              <InventoryItemCard
+                key={index}
+                item={item}
+                onRestock={handleRestock}
+                onViewDetails={handleViewDetails}
+              />
+            ))}
+
+          {dashboardData.lowStockItems.length === 0 &&
+            dashboardData.outOfStockItems.length === 0 && (
+              <View style={styles.noIssuesContainer}>
+                <Icon name="check-circle" size={48} color="#27ae60" />
+                <Text style={styles.noIssuesText}>
+                  All items are properly stocked!
+                </Text>
+                <Text style={styles.noIssuesSubtext}>
+                  Keep up the good work
+                </Text>
+              </View>
+            )}
         </View>
 
         {/* Category Breakdown */}
@@ -304,15 +326,21 @@ const InventoryDashboard = ({ navigation }) => {
               <TouchableOpacity
                 key={index}
                 style={styles.categoryCard}
-                onPress={() => navigation.navigate('Inventory', { 
-                  category: category.category.replace(' ', '_') 
-                })}
+                onPress={() =>
+                  navigation.navigate('Inventory', {
+                    category: category.category.replace(' ', '_'),
+                  })
+                }
                 activeOpacity={0.7}
               >
                 <View style={styles.categoryContent}>
                   <Text style={styles.categoryTitle}>{category.category}</Text>
-                  <Text style={styles.categoryCount}>{category.count} items</Text>
-                  <Text style={styles.categoryValue}>{formatCurrency(category.value)}</Text>
+                  <Text style={styles.categoryCount}>
+                    {category.count} items
+                  </Text>
+                  <Text style={styles.categoryValue}>
+                    {formatCurrency(category.value)}
+                  </Text>
                 </View>
                 <Icon name="chevron-right" size={24} color="#ccc" />
               </TouchableOpacity>
@@ -322,9 +350,9 @@ const InventoryDashboard = ({ navigation }) => {
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
-      
+
       {/* Floating Action Button */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.floatingActionButton}
         onPress={() => navigation.navigate('Inventory', { action: 'add' })}
         activeOpacity={0.8}

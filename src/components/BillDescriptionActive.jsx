@@ -18,6 +18,7 @@ export default function BillDescriptionActive({
   bill,
   onBack,
   onPaymentComplete,
+  navigation,
 }) {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cash');
@@ -32,6 +33,19 @@ export default function BillDescriptionActive({
 
       if (!token) {
         Alert.alert('Error', 'Please login first');
+        return;
+      }
+
+      // If wallet is selected, navigate to scanner
+      if (selectedPaymentMethod === 'wallet') {
+        setIsProcessingPayment(false);
+        navigation.navigate('ScannerScreen', {
+          paymentContext: {
+            bill: bill,
+            amount: getBillDetail('totalAmount', '0'),
+            onPaymentComplete: onPaymentComplete,
+          },
+        });
         return;
       }
 
