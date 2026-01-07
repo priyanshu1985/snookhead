@@ -56,6 +56,15 @@ async function createAdmin() {
   }
 }
 
+// Test endpoint
+app.get('/api/test', (req, res) => {
+  res.json({ 
+    message: 'Server is running!', 
+    timestamp: new Date().toISOString(),
+    port: process.env.PORT || 4000
+  });
+});
+
 // Routes
 app.use("/api/health", require("./routes/health"));
 app.use("/api/auth", require("./routes/auth"));
@@ -74,6 +83,7 @@ app.use("/api/wallets", require("./routes/wallets"));
 app.use("/api/customer", require("./routes/customer"));
 app.use("/api/bugs", require("./routes/bugs"));
 app.use("/api/admin/stations", require("./routes/adminStations"));
+app.use("/api/inventory", require("./routes/inventory"));
 app.use("/api/owner", require("./routes/ownerPanel"));
 app.use("/api/owner/dashboard", require("./routes/ownerDashboard"));
 
@@ -85,7 +95,6 @@ app.use((err, req, res, next) => {
 
 // Server startup
 const preferred = parseInt(process.env.PORT, 10) || 4000;
-const maxPort = preferred + 10;
 
 function startAt(port) {
   app
@@ -103,12 +112,10 @@ function startAt(port) {
     })
     .on("error", (err) => {
       if (err.code === "EADDRINUSE") {
-        logStartup.warn(`Port ${port} in use, trying ${port + 1}`);
-        if (port + 1 <= maxPort) startAt(port + 1);
-        else {
-          logStartup.error(`No ports available (${preferred}-${maxPort})`);
-          process.exit(1);
-        }
+        logStartup.error(`❌ Port ${port} is already in use!`);
+        logStartup.error(`Please stop the process using port ${port} and try again.`);
+        logStartup.error(`You can find the process with: netstat -ano | findstr :${port}`);
+        process.exit(1);
       } else {
         logStartup.error(`Server error: ${err.message}`);
         process.exit(1);

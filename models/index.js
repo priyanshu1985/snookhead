@@ -20,6 +20,7 @@ const Station = require("./Station")(sequelize, DataTypes);
 const StationPayment = require("./StationPayment")(sequelize, DataTypes);
 const StationIssue = require("./StationIssue")(sequelize, DataTypes);
 const OwnerSettings = require("./ownerSettings")(sequelize, DataTypes);
+const Inventory = require("./inventory")(sequelize, DataTypes);
 
 // =============================================
 // CORE RELATIONSHIPS
@@ -172,4 +173,5 @@ module.exports = {
   StationPayment,
   StationIssue,
   OwnerSettings,
+  Inventory,
 };
