@@ -4,19 +4,22 @@ const QRCode = require("qrcode");
 const { v4: uuidv4 } = require("uuid");
 const { Wallet, Customer } = require("../models");
 const { auth, authorize } = require("../middleware/auth");
+const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
 
 /* =====================================================
-   GET Wallet by Customer ID
+   GET Wallet by Customer ID - filtered by station
    ===================================================== */
 router.get(
   "/customer/:customer_id",
   auth,
+  stationContext,
   async (req, res) => {
     try {
       const { customer_id } = req.params;
 
+      const where = addStationFilter({ customer_id }, req.stationId);
       const wallet = await Wallet.findOne({
-        where: { customer_id },
+        where,
         include: [{ model: Customer }],
       });
 
@@ -33,11 +36,13 @@ router.get(
 );
 
 /* =====================================================
-   CREATE Wallet + Generate QR
+   CREATE Wallet + Generate QR - with station_id
    ===================================================== */
 router.post(
   "/create",
   auth,
+  stationContext,
+  requireStation,
   authorize("admin", "owner"),
   async (req, res) => {
     try {
@@ -47,12 +52,15 @@ router.post(
         return res.status(400).json({ error: "customer_id is required" });
       }
 
-      const customer = await Customer.findByPk(customer_id);
+      // Check customer exists and belongs to this station
+      const customerWhere = addStationFilter({ id: customer_id }, req.stationId);
+      const customer = await Customer.findOne({ where: customerWhere });
       if (!customer) {
         return res.status(404).json({ error: "Customer not found" });
       }
 
-      const exists = await Wallet.findOne({ where: { customer_id } });
+      const existsWhere = addStationFilter({ customer_id }, req.stationId);
+      const exists = await Wallet.findOne({ where: existsWhere });
       if (exists) {
         return res
           .status(400)
@@ -71,7 +79,7 @@ router.post(
 
       const qrBase64 = await QRCode.toDataURL(qrPayload);
 
-      const wallet = await Wallet.create({
+      const walletData = addStationToData({
         id: walletId,
         customer_id,
         phone_no,
@@ -81,7 +89,9 @@ router.post(
         balance: 0,
         credit_limit: 0,
         reserved_amount: 0,
-      });
+      }, req.stationId);
+
+      const wallet = await Wallet.create(walletData);
 
       res.status(201).json({
         message: "Wallet created",
@@ -97,11 +107,12 @@ router.post(
 );
 
 /* =====================================================
-   ADD Money
+   ADD Money - filtered by station
    ===================================================== */
 router.post(
   "/add-money",
   auth,
+  stationContext,
   authorize("staff", "admin", "owner"),
   async (req, res) => {
     try {
@@ -111,7 +122,8 @@ router.post(
         return res.status(400).json({ error: "Invalid amount" });
       }
 
-      const wallet = await Wallet.findOne({ where: { customer_id } });
+      const where = addStationFilter({ customer_id }, req.stationId);
+      const wallet = await Wallet.findOne({ where });
       if (!wallet) {
         return res.status(404).json({ error: "Wallet not found" });
       }
@@ -132,11 +144,12 @@ router.post(
 );
 
 /* =====================================================
-   ADD Money by Wallet ID
+   ADD Money by Wallet ID - filtered by station
    ===================================================== */
 router.post(
   "/:wallet_id/add",
   auth,
+  stationContext,
   authorize("staff", "admin", "owner"),
   async (req, res) => {
     try {
@@ -147,7 +160,8 @@ router.post(
         return res.status(400).json({ error: "Invalid amount" });
       }
 
-      const wallet = await Wallet.findByPk(wallet_id);
+      const where = addStationFilter({ id: wallet_id }, req.stationId);
+      const wallet = await Wallet.findOne({ where });
       if (!wallet) {
         return res.status(404).json({ error: "Wallet not found" });
       }
@@ -168,11 +182,12 @@ router.post(
 );
 
 /* =====================================================
-   DEDUCT Money
+   DEDUCT Money - filtered by station
    ===================================================== */
 router.post(
   "/deduct-money",
   auth,
+  stationContext,
   authorize("staff", "admin", "owner"),
   async (req, res) => {
     try {
@@ -182,7 +197,8 @@ router.post(
         return res.status(400).json({ error: "Invalid amount" });
       }
 
-      const wallet = await Wallet.findOne({ where: { customer_id } });
+      const where = addStationFilter({ customer_id }, req.stationId);
+      const wallet = await Wallet.findOne({ where });
       if (!wallet) {
         return res.status(404).json({ error: "Wallet not found" });
       }
@@ -210,11 +226,12 @@ router.post(
 );
 
 /* =====================================================
-   SCAN QR → Get Customer + Wallet
+   SCAN QR → Get Customer + Wallet - filtered by station
    ===================================================== */
 router.post(
   "/scan",
   auth,
+  stationContext,
   authorize("staff", "admin", "owner"),
   async (req, res) => {
     try {
@@ -235,7 +252,9 @@ router.post(
         return res.status(400).json({ error: "Invalid QR type" });
       }
 
-      const wallet = await Wallet.findByPk(decoded.wallet_id, {
+      const where = addStationFilter({ id: decoded.wallet_id }, req.stationId);
+      const wallet = await Wallet.findOne({
+        where,
         include: [
           {
             model: Customer,
@@ -264,15 +283,18 @@ router.post(
 );
 
 /* =====================================================
-   ADMIN: Get all wallets
+   ADMIN/OWNER: Get all wallets - filtered by station
    ===================================================== */
 router.get(
   "/",
   auth,
+  stationContext,
   authorize("admin", "owner"),
   async (req, res) => {
     try {
+      const where = addStationFilter({}, req.stationId);
       const wallets = await Wallet.findAll({
+        where,
         include: [{ model: Customer }],
       });
       res.json(wallets);

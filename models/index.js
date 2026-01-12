@@ -103,8 +103,56 @@ User.hasMany(Bug, { foreignKey: "assigned_to", as: "assignedBugs" });
 Bug.belongsTo(User, { foreignKey: "assigned_to", as: "assignee" });
 
 // =============================================
-// STATION RELATIONSHIPS (Admin Panel)
+// STATION RELATIONSHIPS (Multi-Tenancy)
 // =============================================
+
+// Station ↔ Owner User (each station has one owner)
+Station.belongsTo(User, { foreignKey: "owner_user_id", as: "owner" });
+User.hasOne(Station, { foreignKey: "owner_user_id", as: "ownedStation" });
+
+// Station ↔ Users (staff members belong to a station)
+Station.hasMany(User, { foreignKey: "station_id", as: "staff" });
+User.belongsTo(Station, { foreignKey: "station_id", as: "station" });
+
+// Station ↔ MenuItem (each station has its own menu)
+Station.hasMany(MenuItem, { foreignKey: "station_id" });
+MenuItem.belongsTo(Station, { foreignKey: "station_id" });
+
+// Station ↔ TableAsset (each station has its own tables)
+Station.hasMany(TableAsset, { foreignKey: "station_id" });
+TableAsset.belongsTo(Station, { foreignKey: "station_id" });
+
+// Station ↔ Order (each station has its own orders)
+Station.hasMany(Order, { foreignKey: "station_id" });
+Order.belongsTo(Station, { foreignKey: "station_id" });
+
+// Station ↔ Reservation (each station has its own reservations)
+Station.hasMany(Reservation, { foreignKey: "station_id" });
+Reservation.belongsTo(Station, { foreignKey: "station_id" });
+
+// Station ↔ Bill (each station has its own bills)
+Station.hasMany(Bill, { foreignKey: "station_id" });
+Bill.belongsTo(Station, { foreignKey: "station_id" });
+
+// Station ↔ Game (each station has its own games)
+Station.hasMany(Game, { foreignKey: "station_id" });
+Game.belongsTo(Station, { foreignKey: "station_id" });
+
+// Station ↔ ActiveTable (each station has its own active sessions)
+Station.hasMany(ActiveTable, { foreignKey: "station_id" });
+ActiveTable.belongsTo(Station, { foreignKey: "station_id" });
+
+// Station ↔ Queue (each station has its own queue)
+Station.hasMany(Queue, { foreignKey: "station_id" });
+Queue.belongsTo(Station, { foreignKey: "station_id" });
+
+// Station ↔ Inventory (each station has its own inventory)
+Station.hasMany(Inventory, { foreignKey: "station_id" });
+Inventory.belongsTo(Station, { foreignKey: "station_id" });
+
+// Station ↔ OwnerSettings (each station has its own settings)
+Station.hasMany(OwnerSettings, { foreignKey: "station_id" });
+OwnerSettings.belongsTo(Station, { foreignKey: "station_id" });
 
 // Station ↔ StationPayment
 Station.hasMany(StationPayment, { foreignKey: "station_id" });
@@ -113,6 +161,22 @@ StationPayment.belongsTo(Station, { foreignKey: "station_id" });
 // Station ↔ StationIssue
 Station.hasMany(StationIssue, { foreignKey: "station_id" });
 StationIssue.belongsTo(Station, { foreignKey: "station_id" });
+
+// Station ↔ Customer (each station has its own customers)
+Station.hasMany(Customer, { foreignKey: "station_id" });
+Customer.belongsTo(Station, { foreignKey: "station_id" });
+
+// Station ↔ Wallet (each station has its own wallets)
+Station.hasMany(Wallet, { foreignKey: "station_id" });
+Wallet.belongsTo(Station, { foreignKey: "station_id" });
+
+// Station ↔ FoodItem (each station has its own food items)
+Station.hasMany(FoodItem, { foreignKey: "station_id" });
+FoodItem.belongsTo(Station, { foreignKey: "station_id" });
+
+// Station ↔ Bug (each station has its own bug reports)
+Station.hasMany(Bug, { foreignKey: "station_id" });
+Bug.belongsTo(Station, { foreignKey: "station_id" });
 
 // =============================================
 // SYNC DATABASE (optional - remove after first run)

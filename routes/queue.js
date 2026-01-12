@@ -3,11 +3,12 @@ const router = express.Router();
 const { Op } = require("sequelize");
 const { Queue, TableAsset } = require("../models");
 const { auth, authorize } = require("../middleware/auth");
+const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
 
 /* =====================================================
    ADD CUSTOMER TO QUEUE
    ===================================================== */
-router.post("/", auth, async (req, res) => {
+router.post("/", auth, stationContext, requireStation, async (req, res) => {
   try {
     const { name, phone, members } = req.body;
 
@@ -15,17 +16,21 @@ router.post("/", auth, async (req, res) => {
       return res.status(400).json({ error: "Name and phone are required" });
     }
 
-    const lastPosition = await Queue.max("position");
+    // Get max position within this station
+    const where = addStationFilter({ status: "waiting" }, req.stationId);
+    const lastPosition = await Queue.max("position", { where });
     const position = (lastPosition || 0) + 1;
 
-    const entry = await Queue.create({
+    const entryData = addStationToData({
       name,
       phone,
       members: members || 1,
       position,
       tentative_wait_minutes: position * 10, // simple estimate
       status: "waiting",
-    });
+    }, req.stationId);
+
+    const entry = await Queue.create(entryData);
 
     res.status(201).json(entry);
   } catch (err) {
@@ -37,10 +42,11 @@ router.post("/", auth, async (req, res) => {
 /* =====================================================
    LIST QUEUE (FIFO)
    ===================================================== */
-router.get("/", auth, async (req, res) => {
+router.get("/", auth, stationContext, async (req, res) => {
   try {
+    const where = addStationFilter({ status: "waiting" }, req.stationId);
     const list = await Queue.findAll({
-      where: { status: "waiting" },
+      where,
       order: [["position", "ASC"]],
     });
     res.json(list);
@@ -52,9 +58,10 @@ router.get("/", auth, async (req, res) => {
 /* =====================================================
    GET SINGLE QUEUE ENTRY
    ===================================================== */
-router.get("/:id", auth, async (req, res) => {
+router.get("/:id", auth, stationContext, async (req, res) => {
   try {
-    const entry = await Queue.findByPk(req.params.id);
+    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const entry = await Queue.findOne({ where });
     if (!entry) return res.status(404).json({ error: "Queue entry not found" });
     res.json(entry);
   } catch (err) {
@@ -68,14 +75,16 @@ router.get("/:id", auth, async (req, res) => {
 router.post(
   "/next",
   auth,
+  stationContext,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     const transaction = await Queue.sequelize.transaction();
 
     try {
-      // lock next waiting queue entry
+      // lock next waiting queue entry within this station
+      const queueWhere = addStationFilter({ status: "waiting" }, req.stationId);
       const next = await Queue.findOne({
-        where: { status: "waiting" },
+        where: queueWhere,
         order: [["position", "ASC"]],
         transaction,
         lock: transaction.LOCK.UPDATE,
@@ -86,12 +95,13 @@ router.post(
         return res.status(400).json({ error: "Queue is empty" });
       }
 
-      // find suitable table by capacity
+      // find suitable table by capacity within this station
+      const tableWhere = addStationFilter({
+        status: "available",
+        capacity: { [Op.gte]: next.members },
+      }, req.stationId);
       const table = await TableAsset.findOne({
-        where: {
-          status: "available",
-          capacity: { [Op.gte]: next.members },
-        },
+        where: tableWhere,
         order: [["capacity", "ASC"]],
         transaction,
         lock: transaction.LOCK.UPDATE,
@@ -125,10 +135,12 @@ router.post(
 router.post(
   "/:id/served",
   auth,
+  stationContext,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
-      const entry = await Queue.findByPk(req.params.id);
+      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const entry = await Queue.findOne({ where });
       if (!entry) return res.status(404).json({ error: "Not found" });
 
       await entry.update({ status: "served" });
@@ -145,10 +157,12 @@ router.post(
 router.post(
   "/:id/cancel",
   auth,
+  stationContext,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
-      const entry = await Queue.findByPk(req.params.id);
+      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const entry = await Queue.findOne({ where });
       if (!entry) return res.status(404).json({ error: "Not found" });
 
       await entry.update({ status: "cancelled" });
@@ -160,13 +174,14 @@ router.post(
 );
 
 /* =====================================================
-   CLEAR QUEUE (ONLY WAITING)
+   CLEAR QUEUE (ONLY WAITING) - within station
    ===================================================== */
-router.post("/clear", auth, authorize("admin"), async (req, res) => {
+router.post("/clear", auth, stationContext, authorize("owner", "admin"), async (req, res) => {
   try {
+    const where = addStationFilter({ status: "waiting" }, req.stationId);
     await Queue.update(
       { status: "cancelled" },
-      { where: { status: "waiting" } }
+      { where }
     );
     res.json({ success: true });
   } catch (err) {

@@ -2,13 +2,14 @@ const express = require("express");
 const router = express.Router();
 const { MenuItem } = require("../models");
 const { auth, authorize } = require("../middleware/auth");
+const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
 const { Op } = require("sequelize");
 const { sequelize } = require("../config/database");
 
 // --------------------------------------------------
 // GET ALL MENU ITEMS + Filters + Search + Pagination
 // --------------------------------------------------
-router.get("/", auth, async (req, res) => {
+router.get("/", auth, stationContext, async (req, res) => {
   try {
     const {
       category,
@@ -20,7 +21,7 @@ router.get("/", auth, async (req, res) => {
       includeUnavailable, // New param to include unavailable items (for setup menu)
     } = req.query;
 
-    const where = {};
+    let where = {};
 
     // Only filter by availability if not explicitly requesting all items
     if (includeUnavailable !== 'true') {
@@ -34,6 +35,9 @@ router.get("/", auth, async (req, res) => {
       if (maxPrice) where.price[Op.lte] = maxPrice;
     }
     if (search) where.name = { [Op.like]: `%${search}%` };
+
+    // Apply station filter for multi-tenancy
+    where = addStationFilter(where, req.stationId);
 
     const items = await MenuItem.findAll({
       where,
@@ -69,9 +73,11 @@ router.get("/", auth, async (req, res) => {
 // --------------------------------------------------
 // GET MENU ITEM BY ID
 // --------------------------------------------------
-router.get("/:id", auth, async (req, res) => {
+router.get("/:id", auth, stationContext, async (req, res) => {
   try {
-    const item = await MenuItem.findByPk(req.params.id);
+    // Find item with station filter to ensure owner can only see their items
+    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const item = await MenuItem.findOne({ where });
     if (!item) return res.status(404).json({ error: "Menu item not found" });
 
     res.json(item);
@@ -83,8 +89,7 @@ router.get("/:id", auth, async (req, res) => {
 // --------------------------------------------------
 // ADD MENU ITEM
 // --------------------------------------------------
-// TODO: Re-enable authorization after fixing user roles
-router.post("/", auth, async (req, res) => {
+router.post("/", auth, stationContext, requireStation, async (req, res) => {
   try {
     const { name, category, price } = req.body;
 
@@ -108,7 +113,9 @@ router.post("/", auth, async (req, res) => {
       return res.status(400).json({ error: "Invalid category" });
     }
 
-    const item = await MenuItem.create(req.body);
+    // Add station_id to the item for multi-tenancy
+    const itemData = addStationToData(req.body, req.stationId);
+    const item = await MenuItem.create(itemData);
 
     res.status(201).json({
       message: "Menu item created successfully",
@@ -122,9 +129,11 @@ router.post("/", auth, async (req, res) => {
 // --------------------------------------------------
 // UPDATE MENU ITEM
 // --------------------------------------------------
-router.put("/:id", auth, authorize("staff", "admin", "owner"), async (req, res) => {
+router.put("/:id", auth, stationContext, authorize("staff", "admin", "owner"), async (req, res) => {
   try {
-    const item = await MenuItem.findByPk(req.params.id);
+    // Find item with station filter to ensure owner can only update their items
+    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const item = await MenuItem.findOne({ where });
 
     if (!item) return res.status(404).json({ error: "Menu item not found" });
 
@@ -142,9 +151,11 @@ router.put("/:id", auth, authorize("staff", "admin", "owner"), async (req, res) 
 // --------------------------------------------------
 // DELETE MENU ITEM
 // --------------------------------------------------
-router.delete("/:id", auth, authorize("admin", "owner"), async (req, res) => {
+router.delete("/:id", auth, stationContext, authorize("admin", "owner"), async (req, res) => {
   try {
-    const item = await MenuItem.findByPk(req.params.id);
+    // Find item with station filter to ensure owner can only delete their items
+    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const item = await MenuItem.findOne({ where });
 
     if (!item) return res.status(404).json({ error: "Menu item not found" });
 
@@ -162,7 +173,8 @@ router.delete("/:id", auth, authorize("admin", "owner"), async (req, res) => {
 router.patch(
   "/:id/stock",
   auth,
-  authorize("staff", "admin"),
+  stationContext,
+  authorize("staff", "admin", "owner"),
   async (req, res) => {
     try {
       const { quantity } = req.body;
@@ -171,7 +183,9 @@ router.patch(
         return res.status(400).json({ error: "Quantity is required" });
       }
 
-      const item = await MenuItem.findByPk(req.params.id);
+      // Find item with station filter
+      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const item = await MenuItem.findOne({ where });
 
       if (!item) return res.status(404).json({ error: "Menu item not found" });
 
@@ -198,16 +212,28 @@ router.patch(
 router.get(
   "/alerts/low-stock",
   auth,
-  authorize("staff", "admin"),
+  stationContext,
+  authorize("staff", "admin", "owner"),
   async (req, res) => {
     try {
-      const items = await MenuItem.findAll({
-        where: sequelize.where(
-          sequelize.col("stock"),
-          Op.lt,
-          sequelize.col("threshold")
-        ),
-      });
+      // Build where clause with station filter
+      let where = sequelize.where(
+        sequelize.col("stock"),
+        Op.lt,
+        sequelize.col("threshold")
+      );
+
+      // If station filter is needed, combine conditions
+      if (req.stationId) {
+        where = {
+          [Op.and]: [
+            where,
+            { station_id: req.stationId }
+          ]
+        };
+      }
+
+      const items = await MenuItem.findAll({ where });
 
       res.json({
         success: true,

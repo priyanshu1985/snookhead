@@ -3,7 +3,7 @@ const router = express.Router();
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const { User } = require("../models");
+const { User, Station } = require("../models");
 const tokenStore = require("../utils/tokenStore");
 const { auth, validateRefreshToken } = require("../middleware/auth");
 const {
@@ -16,7 +16,7 @@ require("dotenv").config();
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXP = process.env.JWT_EXP || "15m"; // access token expiry - short lived
-const REFRESH_EXP = 7 * 24 * 60 * 60 * 1000; // 7 days in ms for refresh token
+const REFRESH_EXP = 30 * 24 * 60 * 60 * 1000; // 30 days in ms for refresh token - users stay logged in until manual logout
 const NODE_ENV = process.env.NODE_ENV || "development";
 
 function makeAccessToken(user) {
@@ -25,6 +25,7 @@ function makeAccessToken(user) {
       id: user.id,
       email: user.email,
       role: user.role,
+      station_id: user.station_id || null, // Include station_id for multi-tenancy
       iat: Math.floor(Date.now() / 1000),
     },
     JWT_SECRET,
@@ -87,13 +88,40 @@ router.post(
       if (existing) return res.status(400).json({ error: "User exists" });
 
       const hash = await bcrypt.hash(password, 10);
+
+      // If registering as owner, create a station for them first
+      let stationId = null;
+      if (userRole === "owner") {
+        const station = await Station.create({
+          station_name: `${name}'s Cafe`,
+          subscription_type: "free",
+          subscription_status: "active",
+          location_city: req.body.city || "Not Set",
+          location_state: req.body.state || "Not Set",
+          owner_name: name,
+          owner_phone: phone || "Not Set",
+          onboarding_date: new Date(),
+          status: "active",
+        });
+        stationId = station.id;
+      }
+
       const user = await User.create({
         name,
         email,
         passwordHash: hash,
         phone,
         role: userRole,
+        station_id: stationId,
       });
+
+      // Link station to owner user
+      if (stationId) {
+        await Station.update(
+          { owner_user_id: user.id },
+          { where: { id: stationId } }
+        );
+      }
 
       // Generate tokens so user is logged in after registration
       const access = makeAccessToken(user);
@@ -114,6 +142,7 @@ router.post(
           email: user.email,
           role: user.role,
           phone: user.phone,
+          station_id: user.station_id || null,
         },
       });
     } catch (err) {
@@ -155,6 +184,7 @@ router.post(
           email: user.email,
           role: user.role,
           phone: user.phone,
+          station_id: user.station_id || null,
         },
       });
     } catch (err) {
@@ -220,6 +250,7 @@ router.post("/refresh", async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        station_id: user.station_id || null,
       },
     });
   } catch (err) {
@@ -271,6 +302,7 @@ router.get("/me", auth, async (req, res) => {
         email: user.email,
         role: user.role,
         phone: user.phone,
+        station_id: user.station_id || null,
       },
     });
   } catch (err) {

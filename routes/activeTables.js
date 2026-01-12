@@ -2,12 +2,14 @@ const express = require("express");
 const router = express.Router();
 const { ActiveTable, TableAsset, Order, Bill } = require("../models");
 const { auth, authorize } = require("../middleware/auth");
+const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
 
 // Get all active table sessions
-router.get("/", auth, async (req, res) => {
+router.get("/", auth, stationContext, async (req, res) => {
   try {
+    const where = addStationFilter({ status: "active" }, req.stationId);
     const activeSessions = await ActiveTable.findAll({
-      where: { status: "active" },
+      where,
       include: [
         {
           model: TableAsset,
@@ -27,13 +29,16 @@ router.get("/", auth, async (req, res) => {
 router.post(
   "/start",
   auth,
+  stationContext,
+  requireStation,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
       const { table_id, game_id, user_id, duration_minutes } = req.body;
 
-      // verify table exists
-      const table = await TableAsset.findByPk(table_id);
+      // verify table exists and belongs to this station
+      const tableWhere = addStationFilter({ id: table_id }, req.stationId);
+      const table = await TableAsset.findOne({ where: tableWhere });
 
       if (!table) {
         return res.status(404).json({ error: "Table not found" });
@@ -50,22 +55,24 @@ router.post(
         bookingEndTime = new Date(startTime.getTime() + duration_minutes * 60000);
       }
 
-      // create active session
-      const session = await ActiveTable.create({
+      // create active session with station_id
+      const sessionData = addStationToData({
         table_id: String(table_id), // active_tables.table_id is VARCHAR
         game_id,
         start_time: startTime,
         booking_end_time: bookingEndTime,
         duration_minutes: duration_minutes || null,
         status: "active",
-      });
+      }, req.stationId);
+      const session = await ActiveTable.create(sessionData);
 
-      // create order linked to this session
-      const order = await Order.create({
+      // create order linked to this session with station_id
+      const orderData = addStationToData({
         userId: user_id ?? req.user.id ?? null,
         total: 0,
         status: "pending",
-      });
+      }, req.stationId);
+      const order = await Order.create(orderData);
 
       await table.update({ status: "reserved" });
 
@@ -86,12 +93,14 @@ router.post(
 router.post(
   "/stop",
   auth,
+  stationContext,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
       const { active_id, skip_bill = false } = req.body;
 
-      const session = await ActiveTable.findByPk(active_id);
+      const sessionWhere = addStationFilter({ active_id }, req.stationId);
+      const session = await ActiveTable.findOne({ where: sessionWhere });
       if (!session) {
         return res.status(404).json({ error: "Session not found" });
       }
@@ -137,8 +146,8 @@ router.post(
 
       const grandTotal = tableAmount;
 
-      // create bill record
-      const bill = await Bill.create({
+      // create bill record with station_id
+      const billData = addStationToData({
         orderId: null,
         total: grandTotal,
         status: "pending",
@@ -150,7 +159,8 @@ router.post(
           frameCharge,
           tableAmount,
         }),
-      });
+      }, req.stationId);
+      const bill = await Bill.create(billData);
 
       res.json({
         message: "Bill generated",
@@ -174,12 +184,14 @@ router.post(
 router.post(
   "/auto-release",
   auth,
+  stationContext,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
       const { active_id, cart_items = [] } = req.body;
 
-      const session = await ActiveTable.findByPk(active_id);
+      const sessionWhere = addStationFilter({ active_id }, req.stationId);
+      const session = await ActiveTable.findOne({ where: sessionWhere });
       if (!session) {
         return res.status(404).json({ error: "Session not found" });
       }
@@ -244,8 +256,8 @@ router.post(
         .filter(Boolean)
         .join(", ");
 
-      // Create bill record with proper structure
-      const bill = await Bill.create({
+      // Create bill record with proper structure and station_id
+      const billData = addStationToData({
         bill_number,
         orderId: null,
         customer_name: "Walk-in Customer",
@@ -265,7 +277,8 @@ router.post(
           pricePerMin,
           auto_released: true,
         }),
-      });
+      }, req.stationId);
+      const bill = await Bill.create(billData);
 
       res.json({
         message: "Session auto-released",
@@ -286,9 +299,11 @@ router.post(
 );
 
 // Get session by ID
-router.get("/:id", auth, async (req, res) => {
+router.get("/:id", auth, stationContext, async (req, res) => {
   try {
-    const session = await ActiveTable.findByPk(req.params.id, {
+    const where = addStationFilter({ active_id: req.params.id }, req.stationId);
+    const session = await ActiveTable.findOne({
+      where,
       include: [{ model: TableAsset }],
     });
 

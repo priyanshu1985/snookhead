@@ -2,14 +2,17 @@ const express = require("express");
 const router = express.Router();
 const { Customer } = require("../models");
 const { auth, authorize } = require("../middleware/auth");
+const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
 
 /**
  * GET all customers
- * Admin / Owner only
+ * Admin / Owner only - filtered by station
  */
-router.get("/", auth, authorize("admin", "owner"), async (req, res) => {
+router.get("/", auth, stationContext, authorize("admin", "owner"), async (req, res) => {
   try {
+    const where = addStationFilter({}, req.stationId);
     const list = await Customer.findAll({
+      where,
       attributes: [
         "id",
         "name",
@@ -28,13 +31,15 @@ router.get("/", auth, authorize("admin", "owner"), async (req, res) => {
 
 /**
  * GET single customer
- * Admin / Owner / Staff
+ * Admin / Owner / Staff - filtered by station
  */
-router.get("/:id", auth, authorize("admin", "owner", "staff"), async (req, res) => {
+router.get("/:id", auth, stationContext, authorize("admin", "owner", "staff"), async (req, res) => {
   try {
     const { id } = req.params;
+    const where = addStationFilter({ id }, req.stationId);
 
-    const customer = await Customer.findByPk(id, {
+    const customer = await Customer.findOne({
+      where,
       attributes: [
         "id",
         "name",
@@ -59,9 +64,9 @@ router.get("/:id", auth, authorize("admin", "owner", "staff"), async (req, res) 
 
 /**
  * CREATE customer
- * Admin / Owner / Staff
+ * Admin / Owner / Staff - with station_id
  */
-router.post("/", auth, authorize("admin", "owner", "staff"), async (req, res) => {
+router.post("/", auth, stationContext, requireStation, authorize("admin", "owner", "staff"), async (req, res) => {
   try {
     const {
       name,
@@ -75,14 +80,16 @@ router.post("/", auth, authorize("admin", "owner", "staff"), async (req, res) =>
       return res.status(400).json({ error: "Name and phone are required" });
     }
 
-    const customer = await Customer.create({
+    const customerData = addStationToData({
       name,
       phone,
       email,
       address,
       external_id,
-      created_by: req.user.id, // track creator
-    });
+      created_by: req.user.id,
+    }, req.stationId);
+
+    const customer = await Customer.create(customerData);
 
     res.status(201).json(customer);
   } catch (err) {
@@ -92,12 +99,13 @@ router.post("/", auth, authorize("admin", "owner", "staff"), async (req, res) =>
 
 /**
  * UPDATE customer
- * Admin / Owner / Staff
+ * Admin / Owner / Staff - filtered by station
  */
-router.put("/:id", auth, authorize("admin", "owner", "staff"), async (req, res) => {
+router.put("/:id", auth, stationContext, authorize("admin", "owner", "staff"), async (req, res) => {
   try {
     const { id } = req.params;
-    const customer = await Customer.findByPk(id);
+    const where = addStationFilter({ id }, req.stationId);
+    const customer = await Customer.findOne({ where });
 
     if (!customer) {
       return res.status(404).json({ error: "Customer not found" });
@@ -129,12 +137,13 @@ router.put("/:id", auth, authorize("admin", "owner", "staff"), async (req, res) 
 
 /**
  * SOFT DELETE (Deactivate customer)
- * Admin / Owner only
+ * Admin / Owner only - filtered by station
  */
-router.delete("/:id", auth, authorize("admin", "owner"), async (req, res) => {
+router.delete("/:id", auth, stationContext, authorize("admin", "owner"), async (req, res) => {
   try {
     const { id } = req.params;
-    const customer = await Customer.findByPk(id);
+    const where = addStationFilter({ id }, req.stationId);
+    const customer = await Customer.findOne({ where });
 
     if (!customer) {
       return res.status(404).json({ error: "Customer not found" });
@@ -151,18 +160,18 @@ router.delete("/:id", auth, authorize("admin", "owner"), async (req, res) => {
 
 /**
  * ACTIVATE customer
- * Admin / Owner / Staff
+ * Admin / Owner / Staff - filtered by station
  */
-router.patch("/:id/activate", auth, authorize("admin", "owner", "staff"), async (req, res) => {
+router.patch("/:id/activate", auth, stationContext, authorize("admin", "owner", "staff"), async (req, res) => {
   try {
     const { id } = req.params;
-    const customer = await Customer.findByPk(id);
+    const where = addStationFilter({ id }, req.stationId);
+    const customer = await Customer.findOne({ where });
 
     if (!customer) {
       return res.status(404).json({ error: "Customer not found" });
     }
 
-    // Always set to active, even if already active (idempotent)
     customer.is_active = true;
     await customer.save();
 
@@ -174,18 +183,18 @@ router.patch("/:id/activate", auth, authorize("admin", "owner", "staff"), async 
 
 /**
  * DEACTIVATE customer
- * Admin / Owner / Staff
+ * Admin / Owner / Staff - filtered by station
  */
-router.patch("/:id/deactivate", auth, authorize("admin", "owner", "staff"), async (req, res) => {
+router.patch("/:id/deactivate", auth, stationContext, authorize("admin", "owner", "staff"), async (req, res) => {
   try {
     const { id } = req.params;
-    const customer = await Customer.findByPk(id);
+    const where = addStationFilter({ id }, req.stationId);
+    const customer = await Customer.findOne({ where });
 
     if (!customer) {
       return res.status(404).json({ error: "Customer not found" });
     }
 
-    // Always set to inactive, even if already inactive (idempotent)
     customer.is_active = false;
     await customer.save();
 

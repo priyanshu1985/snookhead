@@ -2,13 +2,14 @@ const express = require("express");
 const router = express.Router();
 const { Bug, User } = require("../models");
 const { auth, authorize } = require("../middleware/auth");
+const { stationContext, requireStation, addStationFilter, addStationToData } = require('../middleware/stationContext');
 
-// Get all bugs
-router.get("/", auth, async (req, res) => {
+// Get all bugs - filtered by station
+router.get("/", auth, stationContext, async (req, res) => {
   try {
     const { status, category, priority } = req.query;
 
-    const whereClause = {};
+    const whereClause = addStationFilter({}, req.stationId);
     if (status) whereClause.status = status;
     if (category) whereClause.category = category;
     if (priority) whereClause.priority = priority;
@@ -36,10 +37,12 @@ router.get("/", auth, async (req, res) => {
   }
 });
 
-// Get bug by ID
-router.get("/:id", auth, async (req, res) => {
+// Get bug by ID - filtered by station
+router.get("/:id", auth, stationContext, async (req, res) => {
   try {
-    const bug = await Bug.findByPk(req.params.id, {
+    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const bug = await Bug.findOne({
+      where,
       include: [
         {
           model: User,
@@ -64,8 +67,8 @@ router.get("/:id", auth, async (req, res) => {
   }
 });
 
-// Create new bug report
-router.post("/", auth, async (req, res) => {
+// Create new bug report - with station_id
+router.post("/", auth, stationContext, requireStation, async (req, res) => {
   try {
     const {
       title,
@@ -80,7 +83,7 @@ router.post("/", auth, async (req, res) => {
       return res.status(400).json({ error: "Title is required" });
     }
 
-    const bug = await Bug.create({
+    const bugData = addStationToData({
       title: title.trim(),
       description: description?.trim() || null,
       category,
@@ -89,7 +92,9 @@ router.post("/", auth, async (req, res) => {
       audio_url,
       reported_by: req.user?.id || null,
       status: "pending",
-    });
+    }, req.stationId);
+
+    const bug = await Bug.create(bugData);
 
     res.status(201).json({
       success: true,
@@ -101,14 +106,16 @@ router.post("/", auth, async (req, res) => {
   }
 });
 
-// Update bug
+// Update bug - filtered by station
 router.put(
   "/:id",
   auth,
+  stationContext,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
-      const bug = await Bug.findByPk(req.params.id);
+      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const bug = await Bug.findOne({ where });
 
       if (!bug) {
         return res.status(404).json({ error: "Bug not found" });
@@ -156,14 +163,16 @@ router.put(
   }
 );
 
-// Update bug status
+// Update bug status - filtered by station
 router.patch(
   "/:id/status",
   auth,
+  stationContext,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
-      const bug = await Bug.findByPk(req.params.id);
+      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const bug = await Bug.findOne({ where });
 
       if (!bug) {
         return res.status(404).json({ error: "Bug not found" });
@@ -195,14 +204,16 @@ router.patch(
   }
 );
 
-// Delete bug
+// Delete bug - filtered by station
 router.delete(
   "/:id",
   auth,
+  stationContext,
   authorize("owner", "admin"),
   async (req, res) => {
     try {
-      const bug = await Bug.findByPk(req.params.id);
+      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const bug = await Bug.findOne({ where });
 
       if (!bug) {
         return res.status(404).json({ error: "Bug not found" });
@@ -220,26 +231,29 @@ router.delete(
   }
 );
 
-// Get bug statistics
+// Get bug statistics - filtered by station
 router.get(
   "/stats/summary",
   auth,
+  stationContext,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
       const { Op } = require("sequelize");
+      const baseWhere = addStationFilter({}, req.stationId);
 
-      const total = await Bug.count();
-      const pending = await Bug.count({ where: { status: "pending" } });
-      const inProgress = await Bug.count({ where: { status: "in_progress" } });
-      const resolved = await Bug.count({ where: { status: "resolved" } });
-      const closed = await Bug.count({ where: { status: "closed" } });
+      const total = await Bug.count({ where: baseWhere });
+      const pending = await Bug.count({ where: addStationFilter({ status: "pending" }, req.stationId) });
+      const inProgress = await Bug.count({ where: addStationFilter({ status: "in_progress" }, req.stationId) });
+      const resolved = await Bug.count({ where: addStationFilter({ status: "resolved" }, req.stationId) });
+      const closed = await Bug.count({ where: addStationFilter({ status: "closed" }, req.stationId) });
 
       const byCategory = await Bug.findAll({
         attributes: [
           "category",
           [require("sequelize").fn("COUNT", require("sequelize").col("id")), "count"],
         ],
+        where: baseWhere,
         group: ["category"],
       });
 
@@ -248,6 +262,7 @@ router.get(
           "priority",
           [require("sequelize").fn("COUNT", require("sequelize").col("id")), "count"],
         ],
+        where: baseWhere,
         group: ["priority"],
       });
 

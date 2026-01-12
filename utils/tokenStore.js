@@ -4,7 +4,7 @@
 const refreshTokens = new Map(); // userId -> { token, expiresAt, createdAt }
 const resetTokens = new Map(); // token -> { userId, expiresAt }
 
-const REFRESH_TOKEN_EXPIRY = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+const REFRESH_TOKEN_EXPIRY = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds - users stay logged in until manual logout
 
 function setRefreshToken(userId, token) {
   const expiresAt = Date.now() + REFRESH_TOKEN_EXPIRY;

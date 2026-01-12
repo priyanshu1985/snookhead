@@ -13,6 +13,12 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM("staff", "owner", "admin", "customer"),
         defaultValue: "customer",
       },
+      station_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true, // Null for admin and customer roles
+        // Note: Foreign key constraint skipped at DB level due to MySQL 64 index limit on users table
+        // Data integrity is maintained at application level
+      },
       owner_panel_password: { type: DataTypes.STRING(128), allowNull: true }, // Hashed owner panel password
       owner_panel_setup: { type: DataTypes.BOOLEAN, defaultValue: false }, // Track if user has set up owner panel password
     },

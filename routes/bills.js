@@ -10,15 +10,19 @@ const {
   Game,
 } = require("../models");
 const { auth, authorize } = require("../middleware/auth");
+const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
 
 // list bills
 router.get(
   "/",
   auth,
+  stationContext,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
+      const where = addStationFilter({}, req.stationId);
       const list = await Bill.findAll({
+        where,
         include: [
           {
             model: Order,
@@ -135,10 +139,13 @@ router.get(
 router.get(
   "/:id",
   auth,
+  stationContext,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
-      const bill = await Bill.findByPk(req.params.id, {
+      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const bill = await Bill.findOne({
+        where,
         include: [
           {
             model: Order,
@@ -254,10 +261,12 @@ router.get(
 router.post(
   "/:id/pay",
   auth,
+  stationContext,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
-      const bill = await Bill.findByPk(req.params.id);
+      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const bill = await Bill.findOne({ where });
       if (!bill) return res.status(404).json({ error: "Bill not found" });
 
       if (bill.status === "paid") {
@@ -288,6 +297,8 @@ router.post(
 router.post(
   "/create",
   auth,
+  stationContext,
+  requireStation,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
@@ -309,7 +320,8 @@ router.post(
       let actualFrameCharges = 0;
 
       if (table_id && session_duration > 0) {
-        const table = await TableAsset.findByPk(table_id);
+        const tableWhere = addStationFilter({ id: table_id }, req.stationId);
+        const table = await TableAsset.findOne({ where: tableWhere });
         if (!table) {
           return res.status(404).json({ error: "Table not found" });
         }
@@ -378,8 +390,8 @@ router.post(
           .filter(Boolean)
           .join(", ") || "Service charges";
 
-      // 6. Create the bill
-      const bill = await Bill.create({
+      // 6. Create the bill with station_id
+      const billData = addStationToData({
         bill_number,
         customer_name,
         customer_phone,
@@ -403,7 +415,8 @@ router.post(
             session_duration,
           },
         }),
-      });
+      }, req.stationId);
+      const bill = await Bill.create(billData);
 
       res.status(201).json({
         success: true,
@@ -436,7 +449,7 @@ router.post(
 );
 
 // Get pricing information for table and menu items before booking
-router.post("/calculate-pricing", auth, async (req, res) => {
+router.post("/calculate-pricing", auth, stationContext, async (req, res) => {
   try {
     const {
       table_id,
@@ -512,15 +525,15 @@ router.post("/calculate-pricing", auth, async (req, res) => {
 router.get(
   "/by-game-table/:game_id/:table_id",
   auth,
+  stationContext,
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
       const { game_id, table_id } = req.params;
 
+      const where = addStationFilter({ table_id: table_id }, req.stationId);
       const bills = await Bill.findAll({
-        where: {
-          table_id: table_id,
-        },
+        where,
         order: [["createdAt", "DESC"]],
       });
 

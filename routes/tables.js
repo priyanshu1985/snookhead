@@ -2,17 +2,21 @@ const express = require("express");
 const router = express.Router();
 const { TableAsset } = require("../models");
 const { auth, authorize } = require("../middleware/auth");
+const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
 
 // -------------------------------------------------
 // GET ALL TABLES + Filters + Pagination
 // -------------------------------------------------
-router.get("/", auth, async (req, res) => {
+router.get("/", auth, stationContext, async (req, res) => {
   try {
     const { status, type, page = 1, limit = 20 } = req.query;
 
-    const where = {};
+    let where = {};
     if (status) where.status = status;
     if (type) where.type = type;
+
+    // Apply station filter for multi-tenancy
+    where = addStationFilter(where, req.stationId);
 
     const tables = await TableAsset.findAll({
       where,
@@ -33,9 +37,11 @@ router.get("/", auth, async (req, res) => {
 // -------------------------------------------------
 // GET TABLE BY ID
 // -------------------------------------------------
-router.get("/:id", auth, async (req, res) => {
+router.get("/:id", auth, stationContext, async (req, res) => {
   try {
-    const table = await TableAsset.findByPk(req.params.id);
+    // Apply station filter
+    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const table = await TableAsset.findOne({ where });
 
     if (!table) {
       return res.status(404).json({ error: "Table not found" });
@@ -50,7 +56,7 @@ router.get("/:id", auth, async (req, res) => {
 // -------------------------------------------------
 // ADD TABLE
 // -------------------------------------------------
-router.post("/", auth, authorize("owner", "staff", "admin"), async (req, res) => {
+router.post("/", auth, stationContext, requireStation, authorize("owner", "staff", "admin"), async (req, res) => {
   try {
     const {
       name,
@@ -76,7 +82,8 @@ router.post("/", auth, authorize("owner", "staff", "admin"), async (req, res) =>
       return res.status(400).json({ error: "Invalid status" });
     }
 
-    const newTable = await TableAsset.create({
+    // Add station_id for multi-tenancy
+    const tableData = addStationToData({
       name,
       dimension,
       onboardDate,
@@ -85,7 +92,9 @@ router.post("/", auth, authorize("owner", "staff", "admin"), async (req, res) =>
       status,
       frameCharge,
       game_id,
-    });
+    }, req.stationId);
+
+    const newTable = await TableAsset.create(tableData);
 
     res.status(201).json({
       message: "Table added successfully",
@@ -99,9 +108,11 @@ router.post("/", auth, authorize("owner", "staff", "admin"), async (req, res) =>
 // -------------------------------------------------
 // UPDATE TABLE
 // -------------------------------------------------
-router.put("/:id", auth, authorize("owner", "staff", "admin"), async (req, res) => {
+router.put("/:id", auth, stationContext, authorize("owner", "staff", "admin"), async (req, res) => {
   try {
-    const table = await TableAsset.findByPk(req.params.id);
+    // Apply station filter
+    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const table = await TableAsset.findOne({ where });
 
     if (!table) {
       return res.status(404).json({ error: "Table not found" });
@@ -121,9 +132,11 @@ router.put("/:id", auth, authorize("owner", "staff", "admin"), async (req, res) 
 // -------------------------------------------------
 // DELETE TABLE
 // -------------------------------------------------
-router.delete("/:id", auth, authorize("owner", "admin"), async (req, res) => {
+router.delete("/:id", auth, stationContext, authorize("owner", "admin"), async (req, res) => {
   try {
-    const table = await TableAsset.findByPk(req.params.id);
+    // Apply station filter
+    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const table = await TableAsset.findOne({ where });
 
     if (!table) {
       return res.status(404).json({ error: "Table not found" });
@@ -144,6 +157,7 @@ router.delete("/:id", auth, authorize("owner", "admin"), async (req, res) => {
 router.patch(
   "/:id/status",
   auth,
+  stationContext,
   authorize("owner", "staff", "admin"),
   async (req, res) => {
     try {
@@ -154,7 +168,9 @@ router.patch(
         return res.status(400).json({ error: "Invalid status" });
       }
 
-      const table = await TableAsset.findByPk(req.params.id);
+      // Apply station filter
+      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const table = await TableAsset.findOne({ where });
 
       if (!table) {
         return res.status(404).json({ error: "Table not found" });

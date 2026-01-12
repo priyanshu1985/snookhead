@@ -3,6 +3,14 @@ module.exports = (sequelize, DataTypes) => {
     "Reservation",
     {
       id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+      station_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: "stations",
+          key: "id",
+        },
+      },
       userId: { type: DataTypes.INTEGER },
       tableId: { type: DataTypes.INTEGER },
       customerName: { type: DataTypes.STRING(100) },

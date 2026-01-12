@@ -2,14 +2,16 @@ const express = require("express");
 const router = express.Router();
 const { Reservation, TableAsset, User, Game } = require("../models");
 const { auth, authorize } = require("../middleware/auth");
+const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
 
 // list reservations
-router.get("/", auth, async (req, res) => {
+router.get("/", auth, stationContext, async (req, res) => {
   try {
+    const where = addStationFilter({
+      status: ["pending", "active"],
+    }, req.stationId);
     const list = await Reservation.findAll({
-      where: {
-        status: ["pending", "active"],
-      },
+      where,
       include: [
         {
           model: TableAsset,
@@ -36,7 +38,7 @@ router.get("/", auth, async (req, res) => {
 });
 
 // create new reservation
-router.post("/", auth, async (req, res) => {
+router.post("/", auth, stationContext, requireStation, async (req, res) => {
   try {
     const {
       table_id,
@@ -62,24 +64,26 @@ router.post("/", auth, async (req, res) => {
       fromTime.getTime() + (duration_minutes || 60) * 60000
     );
 
-    // Check if table exists
-    const table = await TableAsset.findByPk(table_id);
+    // Check if table exists and belongs to this station
+    const tableWhere = addStationFilter({ id: table_id }, req.stationId);
+    const table = await TableAsset.findOne({ where: tableWhere });
     if (!table) {
       return res.status(404).json({ error: "Table not found" });
     }
 
-    // Check for conflicting reservations
-    const conflictingReservation = await Reservation.findOne({
-      where: {
-        tableId: table_id,
-        status: ["pending", "active"],
-        fromTime: {
-          [require("sequelize").Op.lt]: toTime,
-        },
-        toTime: {
-          [require("sequelize").Op.gt]: fromTime,
-        },
+    // Check for conflicting reservations within same station
+    const conflictWhere = addStationFilter({
+      tableId: table_id,
+      status: ["pending", "active"],
+      fromTime: {
+        [require("sequelize").Op.lt]: toTime,
       },
+      toTime: {
+        [require("sequelize").Op.gt]: fromTime,
+      },
+    }, req.stationId);
+    const conflictingReservation = await Reservation.findOne({
+      where: conflictWhere,
     });
 
     if (conflictingReservation) {
@@ -90,7 +94,7 @@ router.post("/", auth, async (req, res) => {
 
     // Create reservation with error handling for missing columns
     try {
-      const reservation = await Reservation.create({
+      const reservationData = addStationToData({
         userId: req.user.id,
         tableId: table_id,
         customerName: customer_name,
@@ -99,7 +103,8 @@ router.post("/", auth, async (req, res) => {
         toTime,
         status: "pending",
         notes: notes || "",
-      });
+      }, req.stationId);
+      const reservation = await Reservation.create(reservationData);
 
       res.status(201).json({
         success: true,
@@ -117,7 +122,7 @@ router.post("/", auth, async (req, res) => {
           "Customer columns not found, creating reservation without customer fields..."
         );
 
-        const basicReservation = await Reservation.create({
+        const basicReservationData = addStationToData({
           userId: req.user.id,
           tableId: table_id,
           fromTime,
@@ -126,7 +131,8 @@ router.post("/", auth, async (req, res) => {
           notes: notes
             ? `${notes} | Customer: ${customer_name} | Phone: ${customer_phone}`
             : `Customer: ${customer_name} | Phone: ${customer_phone}`,
-        });
+        }, req.stationId);
+        const basicReservation = await Reservation.create(basicReservationData);
 
         res.status(201).json({
           success: true,
@@ -145,10 +151,11 @@ router.post("/", auth, async (req, res) => {
 });
 
 // get reservations for a user
-router.get("/user/:id", auth, async (req, res) => {
+router.get("/user/:id", auth, stationContext, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const list = await Reservation.findAll({ where: { user_id: id } });
+    const where = addStationFilter({ user_id: id }, req.stationId);
+    const list = await Reservation.findAll({ where });
     res.json(list);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -156,13 +163,15 @@ router.get("/user/:id", auth, async (req, res) => {
 });
 
 // auto assign available table (simple first-free)
-router.post("/autoassign", auth, async (req, res) => {
+router.post("/autoassign", auth, stationContext, async (req, res) => {
   try {
     const { reservationId } = req.body;
-    const r = await Reservation.findByPk(reservationId);
+    const rWhere = addStationFilter({ id: reservationId }, req.stationId);
+    const r = await Reservation.findOne({ where: rWhere });
     if (!r) return res.status(404).json({ error: "Reservation not found" });
-    // find an available table
-    const t = await TableAsset.findOne({ where: { status: "available" } });
+    // find an available table within same station
+    const tableWhere = addStationFilter({ status: "available" }, req.stationId);
+    const t = await TableAsset.findOne({ where: tableWhere });
     if (!t) return res.status(400).json({ error: "No available table" });
     await r.update({ table_id: t.table_id, status: "assigned" });
     await t.update({ status: "occupied" });
@@ -173,10 +182,11 @@ router.post("/autoassign", auth, async (req, res) => {
 });
 
 // cancel reservation
-router.post("/:id/cancel", auth, async (req, res) => {
+router.post("/:id/cancel", auth, stationContext, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const r = await Reservation.findByPk(id);
+    const where = addStationFilter({ id }, req.stationId);
+    const r = await Reservation.findOne({ where });
     if (!r) return res.status(404).json({ error: "Not found" });
     await r.update({ status: "cancelled" });
     res.json({ success: true });

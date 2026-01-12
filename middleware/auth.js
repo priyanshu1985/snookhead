@@ -4,11 +4,22 @@ require("dotenv").config();
 
 const auth = (req, res, next) => {
   const header = req.headers["authorization"];
-  if (!header) return res.status(401).json({ error: "No token provided" });
+  if (!header) {
+    return res.status(401).json({
+      error: "No token provided",
+      code: "TOKEN_MISSING",
+      message: "Please provide an access token.",
+    });
+  }
 
   const parts = header.split(" ");
-  if (parts.length !== 2)
-    return res.status(401).json({ error: "Invalid token format" });
+  if (parts.length !== 2) {
+    return res.status(401).json({
+      error: "Invalid token format",
+      code: "TOKEN_INVALID",
+      message: "Token format should be: Bearer <token>",
+    });
+  }
 
   const token = parts[1];
   try {
@@ -23,7 +34,12 @@ const auth = (req, res, next) => {
         message: "Access token has expired. Please refresh your token.",
       });
     }
-    return res.status(401).json({ error: "Invalid token" });
+    // For any other JWT error (invalid signature, malformed, etc.)
+    return res.status(401).json({
+      error: "Invalid token",
+      code: "TOKEN_INVALID",
+      message: "The provided token is invalid. Please refresh your token.",
+    });
   }
 };
 

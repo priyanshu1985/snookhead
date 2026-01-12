@@ -2,11 +2,12 @@ const express = require("express");
 const router = express.Router();
 const { Order, OrderItem, MenuItem } = require("../models");
 const { auth, authorize } = require("../middleware/auth");
+const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
 
 // --------------------------------------------------
 // CREATE NEW ORDER (with cart items from menu)
 // --------------------------------------------------
-router.post("/", auth, async (req, res) => {
+router.post("/", auth, stationContext, requireStation, async (req, res) => {
   try {
     const {
       personName,
@@ -33,8 +34,8 @@ router.post("/", auth, async (req, res) => {
       });
     }
 
-    // Create order
-    const order = await Order.create({
+    // Create order with station_id for multi-tenancy
+    const orderData = addStationToData({
       userId: req.user.id, // from auth token
       personName,
       orderTotal: Number(orderTotal) || 0,
@@ -52,7 +53,9 @@ router.post("/", auth, async (req, res) => {
       session_id: session_id ? parseInt(session_id) : null,
       table_id: table_id ? parseInt(table_id) : null,
       orderDate: new Date(),
-    });
+    }, req.stationId);
+
+    const order = await Order.create(orderData);
 
     // Create OrderItems for each item in cart
     let calculatedTotal = 0;
@@ -60,8 +63,9 @@ router.post("/", auth, async (req, res) => {
     for (const cartItem of cart) {
       const { item, qty } = cartItem;
 
-      // Find menu item in database to verify it exists and get current price
-      const menuItem = await MenuItem.findByPk(item.id);
+      // Find menu item in database with station filter
+      const menuWhere = addStationFilter({ id: item.id }, req.stationId);
+      const menuItem = await MenuItem.findOne({ where: menuWhere });
       if (!menuItem) {
         return res.status(404).json({
           error: `Menu item ${item.name} not found`,
@@ -112,7 +116,7 @@ router.post("/", auth, async (req, res) => {
 // --------------------------------------------------
 // GET ALL ORDERS (for all authenticated users)
 // --------------------------------------------------
-router.get("/", auth, async (req, res) => {
+router.get("/", auth, stationContext, async (req, res) => {
   try {
     const {
       page = 1,
@@ -123,11 +127,14 @@ router.get("/", auth, async (req, res) => {
       table_id,
     } = req.query;
 
-    const where = {};
+    let where = {};
     if (status) where.status = status;
     if (source && source !== "all") where.order_source = source;
     if (session_id) where.session_id = parseInt(session_id);
     if (table_id) where.table_id = parseInt(table_id);
+
+    // Apply station filter for multi-tenancy
+    where = addStationFilter(where, req.stationId);
 
     const orders = await Order.findAll({
       where,
@@ -155,12 +162,15 @@ router.get("/", auth, async (req, res) => {
 // --------------------------------------------------
 // GET ORDERS BY SESSION ID (for billing consolidation)
 // --------------------------------------------------
-router.get("/by-session/:sessionId", auth, async (req, res) => {
+router.get("/by-session/:sessionId", auth, stationContext, async (req, res) => {
   try {
     const { sessionId } = req.params;
 
+    // Apply station filter
+    const where = addStationFilter({ session_id: parseInt(sessionId) }, req.stationId);
+
     const orders = await Order.findAll({
-      where: { session_id: parseInt(sessionId) },
+      where,
       include: [
         {
           model: OrderItem,
@@ -218,9 +228,13 @@ router.get("/by-session/:sessionId", auth, async (req, res) => {
 // --------------------------------------------------
 // GET ORDER BY ID (with items)
 // --------------------------------------------------
-router.get("/:id", auth, async (req, res) => {
+router.get("/:id", auth, stationContext, async (req, res) => {
   try {
-    const order = await Order.findByPk(req.params.id, {
+    // Apply station filter
+    const where = addStationFilter({ id: req.params.id }, req.stationId);
+
+    const order = await Order.findOne({
+      where,
       include: [
         {
           model: OrderItem,
@@ -242,11 +256,13 @@ router.get("/:id", auth, async (req, res) => {
 // --------------------------------------------------
 // ADD ITEMS TO EXISTING ORDER
 // --------------------------------------------------
-router.post("/:orderId/items", auth, async (req, res) => {
+router.post("/:orderId/items", auth, stationContext, async (req, res) => {
   try {
     const { items } = req.body; // [{id, name, price, qty}]
 
-    const order = await Order.findByPk(req.params.orderId);
+    // Find order with station filter
+    const where = addStationFilter({ id: req.params.orderId }, req.stationId);
+    const order = await Order.findOne({ where });
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
     }
@@ -254,7 +270,9 @@ router.post("/:orderId/items", auth, async (req, res) => {
     let addedTotal = 0;
 
     for (const cartItem of items || []) {
-      const menuItem = await MenuItem.findByPk(cartItem.id);
+      // Find menu item with station filter
+      const menuWhere = addStationFilter({ id: cartItem.id }, req.stationId);
+      const menuItem = await MenuItem.findOne({ where: menuWhere });
       if (!menuItem) continue;
 
       const priceEach = Number(menuItem.price) || 0;
@@ -292,7 +310,7 @@ router.post("/:orderId/items", auth, async (req, res) => {
 // --------------------------------------------------
 // UPDATE ORDER STATUS (for all authenticated users)
 // --------------------------------------------------
-router.patch("/:id/status", auth, async (req, res) => {
+router.patch("/:id/status", auth, stationContext, async (req, res) => {
   try {
     const { status } = req.body;
 
@@ -300,7 +318,9 @@ router.patch("/:id/status", auth, async (req, res) => {
       return res.status(400).json({ error: "Invalid status" });
     }
 
-    const order = await Order.findByPk(req.params.id);
+    // Find order with station filter
+    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const order = await Order.findOne({ where });
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
     }
@@ -320,9 +340,11 @@ router.patch("/:id/status", auth, async (req, res) => {
 // --------------------------------------------------
 // DELETE ORDER
 // --------------------------------------------------
-router.delete("/:id", auth, authorize("admin"), async (req, res) => {
+router.delete("/:id", auth, stationContext, authorize("admin", "owner"), async (req, res) => {
   try {
-    const order = await Order.findByPk(req.params.id);
+    // Find order with station filter
+    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const order = await Order.findOne({ where });
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
     }

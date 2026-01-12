@@ -3,6 +3,14 @@ module.exports = (sequelize, DataTypes) => {
     "TableAsset",
     {
       id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+      station_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: "stations",
+          key: "id",
+        },
+      },
       name: { type: DataTypes.STRING(50), allowNull: false },
       dimension: { type: DataTypes.STRING(32) },
       onboardDate: { type: DataTypes.DATEONLY },

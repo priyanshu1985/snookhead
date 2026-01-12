@@ -103,8 +103,11 @@ function startAt(port) {
       try {
         await sequelize.authenticate();
         logStartup.success("Database connected");
-        await sequelize.sync();
-        logStartup.success("Models synchronized");
+        // Note: Database sync disabled - schema managed via SQL migrations
+        // This prevents "Too many keys" error on users table (MySQL 64 key limit)
+        // await sequelize.sync();
+        logStartup.success("Database ready");
+        await createAdmin();
       } catch (e) {
         logStartup.error(`Database failed: ${e.message}`);
         process.exit(1);
@@ -128,7 +131,4 @@ function startAt(port) {
 }
 
 // Initialize
-(async () => {
-  await createAdmin();
-  startAt(preferred);
-})();
+startAt(preferred);

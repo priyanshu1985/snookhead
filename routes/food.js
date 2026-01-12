@@ -2,25 +2,39 @@ const express = require('express');
 const router = express.Router();
 const { FoodItem } = require('../models');
 const { auth, authorize } = require('../middleware/auth');
+const { stationContext, requireStation, addStationFilter, addStationToData } = require('../middleware/stationContext');
 
-router.get('/', async (req, res) => {
-  const list = await FoodItem.findAll();
-  res.json(list);
+// Get all food items - filtered by station
+router.get('/', auth, stationContext, async (req, res) => {
+  try {
+    const where = addStationFilter({}, req.stationId);
+    const list = await FoodItem.findAll({ where });
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-router.post('/', auth, authorize('owner','admin'), async (req, res) => {
+// Create food item - with station_id
+router.post('/', auth, stationContext, requireStation, authorize('owner','admin'), async (req, res) => {
   try {
     const { name, image_url, price } = req.body;
-    const created = await FoodItem.create({ name, image_url, price });
+    const foodData = addStationToData({ name, image_url, price }, req.stationId);
+    const created = await FoodItem.create(foodData);
     res.status(201).json(created);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.delete('/:id', auth, authorize('owner','admin'), async (req, res) => {
+// Delete food item - filtered by station
+router.delete('/:id', auth, stationContext, authorize('owner','admin'), async (req, res) => {
   try {
-    await FoodItem.destroy({ where: { id: req.params.id } });
+    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const deleted = await FoodItem.destroy({ where });
+    if (deleted === 0) {
+      return res.status(404).json({ error: 'Food item not found' });
+    }
     res.json({ message: 'Deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });
