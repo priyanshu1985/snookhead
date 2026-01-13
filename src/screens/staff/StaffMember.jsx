@@ -167,11 +167,21 @@ const StaffMember = () => {
         text: 'Logout',
         style: 'destructive',
         onPress: async () => {
-          await logout();
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'LoginScreen' }],
-          });
+          try {
+            console.log('Staff logout started...');
+            await logout();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'LoginScreen' }],
+            });
+          } catch (error) {
+            console.error('Staff logout error:', error);
+            // Still navigate even if logout had issues
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'LoginScreen' }],
+            });
+          }
         },
       },
     ]);

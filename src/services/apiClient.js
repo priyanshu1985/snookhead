@@ -122,11 +122,15 @@ class ApiClient {
       // Make the request
       const response = await fetch(`${this.baseURL}${url}`, requestOptions);
 
-      // If token expired, try to refresh and retry
+      // If 401 error, try to refresh token and retry the request
+      // This handles TOKEN_EXPIRED, TOKEN_INVALID, and TOKEN_MISSING
       if (response.status === 401) {
-        const errorData = await response.json();
+        const errorData = await response.clone().json();
 
-        if (errorData.code === 'TOKEN_EXPIRED') {
+        // Try to refresh for any 401 error that's token-related
+        // Only skip refresh if we don't have a refresh token at all
+        const { refreshToken } = await this.getTokens();
+        if (refreshToken && (errorData.code === 'TOKEN_EXPIRED' || errorData.code === 'TOKEN_INVALID' || errorData.code === 'TOKEN_MISSING')) {
           return this.handleTokenExpiredRequest(url, options);
         }
       }
@@ -173,8 +177,11 @@ class ApiClient {
     } catch (error) {
       this.processQueue(error, null);
 
-      // If refresh fails, redirect to login
-      this.handleAuthFailure();
+      // Only trigger auth failure if refresh token is invalid (not for network errors)
+      // The refreshAccessToken already clears tokens on invalid refresh token
+      if (error.message.includes('Invalid') || error.message.includes('No refresh token')) {
+        this.handleAuthFailure();
+      }
       throw error;
     } finally {
       this.isRefreshing = false;

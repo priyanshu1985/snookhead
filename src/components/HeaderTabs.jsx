@@ -13,28 +13,27 @@ export default function HeaderTabs({ tabs, activeTab, onTabPress }) {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { flexDirection: 'row' }]}
         style={styles.container}
+        decelerationRate="fast"
+        snapToAlignment="start"
       >
         {tabs.map((tab, index) => (
           <TouchableOpacity
             key={index}
             onPress={() => onTabPress(index)}
             activeOpacity={0.7}
-            style={[
-              styles.tab,
-              activeTab === index && styles.activeTab,
-            ]}
+            style={[styles.tab, activeTab === index && styles.activeTab]}
           >
             <Text
               style={[
                 styles.tabText,
                 activeTab === index && styles.activeTabText,
               ]}
+              numberOfLines={1}
             >
               {tab}
             </Text>
-            {activeTab === index && <View style={styles.activeIndicator} />}
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -53,36 +52,35 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 0,
+    paddingTop: 12,
+    paddingBottom: 12,
+    gap: 8,
   },
   tab: {
-    marginRight: 28,
-    paddingBottom: 14,
-    position: 'relative',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'transparent',
+    minWidth: 60,
   },
   activeTab: {
-    // Active state handled by indicator
-  },
-  activeIndicator: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 3,
     backgroundColor: '#FF8C42',
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
   },
   tabText: {
-    fontSize: 15,
-    color: '#999999',
+    fontSize: 13,
+    color: '#666666',
     fontWeight: '500',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
+    textAlign: 'center',
   },
   activeTabText: {
-    color: '#1A1A1A',
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   bottomBorder: {
     height: 1,

@@ -28,18 +28,18 @@ export default function Header({ navigation }) {
       </View>
       {/* Right side icons */}
       <View style={styles.rightIcons}>
-        {/* Notification Bell */}
-        <TouchableOpacity
+        {/* Notification Bell - REMOVED */}
+        {/* <TouchableOpacity
           style={styles.iconButton}
           activeOpacity={0.7}
           onPress={() => navigation.navigate('Notifications')}
         >
           <View style={styles.iconWrapper}>
-            <Icon name="notifications-outline" size={22} color="#FF8C42" />
+            <Icon name="notifications-outline" size={22} color="#F08626" />
             {/* Notification badge */}
-            <View style={styles.notificationBadge} />
+        {/* <View style={styles.notificationBadge} />
           </View>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
         {/* Menu Button */}
         <TouchableOpacity

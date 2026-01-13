@@ -40,21 +40,31 @@ export const AuthProvider = ({ children }) => {
         AsyncStorage.getItem('userData'),
       ]);
 
-      if (authToken && userData) {
+      // User is considered logged in if they have a refresh token (not just access token)
+      // This is because access tokens expire quickly but refresh tokens keep them logged in
+      if (refreshToken && userData) {
         const parsedUser = JSON.parse(userData);
         setUser(parsedUser);
         setIsAuthenticated(true);
 
-        // Validate token by making a test request
+        // Try to validate/refresh the session silently
+        // If access token is expired, apiClient will auto-refresh using the refresh token
         try {
           const userInfo = await apiClient.get('/api/auth/me');
           if (userInfo.success) {
             setUser(userInfo.user);
+            await AsyncStorage.setItem('userData', JSON.stringify(userInfo.user));
           }
         } catch (error) {
-          console.log('Token validation failed, user may need to re-login');
-          // Don't immediately logout - let the interceptor handle it
+          console.log('Token validation failed:', error.message);
+          // Only logout if refresh token is also invalid (handled by apiClient)
+          // The apiClient will call handleAuthFailure if refresh fails
         }
+      } else if (authToken && userData && !refreshToken) {
+        // Edge case: has access token but no refresh token - still try to use it
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        setIsAuthenticated(true);
       }
     } catch (error) {
       console.error('Error checking auth state:', error);
@@ -104,6 +114,11 @@ export const AuthProvider = ({ children }) => {
 
       if (!response.ok) {
         const errorData = await response.json();
+        // Only logout if refresh token is explicitly invalid/revoked
+        if (errorData.code === 'INVALID_REFRESH_TOKEN' || errorData.code === 'USER_NOT_FOUND') {
+          console.log('Refresh token is invalid, logging out');
+          await logout(false); // Don't call backend, token is already invalid
+        }
         throw new Error(errorData.error || 'Token refresh failed');
       }
 
@@ -131,8 +146,8 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Token refresh failed:', error);
-      // Auto-logout on refresh failure
-      await logout();
+      // Don't auto-logout here - only logout if refresh token is invalid (handled above)
+      // This prevents logout on temporary network errors
       throw error;
     } finally {
       setTokenRefreshing(false);
@@ -140,7 +155,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async (callBackend = true) => {
+    console.log('Logout started...');
+
     try {
+      // Immediately reset auth state for better UX
+      setUser(null);
+      setIsAuthenticated(false);
+
       if (callBackend) {
         // Get current tokens for backend logout
         const [authToken, refreshToken] = await Promise.all([
@@ -148,9 +169,12 @@ export const AuthProvider = ({ children }) => {
           AsyncStorage.getItem('refreshToken'),
         ]);
 
-        // Call backend logout endpoint to invalidate tokens
+        // Call backend logout endpoint with timeout - don't wait too long
         if (refreshToken) {
           try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+
             await fetch(`${API_URL}/api/auth/logout`, {
               method: 'POST',
               headers: {
@@ -159,13 +183,17 @@ export const AuthProvider = ({ children }) => {
               },
               body: JSON.stringify({ refreshToken }),
               credentials: 'include',
+              signal: controller.signal,
             });
+
+            clearTimeout(timeoutId);
             console.log('Backend logout successful');
           } catch (backendError) {
             console.warn(
-              'Backend logout failed, continuing with local logout:',
-              backendError,
+              'Backend logout failed or timed out, continuing with local logout:',
+              backendError.message || backendError,
             );
+            // Don't throw - continue with local logout
           }
         }
       }
@@ -177,10 +205,6 @@ export const AuthProvider = ({ children }) => {
         'refreshToken',
         'userRole',
       ]);
-
-      // Reset auth state
-      setUser(null);
-      setIsAuthenticated(false);
 
       console.log('Logout completed successfully');
     } catch (error) {
@@ -211,6 +235,16 @@ export const AuthProvider = ({ children }) => {
     return user?.role === 'customer';
   };
 
+  // Get current station ID for multi-tenancy
+  const getStationId = () => {
+    return user?.station_id || null;
+  };
+
+  // Check if user has a station assigned
+  const hasStation = () => {
+    return !!user?.station_id;
+  };
+
   // Handle authentication failure (called by apiClient)
   const handleAuthFailure = async () => {
     console.log('Authentication failed, logging out user');
@@ -227,6 +261,8 @@ export const AuthProvider = ({ children }) => {
     refreshAccessToken,
     handleAuthFailure,
     getUserRole,
+    getStationId,
+    hasStation,
     isAdmin,
     isStaff,
     isOwner,

@@ -33,24 +33,66 @@ export default function ScannerScreen({ navigation, route }) {
   const requestCameraPermission = async () => {
     try {
       if (Platform.OS === 'android') {
-        const granted = await PermissionsAndroid.request(
+        // Check if we should show permission rationale
+        const shouldShowRationale = await PermissionsAndroid.check(
           PermissionsAndroid.PERMISSIONS.CAMERA,
-          {
-            title: 'Camera Permission',
-            message: 'This app needs camera permission to scan QR codes',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          },
         );
 
-        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-          setHasPermission(true);
+        if (!shouldShowRationale) {
+          // Show explanation before requesting permission
+          Alert.alert(
+            'Camera Access Needed',
+            'This app needs camera permission to scan QR codes for payments and customer wallets. This makes transactions faster and more secure.',
+            [
+              {
+                text: 'Cancel',
+                style: 'cancel',
+                onPress: () => setHasPermission(false),
+              },
+              {
+                text: 'Allow Camera',
+                onPress: () => requestPermissionAndroid(),
+              },
+            ],
+          );
         } else {
-          setHasPermission(false);
+          await requestPermissionAndroid();
         }
       } else {
         setHasPermission(true);
+      }
+    } catch (err) {
+      console.warn(err);
+      setHasPermission(false);
+    }
+  };
+
+  const requestPermissionAndroid = async () => {
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        {
+          title: 'Camera Permission Required',
+          message: 'Allow SNOKEHEAD to access your camera to scan QR codes',
+          buttonNeutral: 'Ask Me Later',
+          buttonNegative: 'Deny',
+          buttonPositive: 'Allow',
+        },
+      );
+
+      if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+        setHasPermission(true);
+      } else {
+        setHasPermission(false);
+        // Show manual entry as alternative
+        Alert.alert(
+          'Camera Access Denied',
+          'No worries! You can still use Manual Entry to input QR code data.',
+          [
+            { text: 'OK' },
+            { text: 'Manual Entry', onPress: () => setShowManualEntry(true) },
+          ],
+        );
       }
     } catch (err) {
       console.warn(err);
@@ -153,6 +195,26 @@ export default function ScannerScreen({ navigation, route }) {
       const result = await response.json();
 
       if (response.ok && result.wallet && result.customer) {
+        // Check if customer is active
+        if (!result.customer.is_active) {
+          Alert.alert(
+            'Wallet Deactivated',
+            'Owner has deactivated your wallet. Please contact the owner to activate your account.',
+            [
+              {
+                text: 'Try Another QR',
+                onPress: () => setShowManualEntry(true),
+              },
+              {
+                text: 'Cancel',
+                onPress: () => navigation.goBack(),
+                style: 'cancel',
+              },
+            ],
+          );
+          return;
+        }
+
         // Check if this is a payment request from bill screen
         if (isPaymentMode && paymentContext) {
           const billAmount = parseFloat(paymentContext.amount);
@@ -410,7 +472,7 @@ export default function ScannerScreen({ navigation, route }) {
       <View style={styles.content}>
         {/* Scanner Icon */}
         <View style={styles.iconContainer}>
-          <Icon name="qr-code" size={100} color="#1a237e" />
+          <Icon name="qr-code" size={100} color="#FF8C42" />
         </View>
 
         {/* Title and Description */}
@@ -459,7 +521,7 @@ export default function ScannerScreen({ navigation, route }) {
           style={styles.manualButton}
           onPress={() => setShowManualEntry(true)}
         >
-          <Icon name="create" size={24} color="#1a237e" />
+          <Icon name="create" size={24} color="#FF8C42" />
           <Text style={styles.manualButtonText}>Manual Entry</Text>
         </TouchableOpacity>
 
@@ -479,7 +541,7 @@ export default function ScannerScreen({ navigation, route }) {
             style={styles.permissionButton}
             onPress={requestCameraPermission}
           >
-            <Icon name="settings" size={20} color="#666" />
+            <Icon name="settings" size={20} color="#FF8C42" />
             <Text style={styles.permissionButtonText}>
               Grant Camera Permission
             </Text>
@@ -555,7 +617,7 @@ export default function ScannerScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F8F9FA',
   },
   content: {
     flex: 1,
@@ -576,20 +638,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   iconContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFF8F5',
     padding: 30,
     borderRadius: 50,
     marginBottom: 30,
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: '#FF8C42',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 8,
+    borderWidth: 2,
+    borderColor: '#FFE0CC',
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#1a237e',
+    color: '#1A1A1A',
     marginBottom: 10,
     textAlign: 'center',
   },
@@ -632,16 +696,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fff',
     borderWidth: 2,
-    borderColor: '#1a237e',
+    borderColor: '#FF8C42',
     paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 25,
     marginBottom: 20,
     minWidth: 200,
     justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   manualButtonText: {
-    color: '#1a237e',
+    color: '#FF8C42',
     fontSize: 18,
     fontWeight: 'bold',
     marginLeft: 10,
@@ -649,15 +718,18 @@ const styles = StyleSheet.create({
   permissionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#FFF8F5',
+    borderWidth: 1,
+    borderColor: '#FFE0CC',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 20,
     marginTop: 10,
   },
   permissionButtonText: {
-    color: '#666',
+    color: '#FF8C42',
     fontSize: 16,
+    fontWeight: '600',
     marginLeft: 8,
   },
   // Scanning screen styles
@@ -751,7 +823,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#1a237e',
+    color: '#1A1A1A',
   },
   closeButton: {
     padding: 5,
@@ -808,7 +880,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#1a237e',
+    borderColor: '#FF8C42',
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 8,
@@ -816,7 +888,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   testDataButtonText: {
-    color: '#1a237e',
+    color: '#FF8C42',
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 5,

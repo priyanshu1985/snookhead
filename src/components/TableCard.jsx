@@ -5,7 +5,25 @@ import Icon from 'react-native-vector-icons/Ionicons';
 export default function TableCard({ table, color, gameImageUrl, onPress }) {
   const [currentTime, setCurrentTime] = React.useState(Date.now());
   const isOccupied = table.status === 'occupied' || table.status === 'reserved';
-  const priceText = table.price || `₹${table.pricePerHour || 200}/hr`;
+
+  // Format price to remove unnecessary decimals and extract currency/unit parts
+  const formatPrice = () => {
+    let rawPrice = table.pricePerMin || table.price_per_min || 200;
+
+    // If it's already a formatted string like "₹200/hr", parse it
+    if (typeof table.price === 'string' && table.price.includes('₹')) {
+      const match = table.price.match(/₹([0-9.]+)/);
+      if (match) {
+        rawPrice = parseFloat(match[1]);
+      }
+    }
+
+    // Format the number - always remove decimals for clean display
+    const formattedPrice = Math.floor(rawPrice).toString();
+    return `₹${formattedPrice}`;
+  };
+
+  const priceText = formatPrice();
 
   // Update timer every second for occupied tables
   React.useEffect(() => {
@@ -36,17 +54,14 @@ export default function TableCard({ table, color, gameImageUrl, onPress }) {
 
       const hours = Math.floor(remaining / 3600);
       const minutes = Math.floor((remaining % 3600) / 60);
-      const seconds = remaining % 60;
 
       let text;
       if (hours > 0) {
-        text = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds
-          .toString()
-          .padStart(2, '0')}`;
+        text = `${hours}h ${minutes}m left`;
+      } else if (minutes > 0) {
+        text = `${minutes}m left`;
       } else {
-        text = `${minutes.toString().padStart(2, '0')}:${seconds
-          .toString()
-          .padStart(2, '0')}`;
+        text = `<1m left`;
       }
 
       return {
@@ -72,17 +87,14 @@ export default function TableCard({ table, color, gameImageUrl, onPress }) {
 
       const hours = Math.floor(remaining / 3600);
       const minutes = Math.floor((remaining % 3600) / 60);
-      const seconds = remaining % 60;
 
       let text;
       if (hours > 0) {
-        text = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds
-          .toString()
-          .padStart(2, '0')}`;
+        text = `${hours}h ${minutes}m left`;
+      } else if (minutes > 0) {
+        text = `${minutes}m left`;
       } else {
-        text = `${minutes.toString().padStart(2, '0')}:${seconds
-          .toString()
-          .padStart(2, '0')}`;
+        text = `<1m left`;
       }
 
       return {
@@ -96,10 +108,20 @@ export default function TableCard({ table, color, gameImageUrl, onPress }) {
       const elapsed = Math.floor(
         (currentTime - new Date(table.startTime).getTime()) / 1000,
       );
-      const minutes = Math.floor(elapsed / 60);
-      const seconds = elapsed % 60;
+      const hours = Math.floor(elapsed / 3600);
+      const minutes = Math.floor((elapsed % 3600) / 60);
+
+      let text;
+      if (hours > 0) {
+        text = `${hours}h ${minutes}m`;
+      } else if (minutes > 0) {
+        text = `${minutes}m`;
+      } else {
+        text = `<1m`;
+      }
+
       return {
-        text: `${minutes}:${seconds.toString().padStart(2, '0')}`,
+        text,
         isExpired: false,
         isWarning: false,
         isElapsed: true,
@@ -107,7 +129,7 @@ export default function TableCard({ table, color, gameImageUrl, onPress }) {
       };
     }
 
-    return { text: '0:00', isExpired: false, isWarning: false, seconds: 0 };
+    return { text: '0m', isExpired: false, isWarning: false, seconds: 0 };
   };
 
   const timerInfo = getRemainingTime();
@@ -201,12 +223,12 @@ export default function TableCard({ table, color, gameImageUrl, onPress }) {
                   ? 'time-outline'
                   : 'hourglass-outline'
               }
-              size={14}
+              size={12}
               color="#FFFFFF"
               style={styles.overlayIcon}
             />
             <Text style={styles.overlayText}>
-              {timerInfo.isElapsed ? '+' : ''}
+              {timerInfo.isElapsed ? ' ' : ''}
               {timerInfo.text}
             </Text>
           </View>
@@ -226,7 +248,7 @@ export default function TableCard({ table, color, gameImageUrl, onPress }) {
         <View style={styles.infoRow}>
           <Text style={styles.tableName}>{table.name}</Text>
           <View style={styles.priceContainer}>
-            <Text style={styles.priceText}>{priceText.split('/')[0]}</Text>
+            <Text style={styles.priceText}>{priceText}</Text>
             <Text style={styles.priceUnit}>/hr</Text>
           </View>
         </View>
@@ -251,9 +273,9 @@ const styles = StyleSheet.create({
   card: {
     width: '48%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 10,
     padding: 10,
-    marginBottom: 14,
+    marginBottom: 18,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -320,12 +342,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     left: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
     backgroundColor: 'rgba(255, 140, 66, 0.95)',
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 3,
   },
   overlayWarning: {
     backgroundColor: 'rgba(255, 87, 34, 0.95)',
@@ -348,14 +371,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFCDD2',
   },
   overlayIcon: {
-    marginLeft: 10,
-    marginRight: 4,
+    marginRight: 0,
   },
   overlayText: {
-    fontSize: 13,
+    fontSize: 10,
     color: '#FFFFFF',
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
 
   availableBadge: {
@@ -387,26 +409,29 @@ const styles = StyleSheet.create({
   },
 
   tableName: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '900',
     color: '#1A1A1A',
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
 
   priceContainer: {
     flexDirection: 'row',
     alignItems: 'baseline',
+    alignSelf: 'flex-end',
   },
   priceText: {
     fontSize: 14,
     fontWeight: '700',
     color: '#FF8C42',
+    lineHeight: 14,
   },
   priceUnit: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '500',
     color: '#FFB27A',
     marginLeft: 1,
+    lineHeight: 14,
   },
 
   actionHint: {

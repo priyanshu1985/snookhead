@@ -10,7 +10,9 @@ import {
   TextInput,
   Alert,
   ScrollView,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
@@ -230,222 +232,232 @@ const Members = ({ navigation }) => {
   );
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.navigate('MainTabs', { screen: 'Home' })}
-        >
-          <Icon name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Members</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.searchButton} onPress={toggleSearch}>
-            <Icon name="search" size={20} color="#666" />
-          </TouchableOpacity>
+    <SafeAreaView style={styles.safeContainer} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
           <TouchableOpacity
-            style={styles.addBtn}
-            onPress={() => setShowAddModal(true)}
+            style={styles.backButton}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Home' })}
           >
-            <Text style={styles.addBtnText}>+ Add</Text>
+            <Icon name="arrow-back" size={24} color="#333" />
           </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Search Input */}
-      {showSearch && (
-        <View style={styles.searchContainer}>
-          <Icon
-            name="search"
-            size={16}
-            color="#999"
-            style={styles.searchIcon}
-          />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search members by name..."
-            placeholderTextColor="#999"
-            value={searchQuery}
-            onChangeText={handleSearch}
-            autoCapitalize="none"
-          />
-          {searchQuery.length > 0 && (
+          <Text style={styles.title}>Members</Text>
+          <View style={styles.headerActions}>
             <TouchableOpacity
-              onPress={() => {
-                setSearchQuery('');
-                setFilteredMembers(members);
-              }}
-              style={styles.clearButton}
+              style={styles.searchButton}
+              onPress={toggleSearch}
             >
-              <Icon name="close-circle" size={16} color="#999" />
+              <Icon name="search" size={20} color="#666" />
             </TouchableOpacity>
-          )}
-        </View>
-      )}
-
-      {/* Content */}
-      {loading ? (
-        <ActivityIndicator size="large" color="#ff8c1a" />
-      ) : (
-        <FlatList
-          data={filteredMembers}
-          keyExtractor={item => item.id.toString()}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 20 }}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Icon name="people-outline" size={48} color="#ccc" />
-              <Text style={styles.emptyText}>
-                {searchQuery
-                  ? 'No members found matching your search'
-                  : 'No members found'}
-              </Text>
-              {searchQuery && (
-                <TouchableOpacity
-                  style={styles.clearSearchButton}
-                  onPress={() => {
-                    setSearchQuery('');
-                    setFilteredMembers(members);
-                  }}
-                >
-                  <Text style={styles.clearSearchText}>Clear Search</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          }
-        />
-      )}
-
-      {/* Add Member Modal */}
-      <Modal
-        visible={showAddModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowAddModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add New Member</Text>
-              <TouchableOpacity
-                onPress={() => setShowAddModal(false)}
-                style={styles.closeButton}
-              >
-                <Icon name="close" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.formContainer}>
-              {/* Name Field - Required */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Name *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.name}
-                  onChangeText={text =>
-                    setFormData(prev => ({ ...prev, name: text }))
-                  }
-                  placeholder="Enter member name"
-                  placeholderTextColor="#999"
-                />
-              </View>
-
-              {/* Phone Field - Required */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Phone *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.phone}
-                  onChangeText={text =>
-                    setFormData(prev => ({ ...prev, phone: text }))
-                  }
-                  placeholder="Enter phone number"
-                  placeholderTextColor="#999"
-                  keyboardType="phone-pad"
-                />
-              </View>
-
-              {/* Email Field - Optional */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.email}
-                  onChangeText={text =>
-                    setFormData(prev => ({ ...prev, email: text }))
-                  }
-                  placeholder="Enter email address"
-                  placeholderTextColor="#999"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-              </View>
-
-              {/* Address Field - Optional */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Address</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  value={formData.address}
-                  onChangeText={text =>
-                    setFormData(prev => ({ ...prev, address: text }))
-                  }
-                  placeholder="Enter address"
-                  placeholderTextColor="#999"
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              {/* External ID Field - Optional */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Member ID (Optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.external_id}
-                  onChangeText={text =>
-                    setFormData(prev => ({ ...prev, external_id: text }))
-                  }
-                  placeholder="Enter external member ID"
-                  placeholderTextColor="#999"
-                />
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowAddModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  addingMember && styles.disabledButton,
-                ]}
-                onPress={handleAddMember}
-                disabled={addingMember}
-              >
-                {addingMember ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.submitButtonText}>Add Member</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() => setShowAddModal(true)}
+            >
+              <Text style={styles.addBtnText}>+ Add</Text>
+            </TouchableOpacity>
           </View>
         </View>
-      </Modal>
-    </View>
+
+        {/* Search Input */}
+        {showSearch && (
+          <View style={styles.searchContainer}>
+            <Icon
+              name="search"
+              size={16}
+              color="#999"
+              style={styles.searchIcon}
+            />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search members by name..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={handleSearch}
+              autoCapitalize="none"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => {
+                  setSearchQuery('');
+                  setFilteredMembers(members);
+                }}
+                style={styles.clearButton}
+              >
+                <Icon name="close-circle" size={16} color="#999" />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* Content */}
+        {loading ? (
+          <ActivityIndicator size="large" color="#ff8c1a" />
+        ) : (
+          <FlatList
+            data={filteredMembers}
+            keyExtractor={item => item.id.toString()}
+            renderItem={renderItem}
+            contentContainerStyle={{ paddingBottom: 20 }}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Icon name="people-outline" size={48} color="#ccc" />
+                <Text style={styles.emptyText}>
+                  {searchQuery
+                    ? 'No members found matching your search'
+                    : 'No members found'}
+                </Text>
+                {searchQuery && (
+                  <TouchableOpacity
+                    style={styles.clearSearchButton}
+                    onPress={() => {
+                      setSearchQuery('');
+                      setFilteredMembers(members);
+                    }}
+                  >
+                    <Text style={styles.clearSearchText}>Clear Search</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            }
+          />
+        )}
+
+        {/* Add Member Modal */}
+        <Modal
+          visible={showAddModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowAddModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Add New Member</Text>
+                <TouchableOpacity
+                  onPress={() => setShowAddModal(false)}
+                  style={styles.closeButton}
+                >
+                  <Icon name="close" size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.formContainer}>
+                {/* Name Field - Required */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Name *</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={formData.name}
+                    onChangeText={text =>
+                      setFormData(prev => ({ ...prev, name: text }))
+                    }
+                    placeholder="Enter member name"
+                    placeholderTextColor="#999"
+                  />
+                </View>
+
+                {/* Phone Field - Required */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Phone *</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={formData.phone}
+                    onChangeText={text =>
+                      setFormData(prev => ({ ...prev, phone: text }))
+                    }
+                    placeholder="Enter phone number"
+                    placeholderTextColor="#999"
+                    keyboardType="phone-pad"
+                  />
+                </View>
+
+                {/* Email Field - Optional */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Email</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={formData.email}
+                    onChangeText={text =>
+                      setFormData(prev => ({ ...prev, email: text }))
+                    }
+                    placeholder="Enter email address"
+                    placeholderTextColor="#999"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                {/* Address Field - Optional */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Address</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    value={formData.address}
+                    onChangeText={text =>
+                      setFormData(prev => ({ ...prev, address: text }))
+                    }
+                    placeholder="Enter address"
+                    placeholderTextColor="#999"
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
+
+                {/* External ID Field - Optional */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Member ID (Optional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={formData.external_id}
+                    onChangeText={text =>
+                      setFormData(prev => ({ ...prev, external_id: text }))
+                    }
+                    placeholder="Enter external member ID"
+                    placeholderTextColor="#999"
+                  />
+                </View>
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setShowAddModal(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.submitButton,
+                    addingMember && styles.disabledButton,
+                  ]}
+                  onPress={handleAddMember}
+                  disabled={addingMember}
+                >
+                  {addingMember ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.submitButtonText}>Add Member</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    </SafeAreaView>
   );
 };
 
 export default Members;
 
 const styles = StyleSheet.create({
+  safeContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
     padding: 16,

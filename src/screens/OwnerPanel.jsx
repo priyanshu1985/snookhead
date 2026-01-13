@@ -7,7 +7,9 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { ownerAPI } from '../services/api';
 
@@ -124,89 +126,99 @@ export default function OwnerPanel({ navigation }) {
   // Show loading screen while checking setup status
   if (checkingSetup) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF8C42" />
-        <Text style={styles.loadingText}>Checking setup status...</Text>
-      </View>
+      <SafeAreaView style={styles.safeContainer} edges={['top']}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF8C42" />
+          <Text style={styles.loadingText}>Checking setup status...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Owner's Panel</Text>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('OwnerPasswordSetup')}
-        >
-          <Icon name="settings-outline" size={24} color="#666" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Content */}
-      <View style={styles.content}>
-        <Icon name="lock-closed-outline" size={60} color="#FF8C42" />
-        <Text style={styles.title}>Secure Access</Text>
-        <Text style={styles.description}>
-          Enter your owner panel password to access the analytics dashboard
-        </Text>
-
-        {/* Password Input */}
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your password"
-            secureTextEntry={!showPassword}
-            value={password}
-            onChangeText={setPassword}
-            placeholderTextColor="#999"
-          />
-          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-            <Icon
-              name={showPassword ? 'eye' : 'eye-off'}
-              size={24}
-              color="#FF8C42"
-            />
+    <SafeAreaView style={styles.safeContainer} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Icon name="arrow-back" size={24} color="#333" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Owner's Panel</Text>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('OwnerPasswordSetup')}
+          >
+            <Icon name="settings-outline" size={24} color="#666" />
           </TouchableOpacity>
         </View>
 
-        {/* Verify Button */}
-        <TouchableOpacity
-          style={[
-            styles.verifyButton,
-            { opacity: password.length >= 4 && !isLoading ? 1 : 0.5 },
-          ]}
-          onPress={handleVerify}
-          disabled={password.length < 4 || isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.verifyButtonText}>Access Dashboard</Text>
-          )}
-        </TouchableOpacity>
+        {/* Content */}
+        <View style={styles.content}>
+          <Icon name="lock-closed-outline" size={60} color="#FF8C42" />
+          <Text style={styles.title}>Secure Access</Text>
+          <Text style={styles.description}>
+            Enter your owner panel password to access the analytics dashboard
+          </Text>
 
-        {/* Forgot Password */}
-        <TouchableOpacity
-          style={styles.forgotButton}
-          onPress={handleForgotPassword}
-        >
-          <Text style={styles.forgotText}>Forgot Password?</Text>
-        </TouchableOpacity>
+          {/* Password Input */}
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter your password"
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={setPassword}
+              placeholderTextColor="#999"
+            />
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+              <Icon
+                name={showPassword ? 'eye' : 'eye-off'}
+                size={24}
+                color="#FF8C42"
+              />
+            </TouchableOpacity>
+          </View>
 
-        {/* Info Text */}
-        <Text style={styles.infoText}>
-          🔐 Your data is secure and encrypted
-        </Text>
+          {/* Verify Button */}
+          <TouchableOpacity
+            style={[
+              styles.verifyButton,
+              { opacity: password.length >= 4 && !isLoading ? 1 : 0.5 },
+            ]}
+            onPress={handleVerify}
+            disabled={password.length < 4 || isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.verifyButtonText}>Access Dashboard</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Forgot Password */}
+          <TouchableOpacity
+            style={styles.forgotButton}
+            onPress={handleForgotPassword}
+          >
+            <Text style={styles.forgotText}>Forgot Password?</Text>
+          </TouchableOpacity>
+
+          {/* Info Text */}
+          <Text style={styles.infoText}>
+            🔐 Your data is secure and encrypted
+          </Text>
+        </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',

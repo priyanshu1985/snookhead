@@ -6,7 +6,9 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 export default function UpgradeSubscription({ navigation }) {
@@ -70,100 +72,107 @@ export default function UpgradeSubscription({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Upgrade Plan</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      <ScrollView style={styles.content}>
-        {/* Title */}
-        <View style={styles.titleSection}>
-          <Text style={styles.mainTitle}>Choose Your Plan</Text>
-          <Text style={styles.subtitle}>
-            Unlock premium features for your business
-          </Text>
+    <SafeAreaView style={styles.safeContainer} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Icon name="arrow-back" size={24} color="#333" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Upgrade Plan</Text>
+          <View style={{ width: 24 }} />
         </View>
 
-        {/* Plans */}
-        {plans.map(plan => (
-          <View
-            key={plan.id}
-            style={[styles.planCard, { borderColor: plan.color }]}
-          >
-            {plan.current && (
-              <View
-                style={[styles.currentBadge, { backgroundColor: plan.color }]}
-              >
-                <Text style={styles.currentText}>Current Plan</Text>
-              </View>
-            )}
-
-            <Text style={[styles.planName, { color: plan.color }]}>
-              {plan.name}
+        <ScrollView style={styles.content}>
+          {/* Title */}
+          <View style={styles.titleSection}>
+            <Text style={styles.mainTitle}>Choose Your Plan</Text>
+            <Text style={styles.subtitle}>
+              Unlock premium features for your business
             </Text>
-
-            <View style={styles.priceContainer}>
-              <Text style={[styles.price, { color: plan.color }]}>
-                {plan.price}
-              </Text>
-              <Text style={styles.period}>{plan.period}</Text>
-            </View>
-
-            {/* Features */}
-            {plan.features.map((feature, idx) => (
-              <View key={idx} style={styles.featureRow}>
-                <Icon name="checkmark-circle" size={16} color={plan.color} />
-                <Text style={styles.featureText}>{feature}</Text>
-              </View>
-            ))}
-
-            {/* Button */}
-            <TouchableOpacity
-              style={[
-                styles.upgradeBtn,
-                {
-                  backgroundColor: plan.current ? '#CCC' : plan.color,
-                },
-              ]}
-              onPress={() => handleUpgrade(plan.name)}
-              disabled={plan.current}
-            >
-              <Text
-                style={[
-                  styles.upgradeBtnText,
-                  { color: plan.current ? '#999' : '#fff' },
-                ]}
-              >
-                {plan.current ? 'Current Plan' : 'Choose Plan'}
-              </Text>
-            </TouchableOpacity>
           </View>
-        ))}
 
-        {/* FAQ Section */}
-        <View style={styles.faqSection}>
-          <Text style={styles.faqTitle}>Frequently Asked Questions</Text>
-          <Text style={styles.faqItem}>
-            ❓ Can I cancel anytime? Yes, without penalties.
-          </Text>
-          <Text style={styles.faqItem}>
-            ❓ Do I get a free trial? Yes, 7 days free on any plan.
-          </Text>
-          <Text style={styles.faqItem}>
-            ❓ Is there a setup fee? No, completely free to set up.
-          </Text>
-        </View>
-      </ScrollView>
-    </View>
+          {/* Plans */}
+          {plans.map(plan => (
+            <View
+              key={plan.id}
+              style={[styles.planCard, { borderColor: plan.color }]}
+            >
+              {plan.current && (
+                <View
+                  style={[styles.currentBadge, { backgroundColor: plan.color }]}
+                >
+                  <Text style={styles.currentText}>Current Plan</Text>
+                </View>
+              )}
+
+              <Text style={[styles.planName, { color: plan.color }]}>
+                {plan.name}
+              </Text>
+
+              <View style={styles.priceContainer}>
+                <Text style={[styles.price, { color: plan.color }]}>
+                  {plan.price}
+                </Text>
+                <Text style={styles.period}>{plan.period}</Text>
+              </View>
+
+              {/* Features */}
+              {plan.features.map((feature, idx) => (
+                <View key={idx} style={styles.featureRow}>
+                  <Icon name="checkmark-circle" size={16} color={plan.color} />
+                  <Text style={styles.featureText}>{feature}</Text>
+                </View>
+              ))}
+
+              {/* Button */}
+              <TouchableOpacity
+                style={[
+                  styles.upgradeBtn,
+                  {
+                    backgroundColor: plan.current ? '#CCC' : plan.color,
+                  },
+                ]}
+                onPress={() => handleUpgrade(plan.name)}
+                disabled={plan.current}
+              >
+                <Text
+                  style={[
+                    styles.upgradeBtnText,
+                    { color: plan.current ? '#999' : '#fff' },
+                  ]}
+                >
+                  {plan.current ? 'Current Plan' : 'Choose Plan'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+
+          {/* FAQ Section */}
+          <View style={styles.faqSection}>
+            <Text style={styles.faqTitle}>Frequently Asked Questions</Text>
+            <Text style={styles.faqItem}>
+              ❓ Can I cancel anytime? Yes, without penalties.
+            </Text>
+            <Text style={styles.faqItem}>
+              ❓ Do I get a free trial? Yes, 7 days free on any plan.
+            </Text>
+            <Text style={styles.faqItem}>
+              ❓ Is there a setup fee? No, completely free to set up.
+            </Text>
+          </View>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',

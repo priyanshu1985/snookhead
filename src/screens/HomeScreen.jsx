@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
   },
   row: {
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 20,
   },
   // Loading State
   centerContainer: {

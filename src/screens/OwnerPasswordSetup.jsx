@@ -8,7 +8,12 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  StatusBar,
 } from 'react-native';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { ownerAPI } from '../services/api';
 
@@ -18,6 +23,7 @@ export default function OwnerPasswordSetup({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const handleSetupPassword = async () => {
     // Validation
@@ -82,140 +88,148 @@ export default function OwnerPasswordSetup({ navigation }) {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Set Up Owner Password</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      {/* Content */}
-      <View style={styles.content}>
-        {/* Icon and Welcome Text */}
-        <View style={styles.welcomeSection}>
-          <Icon name="shield-checkmark" size={80} color="#FF8C42" />
-          <Text style={styles.title}>Secure Your Owner Panel</Text>
-          <Text style={styles.description}>
-            As this is your first time accessing the owner panel, please set up
-            a secure password to protect your data.
-          </Text>
+    <SafeAreaView style={styles.safeContainer} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Icon name="arrow-back" size={24} color="#333" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Set Up Owner Password</Text>
+          <View style={{ width: 24 }} />
         </View>
 
-        {/* Password Input */}
-        <View style={styles.inputSection}>
-          <Text style={styles.inputLabel}>Password</Text>
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter password (min 4 characters)"
-              secureTextEntry={!showPassword}
-              value={password}
-              onChangeText={setPassword}
-              placeholderTextColor="#999"
-            />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-              <Icon
-                name={showPassword ? 'eye' : 'eye-off'}
-                size={24}
-                color="#FF8C42"
-              />
-            </TouchableOpacity>
+        {/* Content */}
+        <View style={styles.content}>
+          {/* Icon and Welcome Text */}
+          <View style={styles.welcomeSection}>
+            <Icon name="shield-checkmark" size={80} color="#FF8C42" />
+            <Text style={styles.title}>Secure Your Owner Panel</Text>
+            <Text style={styles.description}>
+              As this is your first time accessing the owner panel, please set
+              up a secure password to protect your data.
+            </Text>
           </View>
 
-          {/* Confirm Password Input */}
-          <Text style={styles.inputLabel}>Confirm Password</Text>
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Re-enter password"
-              secureTextEntry={!showConfirmPassword}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholderTextColor="#999"
-            />
-            <TouchableOpacity
-              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-            >
-              <Icon
-                name={showConfirmPassword ? 'eye' : 'eye-off'}
-                size={24}
-                color="#FF8C42"
+          {/* Password Input */}
+          <View style={styles.inputSection}>
+            <Text style={styles.inputLabel}>Password</Text>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter password (min 4 characters)"
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+                placeholderTextColor="#999"
               />
-            </TouchableOpacity>
-          </View>
-
-          {/* Password Match Indicator */}
-          {confirmPassword.length > 0 && (
-            <View style={styles.matchIndicator}>
-              <Icon
-                name={
-                  password === confirmPassword
-                    ? 'checkmark-circle'
-                    : 'close-circle'
-                }
-                size={16}
-                color={password === confirmPassword ? '#4CAF50' : '#FF5252'}
-              />
-              <Text
-                style={[
-                  styles.matchText,
-                  {
-                    color: password === confirmPassword ? '#4CAF50' : '#FF5252',
-                  },
-                ]}
-              >
-                {password === confirmPassword
-                  ? 'Passwords match'
-                  : 'Passwords do not match'}
-              </Text>
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <Icon
+                  name={showPassword ? 'eye' : 'eye-off'}
+                  size={24}
+                  color="#FF8C42"
+                />
+              </TouchableOpacity>
             </View>
-          )}
-        </View>
 
-        {/* Setup Button */}
-        <TouchableOpacity
-          style={[
-            styles.setupButton,
-            { opacity: isFormValid() && !isLoading ? 1 : 0.5 },
-          ]}
-          onPress={handleSetupPassword}
-          disabled={!isFormValid() || isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <>
-              <Icon name="shield-checkmark" size={20} color="#fff" />
-              <Text style={styles.setupButtonText}>Set Up Password</Text>
-            </>
-          )}
-        </TouchableOpacity>
+            {/* Confirm Password Input */}
+            <Text style={styles.inputLabel}>Confirm Password</Text>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Re-enter password"
+                secureTextEntry={!showConfirmPassword}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholderTextColor="#999"
+              />
+              <TouchableOpacity
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                <Icon
+                  name={showConfirmPassword ? 'eye' : 'eye-off'}
+                  size={24}
+                  color="#FF8C42"
+                />
+              </TouchableOpacity>
+            </View>
 
-        {/* Security Info */}
-        <View style={styles.securityInfo}>
-          <Text style={styles.securityTitle}>🔐 Security Information</Text>
-          <Text style={styles.securityText}>
-            • Your password is encrypted and stored securely
-          </Text>
-          <Text style={styles.securityText}>
-            • You'll need this password every time you access the owner panel
-          </Text>
-          <Text style={styles.securityText}>
-            • Keep your password safe and don't share it with others
-          </Text>
-          <Text style={styles.securityText}>
-            • You can change your password later from the settings
-          </Text>
+            {/* Password Match Indicator */}
+            {confirmPassword.length > 0 && (
+              <View style={styles.matchIndicator}>
+                <Icon
+                  name={
+                    password === confirmPassword
+                      ? 'checkmark-circle'
+                      : 'close-circle'
+                  }
+                  size={16}
+                  color={password === confirmPassword ? '#4CAF50' : '#FF5252'}
+                />
+                <Text
+                  style={[
+                    styles.matchText,
+                    {
+                      color:
+                        password === confirmPassword ? '#4CAF50' : '#FF5252',
+                    },
+                  ]}
+                >
+                  {password === confirmPassword
+                    ? 'Passwords match'
+                    : 'Passwords do not match'}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Setup Button */}
+          <TouchableOpacity
+            style={[
+              styles.setupButton,
+              { opacity: isFormValid() && !isLoading ? 1 : 0.5 },
+            ]}
+            onPress={handleSetupPassword}
+            disabled={!isFormValid() || isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Icon name="shield-checkmark" size={20} color="#fff" />
+                <Text style={styles.setupButtonText}>Set Up Password</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* Security Info */}
+          <View style={styles.securityInfo}>
+            <Text style={styles.securityTitle}>🔐 Security Information</Text>
+            <Text style={styles.securityText}>
+              • Your password is encrypted and stored securely
+            </Text>
+            <Text style={styles.securityText}>
+              • You'll need this password every time you access the owner panel
+            </Text>
+            <Text style={styles.securityText}>
+              • Keep your password safe and don't share it with others
+            </Text>
+            <Text style={styles.securityText}>
+              • You can change your password later from the settings
+            </Text>
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',

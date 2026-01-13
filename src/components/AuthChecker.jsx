@@ -17,12 +17,15 @@ const AuthChecker = ({ navigation }) => {
             navigation.replace('StaffMember');
             break;
           case 'owner':
+            navigation.replace('MainTabs');
+            break;
           case 'customer':
           default:
             navigation.replace('MainTabs');
             break;
         }
       } else {
+        // Navigate to login screen directly
         navigation.replace('LoginScreen');
       }
     }

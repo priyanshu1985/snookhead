@@ -8,7 +8,9 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { bugsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -85,126 +87,137 @@ export default function ReportBugs({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Report a Bug</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      <ScrollView style={styles.content}>
-        <Text style={styles.description}>
-          Help us improve by reporting any issues you encounter
-        </Text>
-
-        {/* Bug Title */}
-        <Text style={styles.label}>Bug Title *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g., Button not responding"
-          value={bugTitle}
-          onChangeText={setBugTitle}
-          placeholderTextColor="#CCC"
-          editable={!isSubmitting}
-        />
-
-        {/* Category */}
-        <Text style={styles.label}>Category *</Text>
-        <View style={styles.categoryContainer}>
-          {categories.map(cat => (
-            <TouchableOpacity
-              key={cat}
-              style={[
-                styles.categoryBtn,
-                category === cat && styles.categoryBtnActive,
-              ]}
-              onPress={() => setCategory(cat)}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.categoryText,
-                  category === cat && { color: '#FF8C42', fontWeight: 'bold' },
-                ]}
-              >
-                {cat}
-              </Text>
-            </TouchableOpacity>
-          ))}
+    <SafeAreaView style={styles.safeContainer} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Icon name="arrow-back" size={24} color="#333" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Report a Bug</Text>
+          <View style={{ width: 24 }} />
         </View>
 
-        {/* Priority */}
-        <Text style={styles.label}>Priority Level *</Text>
-        <View style={styles.priorityContainer}>
-          {priorities.map(pri => (
-            <TouchableOpacity
-              key={pri.value}
-              style={[
-                styles.priorityBtn,
-                priority === pri.value && styles.priorityBtnActive,
-                {
-                  borderColor: pri.color,
-                  backgroundColor: priority === pri.value ? pri.color : '#fff',
-                },
-              ]}
-              onPress={() => setPriority(pri.value)}
-              disabled={isSubmitting}
-            >
-              <Text
-                style={[
-                  styles.priorityText,
-                  priority === pri.value && { color: '#fff' },
-                ]}
-              >
-                {pri.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Description */}
-        <Text style={styles.label}>Description *</Text>
-        <TextInput
-          style={[styles.input, styles.descriptionInput]}
-          placeholder="Describe the issue in detail..."
-          value={bugDescription}
-          onChangeText={setBugDescription}
-          multiline
-          numberOfLines={6}
-          placeholderTextColor="#CCC"
-          textAlignVertical="top"
-          editable={!isSubmitting}
-        />
-
-        {/* Submit Button */}
-        <TouchableOpacity
-          style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
-          onPress={handleSubmit}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Icon name="send" size={20} color="#fff" />
-          )}
-          <Text style={styles.submitBtnText}>
-            {isSubmitting ? 'Submitting...' : 'Submit Report'}
+        <ScrollView style={styles.content}>
+          <Text style={styles.description}>
+            Help us improve by reporting any issues you encounter
           </Text>
-        </TouchableOpacity>
 
-        {/* Info */}
-        <Text style={styles.infoText}>
-          📧 Your report will be reviewed by our support team within 24 hours
-        </Text>
-      </ScrollView>
-    </View>
+          {/* Bug Title */}
+          <Text style={styles.label}>Bug Title *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g., Button not responding"
+            value={bugTitle}
+            onChangeText={setBugTitle}
+            placeholderTextColor="#CCC"
+            editable={!isSubmitting}
+          />
+
+          {/* Category */}
+          <Text style={styles.label}>Category *</Text>
+          <View style={styles.categoryContainer}>
+            {categories.map(cat => (
+              <TouchableOpacity
+                key={cat}
+                style={[
+                  styles.categoryBtn,
+                  category === cat && styles.categoryBtnActive,
+                ]}
+                onPress={() => setCategory(cat)}
+                disabled={isSubmitting}
+              >
+                <Text
+                  style={[
+                    styles.categoryText,
+                    category === cat && {
+                      color: '#FF8C42',
+                      fontWeight: 'bold',
+                    },
+                  ]}
+                >
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Priority */}
+          <Text style={styles.label}>Priority Level *</Text>
+          <View style={styles.priorityContainer}>
+            {priorities.map(pri => (
+              <TouchableOpacity
+                key={pri.value}
+                style={[
+                  styles.priorityBtn,
+                  priority === pri.value && styles.priorityBtnActive,
+                  {
+                    borderColor: pri.color,
+                    backgroundColor:
+                      priority === pri.value ? pri.color : '#fff',
+                  },
+                ]}
+                onPress={() => setPriority(pri.value)}
+                disabled={isSubmitting}
+              >
+                <Text
+                  style={[
+                    styles.priorityText,
+                    priority === pri.value && { color: '#fff' },
+                  ]}
+                >
+                  {pri.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Description */}
+          <Text style={styles.label}>Description *</Text>
+          <TextInput
+            style={[styles.input, styles.descriptionInput]}
+            placeholder="Describe the issue in detail..."
+            value={bugDescription}
+            onChangeText={setBugDescription}
+            multiline
+            numberOfLines={6}
+            placeholderTextColor="#CCC"
+            textAlignVertical="top"
+            editable={!isSubmitting}
+          />
+
+          {/* Submit Button */}
+          <TouchableOpacity
+            style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
+            onPress={handleSubmit}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Icon name="send" size={20} color="#fff" />
+            )}
+            <Text style={styles.submitBtnText}>
+              {isSubmitting ? 'Submitting...' : 'Submit Report'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Info */}
+          <Text style={styles.infoText}>
+            📧 Your report will be reviewed by our support team within 24 hours
+          </Text>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',

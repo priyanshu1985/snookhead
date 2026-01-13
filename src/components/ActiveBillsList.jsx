@@ -143,7 +143,8 @@ export default function ActiveBillsList({
               bill.customer_phone ||
               bill.mobile ||
               bill.user?.phone ||
-              '+91 XXXXXXXXXX',
+              bill.User?.phone ||
+              '---',
             billNumber:
               bill.bill_number || bill.billNumber || `BILL-${bill.id}`,
             amount: parseFloat(
@@ -245,40 +246,12 @@ export default function ActiveBillsList({
             {item.customerName}
           </Text>
           <Text style={styles.mobile}>{item.mobile}</Text>
-
-          {/* Order Items */}
-          {item.detailedItems && item.detailedItems.length > 0 ? (
-            <View style={styles.orderItemsContainer}>
-              <Text style={styles.orderItemsLabel}>Order Items:</Text>
-              {item.detailedItems.slice(0, 3).map((orderItem, idx) => (
-                <Text key={idx} style={styles.orderItemText} numberOfLines={1}>
-                  •{' '}
-                  {orderItem.MenuItem?.name ||
-                    orderItem.menu_item?.name ||
-                    orderItem.name ||
-                    orderItem.item_name ||
-                    'Item'}{' '}
-                  x{orderItem.qty || orderItem.quantity || 1}
-                </Text>
-              ))}
-              {item.detailedItems.length > 3 && (
-                <Text style={styles.moreItemsText}>
-                  +{item.detailedItems.length - 3} more items
-                </Text>
-              )}
-            </View>
-          ) : (
-            <Text style={styles.items} numberOfLines={1}>
-              {item.items}
-            </Text>
-          )}
-        </View>
-
-        <View style={styles.cardRight}>
-          <Text style={styles.billLabel}>Bill</Text>
           <Text style={styles.billNumber} numberOfLines={1}>
             {item.billNumber}
           </Text>
+        </View>
+
+        <View style={styles.cardRight}>
           <Text style={styles.amount}>{item.amountDisplay}</Text>
           <View
             style={[
@@ -505,7 +478,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
-    minHeight: 50, // Ensure minimum height for touch targets
+    minHeight: 45, // Reduced from 50
   },
   headerBackButton: {
     width: 40,
@@ -520,6 +493,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1A1A1A',
     letterSpacing: 0.3,
+    marginTop: 3, // Move title down 3px for better visual centering
   },
   headerRefreshButton: {
     width: 40,
@@ -533,45 +507,35 @@ const styles = StyleSheet.create({
   // Tabs
   tabsContainer: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F0F0F0',
     marginHorizontal: 16,
     marginTop: 16,
-    borderRadius: 14,
-    padding: 4,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    borderRadius: 12,
+    padding: 2,
   },
   tab: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
     alignItems: 'center',
     borderRadius: 10,
-    position: 'relative',
+    marginHorizontal: 1,
   },
   activeTab: {
-    backgroundColor: '#FFF8F5',
+    backgroundColor: '#FF8C42',
   },
   activeTabIndicator: {
-    position: 'absolute',
-    bottom: 0,
-    left: '20%',
-    right: '20%',
-    height: 3,
-    backgroundColor: '#FF8C42',
-    borderRadius: 2,
+    // Remove the underline indicator
+    display: 'none',
   },
   tabText: {
     fontSize: 12,
-    color: '#999999',
+    color: '#666666',
     fontWeight: '600',
     letterSpacing: 0.5,
   },
   activeTabText: {
     fontSize: 12,
-    color: '#FF8C42',
+    color: '#FFFFFF',
     fontWeight: '700',
     letterSpacing: 0.5,
   },
@@ -669,9 +633,9 @@ const styles = StyleSheet.create({
   // Bill Card
   billCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
     elevation: 3,
     shadowColor: '#000',
     shadowOpacity: 0.08,
@@ -701,7 +665,9 @@ const styles = StyleSheet.create({
   },
   cardLeft: {
     flex: 1,
-    paddingRight: 12,
+    paddingRight: 16,
+    borderRightWidth: 1,
+    borderRightColor: '#F0F0F0',
   },
   date: {
     fontSize: 11,
@@ -728,14 +694,24 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     marginBottom: 4,
   },
+  billNumber: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#BBBBBB',
+    marginBottom: 2,
+  },
+  contentSection: {
+    minHeight: 60, // Ensure consistent height for all cards
+    justifyContent: 'flex-start',
+  },
   orderItemsContainer: {
     marginTop: 8,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
+    backgroundColor: '#FAFBFC',
+    borderRadius: 6,
     padding: 8,
   },
   orderItemsLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: '#666666',
     marginBottom: 4,
@@ -754,22 +730,35 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 2,
   },
+  tableChargesContainer: {
+    marginTop: 8,
+    backgroundColor: '#FAFBFC',
+    borderRadius: 6,
+    padding: 8,
+    minHeight: 36, // Match the order items container height
+  },
+  tableChargesText: {
+    fontSize: 12,
+    color: '#444444',
+    lineHeight: 16,
+  },
   cardRight: {
     alignItems: 'flex-end',
     minWidth: 130,
+    paddingLeft: 16,
   },
   billLabel: {
-    fontSize: 10,
-    color: '#999999',
+    fontSize: 9,
+    color: '#BBBBBB',
     marginBottom: 2,
-    fontWeight: '500',
+    fontWeight: '400',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   billNumber: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FF8C42',
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#BBBBBB',
     marginBottom: 8,
   },
   amount: {
@@ -779,22 +768,22 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   statusBadge: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16,
   },
   statusBadgePaid: {
     backgroundColor: '#E8F5E9',
   },
   statusBadgeUnpaid: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: '#FFF3E0',
   },
   statusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FF8C42',
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FF9800',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   tapIndicator: {
     position: 'absolute',

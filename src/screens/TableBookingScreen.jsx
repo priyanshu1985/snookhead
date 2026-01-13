@@ -287,13 +287,26 @@ export default function TableBookingScreen({ route, navigation }) {
   const getTimeDisplayText = () => {
     switch (selectedTimeOption) {
       case 'Set Time':
-        return `Start Time: ${selectedTime}`;
+        return selectedTime;
       case 'Timer':
-        return `Duration: ${timerDuration} min`;
+        return `${timerDuration} min`;
       case 'Select Frame':
-        return `Frames: ${selectedFrame}`;
+        return `${selectedFrame} frame(s)`;
       default:
         return selectedTimeOption;
+    }
+  };
+
+  const getTimeLabel = () => {
+    switch (selectedTimeOption) {
+      case 'Set Time':
+        return 'Start Time';
+      case 'Timer':
+        return 'Duration';
+      case 'Select Frame':
+        return 'Frames';
+      default:
+        return 'Time';
     }
   };
 
@@ -508,7 +521,7 @@ export default function TableBookingScreen({ route, navigation }) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="chevron-back" size={24} color="#333" />
+          <Icon name="chevron-back" size={28} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{safeGameType}</Text>
         <View style={{ width: 24 }} />
@@ -606,16 +619,23 @@ export default function TableBookingScreen({ route, navigation }) {
 
         {selectedTimeOption && (
           <View style={styles.timeDetailsContainer}>
-            <Icon
-              name="time-outline"
-              size={18}
-              color="#FF8C42"
-              style={styles.timeDetailsIcon}
-            />
-            <Text style={styles.timeDetailsText}>{getTimeDisplayText()}</Text>
-            <TouchableOpacity onPress={() => setShowTimeModal(true)}>
-              <Icon name="pencil" size={16} color="#FF8C42" />
-            </TouchableOpacity>
+            <View style={styles.timeDetailsLeft}>
+              <Icon
+                name="time-outline"
+                size={18}
+                color="#FF8C42"
+                style={styles.timeDetailsIcon}
+              />
+              <Text style={styles.timeDetailsLabel}>{getTimeLabel()}</Text>
+            </View>
+            <View style={styles.timeDetailsRight}>
+              <Text style={styles.timeDetailsValue}>
+                {getTimeDisplayText()}
+              </Text>
+              <TouchableOpacity onPress={() => setShowTimeModal(true)}>
+                <Icon name="pencil" size={16} color="#FF8C42" />
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -1253,7 +1273,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 20,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
@@ -1280,8 +1300,8 @@ const styles = StyleSheet.create({
   tableBadge: {
     alignSelf: 'center',
     backgroundColor: '#FF8C42',
-    paddingHorizontal: 32,
-    paddingVertical: 12,
+    paddingHorizontal: 40,
+    paddingVertical: 8,
     borderRadius: 25,
     marginBottom: 24,
     elevation: 4,
@@ -1344,7 +1364,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 14,
+    padding: 10,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1354,7 +1374,7 @@ const styles = StyleSheet.create({
   timeOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
+    paddingVertical: 4,
     paddingHorizontal: 4,
   },
   timeOptionActive: {},
@@ -1379,23 +1399,43 @@ const styles = StyleSheet.create({
 
   // Time Details
   timeDetailsContainer: {
-    backgroundColor: '#FFF8F5',
-    padding: 14,
+    backgroundColor: '#FFFFFF',
+    padding: 16,
     borderRadius: 12,
     marginBottom: 20,
     borderLeftWidth: 4,
     borderLeftColor: '#FF8C42',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+  },
+  timeDetailsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   timeDetailsIcon: {
     marginRight: 10,
   },
-  timeDetailsText: {
+  timeDetailsLabel: {
     fontSize: 14,
+    color: '#666666',
+    fontWeight: '500',
+  },
+  timeDetailsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  timeDetailsValue: {
+    fontSize: 16,
     color: '#1A1A1A',
-    fontWeight: '600',
-    flex: 1,
+    fontWeight: '700',
   },
 
   // Food Header

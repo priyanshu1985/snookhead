@@ -7,12 +7,18 @@ import {
   StyleSheet,
   StatusBar,
   Alert,
-  ScrollView,
   Modal,
+  Dimensions,
+  Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { API_URL } from '../config';
+import { useAuth } from '../context/AuthContext';
+
+const { width } = Dimensions.get('window');
+const ORANGE = '#F08626';
+const DARK_BLUE = '#1A1A2E';
 
 export default function SignUpScreen({ navigation }) {
   const [email, setEmail] = useState('');
@@ -22,8 +28,10 @@ export default function SignUpScreen({ navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [role, setRole] = useState('customer'); // Default role
+  const [role, setRole] = useState('customer');
   const [showRoleModal, setShowRoleModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { login } = useAuth();
 
   const roleOptions = [
     { label: 'Customer', value: 'customer' },
@@ -41,6 +49,7 @@ export default function SignUpScreen({ navigation }) {
       return;
     }
     try {
+      setIsLoading(true);
       const res = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -49,43 +58,129 @@ export default function SignUpScreen({ navigation }) {
           name,
           phone: number,
           password,
-          role, // Include selected role
+          role,
         }),
+        credentials: 'include',
       });
       const data = await res.json();
-      if (res.ok) {
+      if (res.ok && data.success && data.accessToken) {
+        await login(data.accessToken, data.refreshToken, data.user);
+
         const roleMessage =
           role === 'customer'
             ? 'Account created successfully!'
             : role === 'owner'
-            ? 'Owner account created! You can now access the owner panel.'
-            : 'Staff member account created! You can now access staff features.';
+            ? 'Owner account created! Welcome to your dashboard.'
+            : 'Staff account created! Welcome to staff features.';
+
         Alert.alert('Success', roleMessage, [
-          { text: 'OK', onPress: () => navigation.navigate('MainTabs') },
+          {
+            text: 'OK',
+            onPress: () => {
+              const userRole = data.user.role;
+              if (userRole === 'admin') {
+                navigation.replace('AdminDashboard');
+              } else if (userRole === 'staff') {
+                navigation.replace('StaffMember');
+              } else {
+                navigation.replace('MainTabs');
+              }
+            },
+          },
         ]);
       } else {
         Alert.alert('Sign up error', data.error || 'Could not sign up');
       }
     } catch (err) {
+      console.error('Sign up error:', err);
       Alert.alert('Network error', 'Try again later.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FF8C42" />
-      <ScrollView
-        contentContainerStyle={styles.formSection}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.logoText}>SNOKEHEAD</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={ORANGE} />
+
+      {/* Orange Header with Curved Wave Pattern */}
+      <View style={styles.headerContainer}>
+        {/* Curved Wave Pattern Lines */}
+        <Svg height="180" width={width} style={styles.patternSvg}>
+          {/* Multiple curved wave lines */}
+          <Path
+            d={`M-50,140 Q${width * 0.2},100 ${width * 0.5},120 T${
+              width + 50
+            },80`}
+            stroke="rgba(255,255,255,0.12)"
+            strokeWidth="1.5"
+            fill="none"
+          />
+          <Path
+            d={`M-50,120 Q${width * 0.25},80 ${width * 0.5},100 T${
+              width + 50
+            },60`}
+            stroke="rgba(255,255,255,0.12)"
+            strokeWidth="1.5"
+            fill="none"
+          />
+          <Path
+            d={`M-50,100 Q${width * 0.3},60 ${width * 0.5},80 T${
+              width + 50
+            },40`}
+            stroke="rgba(255,255,255,0.12)"
+            strokeWidth="1.5"
+            fill="none"
+          />
+          <Path
+            d={`M-50,80 Q${width * 0.25},40 ${width * 0.5},60 T${
+              width + 50
+            },20`}
+            stroke="rgba(255,255,255,0.12)"
+            strokeWidth="1.5"
+            fill="none"
+          />
+          <Path
+            d={`M-50,60 Q${width * 0.2},20 ${width * 0.5},40 T${width + 50},0`}
+            stroke="rgba(255,255,255,0.12)"
+            strokeWidth="1.5"
+            fill="none"
+          />
+        </Svg>
+
+        <View style={styles.headerContent}>
+          <View style={styles.logoRow}>
+            <Image
+              source={require('../Assets/logo.jpg')}
+              style={styles.logoImage}
+            />
+            <Text style={styles.logoText}>SNOKEHEAD</Text>
+          </View>
+        </View>
+
+        {/* Wave SVG at bottom */}
+        <View style={styles.waveContainer}>
+          <Svg height="40" width={width} viewBox={`0 0 ${width} 40`}>
+            <Path
+              d={`M0,20 Q${width * 0.25},40 ${
+                width * 0.5
+              },20 T${width},20 L${width},40 L0,40 Z`}
+              fill="#FFFFFF"
+            />
+          </Svg>
+        </View>
+      </View>
+
+      {/* Form Container - No Scroll */}
+      <View style={styles.formContainer}>
         <Text style={styles.header}>Sign up</Text>
 
+        {/* Email Input */}
         <Text style={styles.label}>Email</Text>
         <View style={styles.inputWrapper}>
           <Icon
             name="mail-outline"
-            size={18}
+            size={16}
             color="#999"
             style={styles.inputIcon}
           />
@@ -99,28 +194,55 @@ export default function SignUpScreen({ navigation }) {
             autoCapitalize="none"
           />
         </View>
-        <Text style={styles.label}>Name</Text>
+
+        {/* Name Input */}
+        <Text style={styles.label}>Full Name</Text>
         <View style={styles.inputWrapper}>
           <Icon
             name="person-outline"
-            size={18}
+            size={16}
             color="#999"
             style={styles.inputIcon}
           />
           <TextInput
             style={styles.input}
-            placeholder="Your name"
+            placeholder="Enter your full name"
             placeholderTextColor="#bbb"
             value={name}
             onChangeText={setName}
             autoCapitalize="words"
           />
         </View>
+
+        {/* Role Selection */}
+        <Text style={styles.label}>Role</Text>
+        <TouchableOpacity
+          style={styles.inputWrapper}
+          onPress={() => setShowRoleModal(true)}
+        >
+          <Icon
+            name="briefcase-outline"
+            size={16}
+            color="#999"
+            style={styles.inputIcon}
+          />
+          <Text style={[styles.input, { paddingTop: 12 }]}>
+            {roleOptions.find(option => option.value === role)?.label || 'Select Role'}
+          </Text>
+          <Icon
+            name="chevron-down-outline"
+            size={16}
+            color="#999"
+            style={styles.dropdownIcon}
+          />
+        </TouchableOpacity>
+
+        {/* Phone Input */}
         <Text style={styles.label}>Phone no</Text>
         <View style={styles.inputWrapper}>
           <Icon
             name="call-outline"
-            size={18}
+            size={16}
             color="#999"
             style={styles.inputIcon}
           />
@@ -134,35 +256,18 @@ export default function SignUpScreen({ navigation }) {
           />
         </View>
 
-        <Text style={styles.label}>Account Type</Text>
-        <TouchableOpacity
-          style={styles.inputWrapper}
-          onPress={() => setShowRoleModal(true)}
-        >
-          <Icon
-            name="person-circle-outline"
-            size={18}
-            color="#999"
-            style={styles.inputIcon}
-          />
-          <Text style={styles.dropdownText}>
-            {roleOptions.find(option => option.value === role)?.label ||
-              'Select Role'}
-          </Text>
-          <Icon name="chevron-down-outline" size={18} color="#999" />
-        </TouchableOpacity>
-
+        {/* Password Input */}
         <Text style={styles.label}>Password</Text>
         <View style={styles.inputWrapper}>
           <Icon
             name="lock-closed-outline"
-            size={18}
+            size={16}
             color="#999"
             style={styles.inputIcon}
           />
           <TextInput
             style={styles.input}
-            placeholder="Enter your password"
+            placeholder="enter your password"
             placeholderTextColor="#bbb"
             value={password}
             onChangeText={setPassword}
@@ -175,17 +280,18 @@ export default function SignUpScreen({ navigation }) {
           >
             <Icon
               name={showPassword ? 'eye-outline' : 'eye-off-outline'}
-              size={18}
+              size={16}
               color="#999"
             />
           </TouchableOpacity>
         </View>
 
+        {/* Confirm Password Input */}
         <Text style={styles.label}>Confirm Password</Text>
         <View style={styles.inputWrapper}>
           <Icon
             name="lock-closed-outline"
-            size={18}
+            size={16}
             color="#999"
             style={styles.inputIcon}
           />
@@ -204,23 +310,31 @@ export default function SignUpScreen({ navigation }) {
           >
             <Icon
               name={showConfirm ? 'eye-outline' : 'eye-off-outline'}
-              size={18}
+              size={16}
               color="#999"
             />
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.createBtn} onPress={handleSignUp}>
-          <Text style={styles.createBtnText}>Create Account</Text>
+        {/* Create Account Button */}
+        <TouchableOpacity
+          style={[styles.createBtn, isLoading && styles.createBtnDisabled]}
+          onPress={handleSignUp}
+          disabled={isLoading}
+        >
+          <Text style={styles.createBtnText}>
+            {isLoading ? 'Creating Account...' : 'Create Acount'}
+          </Text>
         </TouchableOpacity>
 
+        {/* Login Link */}
         <View style={styles.signupSection}>
           <Text style={styles.textMuted}>Already have an Account! </Text>
           <TouchableOpacity onPress={() => navigation.navigate('LoginScreen')}>
             <Text style={styles.signupText}>Login</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
 
       {/* Role Selection Modal */}
       <Modal
@@ -262,7 +376,7 @@ export default function SignUpScreen({ navigation }) {
                       : 'people-outline'
                   }
                   size={20}
-                  color={role === option.value ? '#FF8C42' : '#666'}
+                  color={role === option.value ? ORANGE : '#666'}
                 />
                 <Text
                   style={[
@@ -273,7 +387,7 @@ export default function SignUpScreen({ navigation }) {
                   {option.label}
                 </Text>
                 {role === option.value && (
-                  <Icon name="checkmark-circle" size={20} color="#FF8C42" />
+                  <Icon name="checkmark-circle" size={20} color={ORANGE} />
                 )}
               </TouchableOpacity>
             ))}
@@ -288,59 +402,80 @@ export default function SignUpScreen({ navigation }) {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
-
-const ORANGE = '#FF8C42';
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-  logoText: {
-    fontSize: 28,
-    color: '#1A1A1A',
-    letterSpacing: 1.5,
-    fontWeight: '800',
-    alignSelf: 'center',
-    marginTop: 50,
-    marginBottom: 8,
+  headerContainer: {
+    backgroundColor: ORANGE,
+    height: 180,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  formSection: {
-    paddingHorizontal: 28,
-    paddingBottom: 40,
+  patternSvg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  headerContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 30,
+  },
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  logoImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    resizeMode: 'contain',
+  },
+  logoText: {
+    fontSize: 20,
+    color: DARK_BLUE,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  waveContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  formContainer: {
+    flex: 1,
+    paddingHorizontal: 24,
     paddingTop: 12,
   },
   header: {
-    fontSize: 26,
+    fontSize: 32,
     fontWeight: '700',
     color: '#1A1A1A',
-    marginBottom: 8,
-    alignSelf: 'flex-start',
-    marginTop: 16,
-  },
-  subHeader: {
-    fontSize: 14,
-    color: '#888888',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   label: {
-    color: '#666666',
+    color: '#1A1A1A',
     fontWeight: '600',
-    marginTop: 12,
     marginBottom: 8,
-    fontSize: 13,
+    fontSize: 14,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F8F9FA',
-    borderRadius: 14,
-    marginBottom: 4,
+    borderRadius: 12,
+    marginBottom: 12,
     paddingHorizontal: 16,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: '#E8E8E8',
   },
   inputIcon: {
@@ -351,9 +486,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 15,
     color: '#1A1A1A',
-    letterSpacing: 0.2,
   },
   eyeBtn: {
+    padding: 8,
+    marginLeft: 4,
+  },
+  dropdownIcon: {
     padding: 8,
     marginLeft: 4,
   },
@@ -362,7 +500,37 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 15,
     color: '#1A1A1A',
-    letterSpacing: 0.2,
+  },
+  createBtn: {
+    backgroundColor: ORANGE,
+    borderRadius: 25,
+    alignItems: 'center',
+    paddingVertical: 16,
+    marginTop: 20,
+    marginBottom: 16,
+  },
+  createBtnDisabled: {
+    backgroundColor: '#CCCCCC',
+  },
+  createBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  signupSection: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  textMuted: {
+    color: '#888888',
+    fontSize: 14,
+  },
+  signupText: {
+    color: ORANGE,
+    fontWeight: '700',
+    fontSize: 14,
   },
   modalOverlay: {
     flex: 1,
@@ -375,8 +543,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     margin: 20,
     padding: 20,
-    width: '80%',
-    maxWidth: 320,
+    width: '85%',
+    maxWidth: 340,
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -400,10 +568,10 @@ const styles = StyleSheet.create({
   roleOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: 12,
-    marginBottom: 8,
+    marginBottom: 10,
     borderWidth: 1.5,
     borderColor: '#E8E8E8',
     backgroundColor: '#F8F9FA',
@@ -423,46 +591,13 @@ const styles = StyleSheet.create({
     color: ORANGE,
   },
   roleDescription: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#666',
     textAlign: 'center',
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#E8E8E8',
-    lineHeight: 16,
-  },
-  createBtn: {
-    backgroundColor: ORANGE,
-    borderRadius: 14,
-    alignItems: 'center',
-    paddingVertical: 18,
-    marginTop: 28,
-    marginBottom: 16,
-    elevation: 4,
-    shadowColor: ORANGE,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  createBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  signupSection: {
-    marginTop: 16,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  textMuted: {
-    color: '#888888',
-    fontSize: 14,
-  },
-  signupText: {
-    color: ORANGE,
-    fontWeight: '700',
-    fontSize: 14,
+    lineHeight: 18,
   },
 });

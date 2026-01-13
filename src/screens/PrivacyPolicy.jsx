@@ -5,80 +5,87 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 export default function PrivacyPolicy({ navigation }) {
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Privacy Policy</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      <ScrollView style={styles.content}>
-        <Text style={styles.title}>Privacy & Policy</Text>
-        <Text style={styles.lastUpdated}>Last Updated: October 2025</Text>
-
-        <Section title="1. Introduction">
-          <Text style={styles.text}>
-            Game Zone ("we", "us", "our") operates the Game Zone app. This page
-            informs you of our policies regarding the collection, use, and
-            disclosure of personal data when you use our Service.
-          </Text>
-        </Section>
-
-        <Section title="2. Information Collection and Use">
-          <Text style={styles.text}>
-            We collect several different types of information for various
-            purposes to provide and improve our Service to you:
-          </Text>
-          <Text style={styles.bulletPoint}>
-            • Personal Data (name, email, phone)
-          </Text>
-          <Text style={styles.bulletPoint}>
-            • Usage Data (app usage patterns)
-          </Text>
-          <Text style={styles.bulletPoint}>
-            • Device Information (device type, OS)
-          </Text>
-        </Section>
-
-        <Section title="3. Security of Data">
-          <Text style={styles.text}>
-            The security of your data is important to us but remember that no
-            method of transmission over the Internet or method of electronic
-            storage is 100% secure. While we strive to use commercially
-            acceptable means to protect your Personal Data, we cannot guarantee
-            its absolute security.
-          </Text>
-        </Section>
-
-        <Section title="4. Changes to This Privacy Policy">
-          <Text style={styles.text}>
-            We may update our Privacy Policy from time to time. We will notify
-            you of any changes by posting the new Privacy Policy on this page
-            and updating the "Last Updated" date.
-          </Text>
-        </Section>
-
-        <Section title="5. Contact Us">
-          <Text style={styles.text}>
-            If you have any questions about this Privacy Policy, please contact
-            us at support@gamezone.com
-          </Text>
-        </Section>
-
-        <View style={styles.footer}>
-          <Icon name="checkmark-circle" size={24} color="#4CAF50" />
-          <Text style={styles.footerText}>You're protected with Game Zone</Text>
+    <SafeAreaView style={styles.safeContainer} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Icon name="arrow-back" size={24} color="#333" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Privacy Policy</Text>
+          <View style={{ width: 24 }} />
         </View>
-      </ScrollView>
-    </View>
+
+        <ScrollView style={styles.content}>
+          <Text style={styles.title}>Privacy & Policy</Text>
+          <Text style={styles.lastUpdated}>Last Updated: October 2025</Text>
+
+          <Section title="1. Introduction">
+            <Text style={styles.text}>
+              Game Zone ("we", "us", "our") operates the Game Zone app. This
+              page informs you of our policies regarding the collection, use,
+              and disclosure of personal data when you use our Service.
+            </Text>
+          </Section>
+
+          <Section title="2. Information Collection and Use">
+            <Text style={styles.text}>
+              We collect several different types of information for various
+              purposes to provide and improve our Service to you:
+            </Text>
+            <Text style={styles.bulletPoint}>
+              • Personal Data (name, email, phone)
+            </Text>
+            <Text style={styles.bulletPoint}>
+              • Usage Data (app usage patterns)
+            </Text>
+            <Text style={styles.bulletPoint}>
+              • Device Information (device type, OS)
+            </Text>
+          </Section>
+
+          <Section title="3. Security of Data">
+            <Text style={styles.text}>
+              The security of your data is important to us but remember that no
+              method of transmission over the Internet or method of electronic
+              storage is 100% secure. While we strive to use commercially
+              acceptable means to protect your Personal Data, we cannot
+              guarantee its absolute security.
+            </Text>
+          </Section>
+
+          <Section title="4. Changes to This Privacy Policy">
+            <Text style={styles.text}>
+              We may update our Privacy Policy from time to time. We will notify
+              you of any changes by posting the new Privacy Policy on this page
+              and updating the "Last Updated" date.
+            </Text>
+          </Section>
+
+          <Section title="5. Contact Us">
+            <Text style={styles.text}>
+              If you have any questions about this Privacy Policy, please
+              contact us at support@gamezone.com
+            </Text>
+          </Section>
+
+          <View style={styles.footer}>
+            <Icon name="checkmark-circle" size={24} color="#4CAF50" />
+            <Text style={styles.footerText}>
+              You're protected with Game Zone
+            </Text>
+          </View>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -92,6 +99,10 @@ function Section({ title, children }) {
 }
 
 const styles = StyleSheet.create({
+  safeContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',

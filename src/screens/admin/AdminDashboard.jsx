@@ -74,21 +74,26 @@ const AdminDashboard = () => {
 
       // Enhanced analytics
       const pendingOrders = orders.filter(o => o.status === 'pending').length;
-      const completedOrders = orders.filter(o => o.status === 'completed').length;
-      
+      const completedOrders = orders.filter(
+        o => o.status === 'completed',
+      ).length;
+
       const totalRevenue = orders
         .filter(o => o.status === 'completed')
         .reduce((sum, o) => sum + Number(o.total || 0), 0);
 
       // Weekly revenue data for chart
       const weeklyRevenue = generateWeeklyRevenue(orders);
-      
+
       // Orders by source for pie chart
       const ordersBySource = generateOrdersBySource(orders);
-      
+
       // Table utilization calculation
-      const activeTableCount = tables.filter(t => t.status === 'occupied').length;
-      const tableUtilization = tables.length > 0 ? (activeTableCount / tables.length) * 100 : 0;
+      const activeTableCount = tables.filter(
+        t => t.status === 'occupied',
+      ).length;
+      const tableUtilization =
+        tables.length > 0 ? (activeTableCount / tables.length) * 100 : 0;
 
       setStats({
         totalOrders: orders.length,
@@ -113,7 +118,7 @@ const AdminDashboard = () => {
     try {
       const response = await fetch(`${API_URL}/api/users`, {
         headers: {
-          'Authorization': `Bearer ${await AsyncStorage.getItem('authToken')}`,
+          Authorization: `Bearer ${await AsyncStorage.getItem('authToken')}`,
           'Content-Type': 'application/json',
         },
       });
@@ -127,36 +132,43 @@ const AdminDashboard = () => {
   };
 
   /* ---------------- ANALYTICS HELPERS ---------------- */
-  const generateWeeklyRevenue = (orders) => {
+  const generateWeeklyRevenue = orders => {
     const last7Days = [];
     const today = new Date();
-    
+
     for (let i = 6; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(today.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
-      
+
       const dayRevenue = orders
         .filter(o => o.status === 'completed' && o.createdAt?.includes(dateStr))
         .reduce((sum, o) => sum + Number(o.total || 0), 0);
-      
+
       last7Days.push(dayRevenue);
     }
-    
+
     return last7Days;
   };
 
-  const generateOrdersBySource = (orders) => {
+  const generateOrdersBySource = orders => {
     const sources = {};
     orders.forEach(order => {
       const source = order.source || 'counter';
       sources[source] = (sources[source] || 0) + 1;
     });
-    
+
     return Object.entries(sources).map(([name, count], index) => ({
       name: name.charAt(0).toUpperCase() + name.slice(1),
       count,
-      color: [COLORS.primary, COLORS.secondary, COLORS.info, COLORS.warning, COLORS.success][index] || COLORS.textTertiary,
+      color:
+        [
+          COLORS.primary,
+          COLORS.secondary,
+          COLORS.info,
+          COLORS.warning,
+          COLORS.success,
+        ][index] || COLORS.textTertiary,
       legendFontColor: COLORS.textPrimary,
       legendFontSize: 12,
     }));
@@ -205,11 +217,21 @@ const AdminDashboard = () => {
         text: 'Logout',
         style: 'destructive',
         onPress: async () => {
-          await logout();
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'LoginScreen' }],
-          });
+          try {
+            console.log('Admin logout started...');
+            await logout();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'AuthChecker' }],
+            });
+          } catch (error) {
+            console.error('Admin logout error:', error);
+            // Still navigate even if logout had issues
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'AuthChecker' }],
+            });
+          }
         },
       },
     ]);
@@ -284,21 +306,25 @@ const AdminDashboard = () => {
   return (
     <View style={styles.container}>
       <Header navigation={navigation} />
-      
-      <ScrollView 
+
+      <ScrollView
         style={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
         showsVerticalScrollIndicator={false}
       >
         {/* ADMIN TITLE */}
         <View style={styles.titleSection}>
           <Text style={styles.welcomeText}>Welcome back, Admin</Text>
-          <Text style={styles.dateText}>{new Date().toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          })}</Text>
+          <Text style={styles.dateText}>
+            {new Date().toLocaleDateString('en-US', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })}
+          </Text>
         </View>
 
         {/* STATS CARDS */}
@@ -338,29 +364,37 @@ const AdminDashboard = () => {
                 value={users.length.toString()}
                 icon="people"
                 color={COLORS.secondary}
-                subtitle={`${users.filter(u => u.role === 'owner').length} owners`}
+                subtitle={`${
+                  users.filter(u => u.role === 'owner').length
+                } owners`}
               />
             </View>
 
             {/* Charts Section */}
             <Text style={styles.sectionTitle}>Analytics</Text>
-            
+
             {/* Weekly Revenue Chart - Placeholder */}
             <View style={styles.chartContainer}>
               <Text style={styles.chartTitle}>Weekly Revenue Trend</Text>
               <View style={styles.chartPlaceholder}>
                 <Text style={styles.chartPlaceholderText}>
                   {stats.weeklyRevenue.length > 0
-                    ? `Total: ₹${stats.weeklyRevenue.reduce((a, b) => a + b, 0).toLocaleString()}`
+                    ? `Total: ₹${stats.weeklyRevenue
+                        .reduce((a, b) => a + b, 0)
+                        .toLocaleString()}`
                     : 'No data available'}
                 </Text>
                 <View style={styles.weeklyRevenueList}>
-                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, idx) => (
-                    <View key={day} style={styles.revenueItem}>
-                      <Text style={styles.revenueDay}>{day}</Text>
-                      <Text style={styles.revenueValue}>₹{(stats.weeklyRevenue[idx] || 0).toLocaleString()}</Text>
-                    </View>
-                  ))}
+                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(
+                    (day, idx) => (
+                      <View key={day} style={styles.revenueItem}>
+                        <Text style={styles.revenueDay}>{day}</Text>
+                        <Text style={styles.revenueValue}>
+                          ₹{(stats.weeklyRevenue[idx] || 0).toLocaleString()}
+                        </Text>
+                      </View>
+                    ),
+                  )}
                 </View>
               </View>
             </View>
@@ -372,9 +406,16 @@ const AdminDashboard = () => {
                 <View style={styles.chartPlaceholder}>
                   {stats.ordersBySource.map((source, idx) => (
                     <View key={idx} style={styles.sourceItem}>
-                      <View style={[styles.sourceColor, { backgroundColor: source.color }]} />
+                      <View
+                        style={[
+                          styles.sourceColor,
+                          { backgroundColor: source.color },
+                        ]}
+                      />
                       <Text style={styles.sourceName}>{source.name}</Text>
-                      <Text style={styles.sourceCount}>{source.count} orders</Text>
+                      <Text style={styles.sourceCount}>
+                        {source.count} orders
+                      </Text>
                     </View>
                   ))}
                 </View>
@@ -423,11 +464,11 @@ const AdminDashboard = () => {
 export default AdminDashboard;
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
+  container: {
+    flex: 1,
     backgroundColor: COLORS.background,
   },
-  
+
   content: {
     flex: 1,
     paddingHorizontal: SPACING.lg,
@@ -540,20 +581,20 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
 
-  row: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: SPACING.sm,
     marginBottom: SPACING.sm,
   },
-  
-  title: { 
-    fontWeight: '600', 
+
+  title: {
+    fontWeight: '600',
     fontSize: 16,
     color: COLORS.textPrimary,
   },
-  
-  subText: { 
+
+  subText: {
     color: COLORS.textSecondary,
     fontSize: 14,
   },
@@ -564,22 +605,22 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
 
-  pauseBtn: { 
-    backgroundColor: COLORS.warning, 
+  pauseBtn: {
+    backgroundColor: COLORS.warning,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
   },
-  
-  viewBtn: { 
-    backgroundColor: COLORS.info, 
+
+  viewBtn: {
+    backgroundColor: COLORS.info,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
   },
-  
-  removeBtn: { 
-    backgroundColor: COLORS.error, 
+
+  removeBtn: {
+    backgroundColor: COLORS.error,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,

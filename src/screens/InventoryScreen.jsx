@@ -14,9 +14,10 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { useFocusEffect } from '@react-navigation/native';
 import { inventoryAPI } from '../services/api';
 
-const InventoryScreen = ({ navigation }) => {
+const InventoryScreen = ({ navigation, route }) => {
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -72,6 +73,17 @@ const InventoryScreen = ({ navigation }) => {
     loadLowStockItems();
   }, [selectedCategory, searchTerm]);
 
+  // Handle navigation parameters to auto-open add modal
+  useFocusEffect(
+    useCallback(() => {
+      if (route?.params?.addMode) {
+        setShowAddModal(true);
+        // Clear the parameter to prevent modal from reopening on subsequent focuses
+        navigation.setParams({ addMode: false });
+      }
+    }, [route?.params?.addMode]),
+  );
+
   const loadInventory = async () => {
     try {
       setLoading(true);
@@ -126,9 +138,28 @@ const InventoryScreen = ({ navigation }) => {
 
       console.log('Creating item with data:', itemData);
       await inventoryAPI.create(itemData);
-      Alert.alert('Success', 'Item added successfully');
-      setShowAddModal(false);
-      resetForm();
+      Alert.alert('Success', 'Item added successfully!', [
+        {
+          text: 'Add Another',
+          onPress: () => {
+            resetForm();
+            // Keep modal open for adding another item
+          },
+        },
+        {
+          text: 'View Dashboard',
+          onPress: () => {
+            setShowAddModal(false);
+            resetForm();
+            // Navigate back to dashboard to show the new item
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('InventoryDashboard');
+            }
+          },
+        },
+      ]);
       loadInventory();
       loadLowStockItems();
     } catch (error) {
@@ -446,6 +477,12 @@ const InventoryScreen = ({ navigation }) => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Icon name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
         <Text style={styles.title}>Inventory Management</Text>
         <TouchableOpacity
           style={styles.addButton}
@@ -716,10 +753,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 6,
   },
+  backButton: {
+    padding: 8,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
+    flex: 1,
+    textAlign: 'center',
   },
   addButton: {
     backgroundColor: '#FF8C42',

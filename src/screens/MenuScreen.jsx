@@ -84,10 +84,12 @@ export default function MenuScreen({ navigation }) {
         onPress: async () => {
           try {
             console.log('Starting logout process...');
+
+            // Perform logout
             await logout();
             console.log('Logout function completed, navigating to login...');
 
-            // Navigate to login screen and reset navigation stack
+            // Navigate to LoginScreen
             navigation.reset({
               index: 0,
               routes: [{ name: 'LoginScreen' }],
@@ -96,10 +98,12 @@ export default function MenuScreen({ navigation }) {
             console.log('Navigation reset completed');
           } catch (error) {
             console.error('Error during logout process:', error);
-            Alert.alert(
-              'Logout Error',
-              'There was an issue logging out. Please try again.',
-            );
+
+            // Still navigate even if there was an error
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'LoginScreen' }],
+            });
           }
         },
       },
@@ -112,15 +116,11 @@ export default function MenuScreen({ navigation }) {
       activeOpacity={1}
       onPress={() => navigation.goBack()}
     >
-      <TouchableOpacity
-        activeOpacity={1}
-        style={styles.menu}
-        onPress={e => e.stopPropagation()}
-      >
+      <View style={styles.menu}>
         {/* Profile Section */}
         <View style={styles.profile}>
           <View style={styles.avatar}>
-            <Icon name="person" size={40} color="#fff" />
+            <Icon name="person-outline" size={36} color="#fff" />
           </View>
           <Text style={styles.staffId}>{user?.name || 'User'}</Text>
           <Text style={styles.email}>{user?.email || 'user@example.com'}</Text>
@@ -138,11 +138,11 @@ export default function MenuScreen({ navigation }) {
             style={styles.menuItem}
             onPress={() => handleMenuItemPress(item.route)}
           >
-            <Icon name={item.icon} size={24} color="#FF8C42" />
+            <Icon name={item.icon} size={22} color="#FF8C42" />
             <Text style={styles.menuText}>{item.title}</Text>
             <Icon
-              name="chevron-forward"
-              size={20}
+              name="chevron-forward-outline"
+              size={18}
               color="#CCC"
               style={{ marginLeft: 'auto' }}
             />
@@ -150,10 +150,17 @@ export default function MenuScreen({ navigation }) {
         ))}
 
         {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={e => {
+            e.stopPropagation();
+            handleLogout();
+          }}
+          activeOpacity={0.7}
+        >
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
-      </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -168,22 +175,22 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 24,
-    paddingTop: 60,
+    paddingTop: 80,
     paddingBottom: 32,
     borderTopRightRadius: 0,
     borderBottomRightRadius: 0,
   },
   profile: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 40,
     paddingBottom: 28,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
   avatar: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: '#FF8C42',
     justifyContent: 'center',
     alignItems: 'center',
@@ -240,15 +247,16 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     backgroundColor: '#FF8C42',
-    padding: 18,
+    paddingVertical: 20,
+    paddingHorizontal: 18,
     borderRadius: 14,
     alignItems: 'center',
     marginTop: 'auto',
-    elevation: 4,
+    elevation: 6,
     shadowColor: '#FF8C42',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
   },
   logoutText: {
     color: '#FFFFFF',

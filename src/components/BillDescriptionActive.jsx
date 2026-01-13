@@ -5,11 +5,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  StatusBar,
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
@@ -171,9 +169,7 @@ export default function BillDescriptionActive({
   const totalAmount = parseFloat(getBillDetail('totalAmount', '0'));
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" />
-
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
@@ -302,10 +298,12 @@ export default function BillDescriptionActive({
                   </View>
                   <Text style={styles.menuItemPrice}>
                     ₹
-                    {(
-                      (item.price || item.amount || 0) *
-                      (item.quantity || item.qty || 1)
-                    ).toFixed(2)}
+                    {(() => {
+                      const price = parseFloat(item.price || item.amount || 0);
+                      const quantity = parseInt(item.quantity || item.qty || 1);
+                      const total = isNaN(price) ? 0 : price * quantity;
+                      return isNaN(total) ? '0.00' : total.toFixed(2);
+                    })()}
                   </Text>
                 </View>
               ))
@@ -481,7 +479,7 @@ export default function BillDescriptionActive({
           )}
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
