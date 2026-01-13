@@ -227,7 +227,8 @@ export default function SignUpScreen({ navigation }) {
             style={styles.inputIcon}
           />
           <Text style={[styles.input, { paddingTop: 12 }]}>
-            {roleOptions.find(option => option.value === role)?.label || 'Select Role'}
+            {roleOptions.find(option => option.value === role)?.label ||
+              'Select Role'}
           </Text>
           <Icon
             name="chevron-down-outline"

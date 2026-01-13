@@ -17,7 +17,7 @@ const AuthChecker = ({ navigation }) => {
             navigation.replace('StaffMember');
             break;
           case 'owner':
-            navigation.replace('MainTabs');
+            navigation.replace('HomeScreen');
             break;
           case 'customer':
           default:
@@ -25,8 +25,8 @@ const AuthChecker = ({ navigation }) => {
             break;
         }
       } else {
-        // Navigate to login screen directly
-        navigation.replace('LoginScreen');
+        // Navigate to new welcome screen instead of direct login
+        navigation.replace('WelcomeScreen');
       }
     }
   }, [loading, isAuthenticated, user, navigation]);
