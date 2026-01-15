@@ -80,7 +80,20 @@ function revokeResetToken(token) {
 // Cleanup expired tokens every hour
 setInterval(cleanupExpiredRefreshTokens, 60 * 60 * 1000);
 
-module.exports = {
+export {
+  refreshTokens,
+  setRefreshToken,
+  getRefreshToken,
+  findUserByRefreshToken,
+  revokeRefreshToken,
+  revokeAllRefreshTokens,
+  cleanupExpiredRefreshTokens,
+  setResetToken,
+  getResetToken,
+  revokeResetToken,
+};
+
+export default {
   refreshTokens,
   setRefreshToken,
   getRefreshToken,

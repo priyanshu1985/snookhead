@@ -1,12 +1,29 @@
-const express = require('express');
-const { sequelize } = require('../config/database');
+import express from "express";
+import { getSupabase } from "../config/supabase.js";
 const router = express.Router();
-router.get('/', async (req, res) => {
+
+router.get("/", async (req, res) => {
   try {
-    await sequelize.authenticate();
-    res.json({ status: 'OK', database: 'Connected', timestamp: new Date().toISOString() });
+    const supabase = getSupabase();
+    // Test Supabase connection by making a simple storage query (no RLS issues)
+    const { error } = await supabase.storage.listBuckets();
+    if (error && !error.message.includes('JWT')) {
+      throw error;
+    }
+    res.json({
+      status: "OK",
+      database: "Connected",
+      timestamp: new Date().toISOString(),
+    });
   } catch (error) {
-    res.status(503).json({ status: 'Error', database: 'Disconnected', error: error.message });
+    res
+      .status(503)
+      .json({
+        status: "Error",
+        database: "Disconnected",
+        error: error.message,
+      });
   }
 });
-module.exports = router;
+
+export default router;

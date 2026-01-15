@@ -11,7 +11,7 @@
  * 4. Routes use req.stationId to filter queries
  */
 
-const { User, Station } = require("../models");
+import { User, Station } from "../models/index.js";
 
 /**
  * Middleware to extract station context from authenticated user
@@ -34,7 +34,7 @@ const stationContext = async (req, res, next) => {
 
     // For owner/staff roles, get station_id from user record
     if (req.user.role === "owner" || req.user.role === "staff") {
-      // First check if station_id is already in JWT payload
+      // First check if station_id is already in JWT payload (JWT uses station_id usually, but let's check)
       if (req.user.station_id) {
         req.stationId = req.user.station_id;
         return next();
@@ -42,7 +42,7 @@ const stationContext = async (req, res, next) => {
 
       // Otherwise fetch from database
       const user = await User.findByPk(req.user.id, {
-        attributes: ["id", "station_id", "role"],
+        attributes: ["id", "stationid", "role"],
       });
 
       if (!user) {
@@ -50,15 +50,15 @@ const stationContext = async (req, res, next) => {
       }
 
       // For owners without a station_id, they might need to create one first
-      if (req.user.role === "owner" && !user.station_id) {
+      if (req.user.role === "owner" && !user.stationid) {
         // Check if they have an owned station
         const ownedStation = await Station.findOne({
-          where: { owner_user_id: user.id },
+          where: { owneruserid: user.id },
         });
 
         if (ownedStation) {
           // Update user's station_id
-          await user.update({ station_id: ownedStation.id });
+          await User.update({ stationid: ownedStation.id }, { where: { id: user.id } });
           req.stationId = ownedStation.id;
         } else {
           // Owner needs to create a station first
@@ -69,14 +69,14 @@ const stationContext = async (req, res, next) => {
       }
 
       // Staff must have a station_id
-      if (req.user.role === "staff" && !user.station_id) {
+      if (req.user.role === "staff" && !user.stationid) {
         return res.status(403).json({
           error: "Staff member not assigned to any station",
           code: "NO_STATION_ASSIGNED",
         });
       }
 
-      req.stationId = user.station_id;
+      req.stationId = user.stationid;
       return next();
     }
 
@@ -130,7 +130,7 @@ const addStationFilter = (where = {}, stationId) => {
 
   return {
     ...where,
-    station_id: stationId,
+    stationid: stationId,
   };
 };
 
@@ -147,13 +147,8 @@ const addStationToData = (data = {}, stationId) => {
 
   return {
     ...data,
-    station_id: stationId,
+    stationid: stationId,
   };
 };
 
-module.exports = {
-  stationContext,
-  requireStation,
-  addStationFilter,
-  addStationToData,
-};
+export { stationContext, requireStation, addStationFilter, addStationToData };

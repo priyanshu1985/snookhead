@@ -1,19 +1,20 @@
-const express = require("express");
+import express from "express";
+import { auth } from "../middleware/auth.js";
+import {
+  stationContext,
+  requireStation,
+  addStationFilter,
+  addStationToData,
+} from "../middleware/stationContext.js";
+import { validateRequired } from "../middleware/validation.js";
+
 const router = express.Router();
-const { Op } = require("sequelize");
-const { auth } = require("../middleware/auth");
-const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
-const {
-  validateRequired,
-  validateNumeric,
-  validateEnum,
-} = require("../middleware/validation");
 
 // Get models
 let models;
-const getModels = () => {
+const getModels = async () => {
   if (!models) {
-    models = require("../models");
+    models = await import("../models/index.js");
   }
   return models;
 };
@@ -74,7 +75,7 @@ router.get("/", auth, stationContext, async (req, res) => {
   try {
     console.log("GET /api/inventory - Starting request...");
 
-    const models = getModels();
+    const models = await getModels();
     console.log("Models loaded:", Object.keys(models));
 
     const { Inventory } = models;
@@ -99,7 +100,7 @@ router.get("/", auth, stationContext, async (req, res) => {
     let whereClause = {};
 
     if (include_inactive !== "true") {
-      whereClause.is_active = true;
+      whereClause.isactive = true;
     }
 
     if (category) {
@@ -108,7 +109,7 @@ router.get("/", auth, stationContext, async (req, res) => {
 
     if (search) {
       whereClause[Op.or] = [
-        { item_name: { [Op.like]: `%${search}%` } },
+        { itemname: { [Op.like]: `%${search}%` } },
         { description: { [Op.like]: `%${search}%` } },
         { supplier: { [Op.like]: `%${search}%` } },
       ];
@@ -136,13 +137,13 @@ router.get("/", auth, stationContext, async (req, res) => {
     if (status) {
       if (status === "low_stock") {
         filteredRows = rows.filter(
-          (item) => item.current_quantity <= item.minimum_threshold
+          (item) => item.currentquantity <= item.minimumthreshold
         );
       } else if (status === "out_of_stock") {
-        filteredRows = rows.filter((item) => item.current_quantity === 0);
+        filteredRows = rows.filter((item) => item.currentquantity === 0);
       } else if (status === "in_stock") {
         filteredRows = rows.filter(
-          (item) => item.current_quantity > item.minimum_threshold
+          (item) => item.currentquantity > item.minimumthreshold
         );
       }
     }
@@ -150,15 +151,15 @@ router.get("/", auth, stationContext, async (req, res) => {
     // Calculate summary statistics
     const summary = {
       total_items: count,
-      active_items: rows.filter((item) => item.is_active).length,
+      active_items: rows.filter((item) => item.isactive).length,
       low_stock_items: filteredRows.filter(
-        (item) => item.current_quantity <= item.minimum_threshold
+        (item) => item.currentquantity <= item.minimumthreshold
       ).length,
       out_of_stock_items: filteredRows.filter(
-        (item) => item.current_quantity === 0
+        (item) => item.currentquantity === 0
       ).length,
       total_value: filteredRows.reduce(
-        (sum, item) => sum + (item.cost_per_unit || 0) * item.current_quantity,
+        (sum, item) => sum + (item.costperunit || 0) * item.currentquantity,
         0
       ),
       categories: await Inventory.findAll({
@@ -166,7 +167,7 @@ router.get("/", auth, stationContext, async (req, res) => {
           "category",
           [Inventory.sequelize.fn("COUNT", "*"), "count"],
         ],
-        where: { is_active: true },
+        where: { isactive: true },
         group: ["category"],
         raw: true,
       }),
@@ -195,7 +196,7 @@ router.get("/", auth, stationContext, async (req, res) => {
 // GET /api/inventory/:id - Get single inventory item
 router.get("/:id", auth, stationContext, async (req, res) => {
   try {
-    const { Inventory } = getModels();
+    const { Inventory } = await getModels();
     const { id } = req.params;
 
     // Apply station filter
@@ -222,79 +223,92 @@ router.get("/:id", auth, stationContext, async (req, res) => {
 });
 
 // POST /api/inventory - Add new inventory item
-router.post("/", auth, stationContext, requireStation, validateInventoryItem, async (req, res) => {
-  try {
-    const { Inventory } = getModels();
-    const {
-      item_name,
-      category,
-      current_quantity = 0,
-      minimum_threshold = 10,
-      unit,
-      cost_per_unit,
-      supplier,
-      description,
-      last_restocked,
-    } = req.body;
+router.post(
+  "/",
+  auth,
+  stationContext,
+  requireStation,
+  validateInventoryItem,
+  async (req, res) => {
+    try {
+      const { Inventory } = await getModels();
+      const {
+        item_name,
+        category,
+        current_quantity = 0,
+        minimum_threshold = 10,
+        unit,
+        cost_per_unit,
+        supplier,
+        description,
+        last_restocked,
+      } = req.body;
 
-    // Check if item already exists for this station
-    const existingWhere = addStationFilter({ item_name: item_name.trim() }, req.stationId);
-    const existingItem = await Inventory.findOne({
-      where: existingWhere,
-    });
+      // Check if item already exists for this station
+      const existingWhere = addStationFilter(
+        { itemname: item_name.trim() },
+        req.stationId
+      );
+      const existingItem = await Inventory.findOne({
+        where: existingWhere,
+      });
 
-    if (existingItem) {
-      return res.status(409).json({
-        error: "Inventory item already exists",
-        suggestion: "Use PUT /api/inventory/:id to update existing item",
+      if (existingItem) {
+        return res.status(409).json({
+          error: "Inventory item already exists",
+          suggestion: "Use PUT /api/inventory/:id to update existing item",
+        });
+      }
+
+      // Create new inventory item with station_id
+      const itemData = addStationToData(
+        {
+          itemname: item_name.trim(),
+          category,
+          currentquantity: parseInt(current_quantity),
+          minimumthreshold: parseInt(minimum_threshold),
+          unit: unit.trim(),
+          costperunit: cost_per_unit ? parseFloat(cost_per_unit) : null,
+          supplier: supplier ? supplier.trim() : null,
+          description: description ? description.trim() : null,
+          lastrestocked: last_restocked ? new Date(last_restocked) : null,
+          isactive: true,
+        },
+        req.stationId
+      );
+
+      const newItem = await Inventory.create(itemData);
+
+      // Fetch the created item with virtual fields
+      const itemWithVirtuals = await Inventory.findByPk(newItem.id);
+
+      res.status(201).json({
+        success: true,
+        message: "Inventory item created successfully",
+        data: itemWithVirtuals,
+      });
+    } catch (error) {
+      console.error("Error creating inventory item:", error);
+
+      if (error.name === "SequelizeValidationError") {
+        return res.status(400).json({
+          error: "Validation failed",
+          details: error.errors.map((err) => err.message),
+        });
+      }
+
+      res.status(500).json({
+        error: "Failed to create inventory item",
+        details: error.message,
       });
     }
-
-    // Create new inventory item with station_id
-    const itemData = addStationToData({
-      item_name: item_name.trim(),
-      category,
-      current_quantity: parseInt(current_quantity),
-      minimum_threshold: parseInt(minimum_threshold),
-      unit: unit.trim(),
-      cost_per_unit: cost_per_unit ? parseFloat(cost_per_unit) : null,
-      supplier: supplier ? supplier.trim() : null,
-      description: description ? description.trim() : null,
-      last_restocked: last_restocked ? new Date(last_restocked) : null,
-      is_active: true,
-    }, req.stationId);
-
-    const newItem = await Inventory.create(itemData);
-
-    // Fetch the created item with virtual fields
-    const itemWithVirtuals = await Inventory.findByPk(newItem.id);
-
-    res.status(201).json({
-      success: true,
-      message: "Inventory item created successfully",
-      data: itemWithVirtuals,
-    });
-  } catch (error) {
-    console.error("Error creating inventory item:", error);
-
-    if (error.name === "SequelizeValidationError") {
-      return res.status(400).json({
-        error: "Validation failed",
-        details: error.errors.map((err) => err.message),
-      });
-    }
-
-    res.status(500).json({
-      error: "Failed to create inventory item",
-      details: error.message,
-    });
   }
-});
+);
 
 // PUT /api/inventory/:id - Update inventory item
 router.put("/:id", auth, stationContext, async (req, res) => {
   try {
-    const { Inventory } = getModels();
+    const { Inventory } = await getModels();
     const { id } = req.params;
     const updateData = req.body;
 
@@ -309,11 +323,18 @@ router.put("/:id", auth, stationContext, async (req, res) => {
 
     // Handle quantity updates
     if (updateData.current_quantity !== undefined) {
-      updateData.current_quantity = parseInt(updateData.current_quantity);
-      if (updateData.current_quantity > item.current_quantity) {
-        updateData.last_restocked = new Date();
+      updateData.currentquantity = parseInt(updateData.current_quantity);
+      delete updateData.current_quantity; // remove old key
+      if (updateData.currentquantity > item.currentquantity) {
+        updateData.lastrestocked = new Date();
       }
     }
+    // Handle specific fields renaming if passed in body
+    if (updateData.item_name) { updateData.itemname = updateData.item_name; delete updateData.item_name; }
+    if (updateData.minimum_threshold) { updateData.minimumthreshold = updateData.minimum_threshold; delete updateData.minimum_threshold; }
+    if (updateData.cost_per_unit) { updateData.costperunit = updateData.cost_per_unit; delete updateData.cost_per_unit; }
+    if (updateData.last_restocked) { updateData.lastrestocked = updateData.last_restocked; delete updateData.last_restocked; }
+    if (updateData.is_active !== undefined) { updateData.isactive = updateData.is_active; delete updateData.is_active; }
 
     // Update the item
     await item.update(updateData);
@@ -346,7 +367,7 @@ router.put("/:id", auth, stationContext, async (req, res) => {
 // PATCH /api/inventory/:id/quantity - Update item quantity (stock in/out)
 router.patch("/:id/quantity", auth, stationContext, async (req, res) => {
   try {
-    const { Inventory } = getModels();
+    const { Inventory } = await getModels();
     const { id } = req.params;
     const { quantity_change, operation = "add", reason } = req.body;
 
@@ -367,9 +388,9 @@ router.patch("/:id/quantity", auth, stationContext, async (req, res) => {
 
     let newQuantity;
     if (operation === "add") {
-      newQuantity = item.current_quantity + parseInt(quantity_change);
+      newQuantity = item.currentquantity + parseInt(quantity_change);
     } else if (operation === "subtract") {
-      newQuantity = item.current_quantity - parseInt(quantity_change);
+      newQuantity = item.currentquantity - parseInt(quantity_change);
     } else {
       return res.status(400).json({
         error: 'Operation must be "add" or "subtract"',
@@ -379,18 +400,18 @@ router.patch("/:id/quantity", auth, stationContext, async (req, res) => {
     if (newQuantity < 0) {
       return res.status(400).json({
         error: "Insufficient stock. Current quantity would become negative.",
-        current_quantity: item.current_quantity,
+        current_quantity: item.currentquantity,
         requested_change: quantity_change,
       });
     }
 
     // Update quantity and last_restocked if adding stock
     const updateData = {
-      current_quantity: newQuantity,
+      currentquantity: newQuantity,
     };
 
     if (operation === "add") {
-      updateData.last_restocked = new Date();
+      updateData.lastrestocked = new Date();
     }
 
     await item.update(updateData);
@@ -405,7 +426,7 @@ router.patch("/:id/quantity", auth, stationContext, async (req, res) => {
       change_summary: {
         operation,
         quantity_change: parseInt(quantity_change),
-        previous_quantity: item.current_quantity,
+        previous_quantity: item.currentquantity,
         new_quantity: newQuantity,
         reason: reason || null,
       },
@@ -422,7 +443,7 @@ router.patch("/:id/quantity", auth, stationContext, async (req, res) => {
 // DELETE /api/inventory/:id - Delete (deactivate) inventory item
 router.delete("/:id", auth, stationContext, async (req, res) => {
   try {
-    const { Inventory } = getModels();
+    const { Inventory } = await getModels();
     const { id } = req.params;
     const { permanent = false } = req.query;
 
@@ -442,7 +463,7 @@ router.delete("/:id", auth, stationContext, async (req, res) => {
         message: "Inventory item permanently deleted",
       });
     } else {
-      await item.update({ is_active: false });
+      await item.update({ isactive: false });
       res.json({
         success: true,
         message: "Inventory item deactivated",
@@ -461,29 +482,29 @@ router.delete("/:id", auth, stationContext, async (req, res) => {
 // GET /api/inventory/low-stock - Get items running low
 router.get("/alerts/low-stock", auth, stationContext, async (req, res) => {
   try {
-    const { Inventory } = getModels();
+    const { Inventory } = await getModels();
 
     // Build where clause with station filter
     let whereClause = {
-      is_active: true,
-      current_quantity: {
-        [Op.lte]: Inventory.sequelize.col("minimum_threshold"),
+      isactive: true,
+      currentquantity: {
+        [Op.lte]: Inventory.sequelize.col("minimumthreshold"),
       },
     };
     whereClause = addStationFilter(whereClause, req.stationId);
 
     const lowStockItems = await Inventory.findAll({
       where: whereClause,
-      order: [["current_quantity", "ASC"]],
+      order: [["currentquantity", "ASC"]],
     });
 
     const outOfStockItems = lowStockItems.filter(
-      (item) => item.current_quantity === 0
+      (item) => item.currentquantity === 0
     );
     const criticallyLowItems = lowStockItems.filter(
       (item) =>
-        item.current_quantity > 0 &&
-        item.current_quantity <= item.minimum_threshold * 0.5
+        item.currentquantity > 0 &&
+        item.currentquantity <= item.minimumthreshold * 0.5
     );
 
     res.json({
@@ -508,4 +529,4 @@ router.get("/alerts/low-stock", auth, stationContext, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

@@ -1,14 +1,17 @@
-const express = require("express");
+import express from "express";
+import { auth } from "../middleware/auth.js";
+import {
+  stationContext,
+  addStationFilter,
+} from "../middleware/stationContext.js";
+
 const router = express.Router();
-const { Op, fn, col, literal } = require("sequelize");
-const { auth } = require("../middleware/auth");
-const { stationContext, addStationFilter } = require("../middleware/stationContext");
 
 // Get models
 let models;
-const getModels = () => {
+const getModels = async () => {
   if (!models) {
-    models = require("../models");
+    models = await import("../models/index.js");
   }
   return models;
 };
@@ -47,7 +50,7 @@ router.get("/stats", auth, stationContext, async (req, res) => {
   try {
     const { period = "week" } = req.query;
     const { startDate, endDate } = getDateRange(period);
-    const { Wallet, Customer, Bill, ActiveTable, Order } = getModels();
+    const { Wallet, Customer, Bill, ActiveTable, Order } = await getModels();
 
     // Get previous period for comparison
     const prevPeriodLength = endDate - startDate;
@@ -55,32 +58,52 @@ router.get("/stats", auth, stationContext, async (req, res) => {
     const prevEndDate = startDate;
 
     // Active wallets (wallets with balance > 0) - filtered by station
-    const activeWalletsWhere = addStationFilter({ balance: { [Op.gt]: 0 } }, req.stationId);
+    const activeWalletsWhere = addStationFilter(
+      { balance: { [Op.gt]: 0 } },
+      req.stationId
+    );
     const activeWallets = await Wallet.count({ where: activeWalletsWhere });
 
-    const prevActiveWalletsWhere = addStationFilter({
-      balance: { [Op.gt]: 0 },
-      createdAt: { [Op.lt]: startDate },
-    }, req.stationId);
-    const prevActiveWallets = await Wallet.count({ where: prevActiveWalletsWhere });
+    const prevActiveWalletsWhere = addStationFilter(
+      {
+        balance: { [Op.gt]: 0 },
+        createdAt: { [Op.lt]: startDate },
+      },
+      req.stationId
+    );
+    const prevActiveWallets = await Wallet.count({
+      where: prevActiveWalletsWhere,
+    });
 
     // New members in current period - filtered by station
-    const newMembersWhere = addStationFilter({
-      createdAt: { [Op.between]: [startDate, endDate] },
-    }, req.stationId);
+    const newMembersWhere = addStationFilter(
+      {
+        createdAt: { [Op.between]: [startDate, endDate] },
+      },
+      req.stationId
+    );
     const newMembers = await Customer.count({ where: newMembersWhere });
 
-    const prevNewMembersWhere = addStationFilter({
-      createdAt: { [Op.between]: [prevStartDate, prevEndDate] },
-    }, req.stationId);
+    const prevNewMembersWhere = addStationFilter(
+      {
+        createdAt: { [Op.between]: [prevStartDate, prevEndDate] },
+      },
+      req.stationId
+    );
     const prevNewMembers = await Customer.count({ where: prevNewMembersWhere });
 
     // Inactive wallets - filtered by station
-    const inactiveWalletsWhere = addStationFilter({ balance: { [Op.eq]: 0 } }, req.stationId);
+    const inactiveWalletsWhere = addStationFilter(
+      { balance: { [Op.eq]: 0 } },
+      req.stationId
+    );
     const inactiveWallets = await Wallet.count({ where: inactiveWalletsWhere });
 
     // Credit members - filtered by station
-    const creditMembersWhere = addStationFilter({ balance: { [Op.lt]: 0 } }, req.stationId);
+    const creditMembersWhere = addStationFilter(
+      { balance: { [Op.lt]: 0 } },
+      req.stationId
+    );
     const creditMembers = await Wallet.count({ where: creditMembersWhere });
 
     // Calculate trends
@@ -146,7 +169,7 @@ router.get("/game-utilization", auth, stationContext, async (req, res) => {
   try {
     const { period = "week" } = req.query;
     const { startDate, endDate } = getDateRange(period);
-    const { Game, ActiveTable, Bill, sequelize } = getModels();
+    const { Game, ActiveTable, Bill, sequelize } = await getModels();
 
     // Get all games for this station
     const gamesWhere = addStationFilter({}, req.stationId);
@@ -159,17 +182,25 @@ router.get("/game-utilization", auth, stationContext, async (req, res) => {
     const gameData = await Promise.all(
       games.map(async (game) => {
         // Count active sessions for this game in the period - filtered by station
-        const sessionWhere = addStationFilter({
-          game_id: game.game_id,
-          start_time: { [Op.between]: [startDate, endDate] },
-        }, req.stationId);
+        const sessionWhere = addStationFilter(
+          {
+            game_id: game.game_id,
+            start_time: { [Op.between]: [startDate, endDate] },
+          },
+          req.stationId
+        );
         const sessionCount = await ActiveTable.count({ where: sessionWhere });
 
         // Get total sessions across all games in the period - filtered by station
-        const totalSessionsWhere = addStationFilter({
-          start_time: { [Op.between]: [startDate, endDate] },
-        }, req.stationId);
-        const totalSessions = await ActiveTable.count({ where: totalSessionsWhere });
+        const totalSessionsWhere = addStationFilter(
+          {
+            start_time: { [Op.between]: [startDate, endDate] },
+          },
+          req.stationId
+        );
+        const totalSessions = await ActiveTable.count({
+          where: totalSessionsWhere,
+        });
 
         // Calculate usage percentage
         const usage =
@@ -241,13 +272,16 @@ router.get("/revenue", auth, stationContext, async (req, res) => {
   try {
     const { period = "week" } = req.query;
     const { startDate, endDate } = getDateRange(period);
-    const { Bill, Order } = getModels();
+    const { Bill, Order } = await getModels();
 
     // Total revenue in period - filtered by station
-    const revenueWhere = addStationFilter({
-      createdAt: { [Op.between]: [startDate, endDate] },
-      status: "paid",
-    }, req.stationId);
+    const revenueWhere = addStationFilter(
+      {
+        createdAt: { [Op.between]: [startDate, endDate] },
+        status: "paid",
+      },
+      req.stationId
+    );
     const revenueResult = await Bill.findOne({
       attributes: [
         [fn("SUM", col("total_amount")), "totalRevenue"],
@@ -262,10 +296,13 @@ router.get("/revenue", auth, stationContext, async (req, res) => {
     const prevStartDate = new Date(startDate - prevPeriodLength);
     const prevEndDate = startDate;
 
-    const prevRevenueWhere = addStationFilter({
-      createdAt: { [Op.between]: [prevStartDate, prevEndDate] },
-      status: "paid",
-    }, req.stationId);
+    const prevRevenueWhere = addStationFilter(
+      {
+        createdAt: { [Op.between]: [prevStartDate, prevEndDate] },
+        status: "paid",
+      },
+      req.stationId
+    );
     const prevRevenueResult = await Bill.findOne({
       attributes: [[fn("SUM", col("total_amount")), "totalRevenue"]],
       where: prevRevenueWhere,
@@ -285,10 +322,13 @@ router.get("/revenue", auth, stationContext, async (req, res) => {
     }
 
     // Daily/weekly breakdown - filtered by station
-    const breakdownWhere = addStationFilter({
-      createdAt: { [Op.between]: [startDate, endDate] },
-      status: "paid",
-    }, req.stationId);
+    const breakdownWhere = addStationFilter(
+      {
+        createdAt: { [Op.between]: [startDate, endDate] },
+        status: "paid",
+      },
+      req.stationId
+    );
     const revenueBreakdown = await Bill.findAll({
       attributes: [
         [fn("DATE", col("createdAt")), "date"],
@@ -321,7 +361,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     const { period = "week" } = req.query;
     const { startDate, endDate } = getDateRange(period);
     const { Wallet, Customer, Bill, ActiveTable, Game, TableAsset, Order } =
-      getModels();
+      await getModels();
 
     // Current date for display
     const currentDate = new Date().toLocaleDateString("en-US", {
@@ -347,31 +387,54 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       totalSessions,
       activeTables,
     ] = await Promise.all([
-      Wallet.count({ where: addStationFilter({ balance: { [Op.gt]: 0 } }, req.stationId) }),
-      Customer.count({
-        where: addStationFilter({ createdAt: { [Op.between]: [startDate, endDate] } }, req.stationId),
+      Wallet.count({
+        where: addStationFilter({ balance: { [Op.gt]: 0 } }, req.stationId),
       }),
       Customer.count({
-        where: addStationFilter({ createdAt: { [Op.between]: [prevStartDate, prevEndDate] } }, req.stationId),
+        where: addStationFilter(
+          { createdAt: { [Op.between]: [startDate, endDate] } },
+          req.stationId
+        ),
       }),
-      Wallet.count({ where: addStationFilter({ balance: { [Op.eq]: 0 } }, req.stationId) }),
-      Wallet.count({ where: addStationFilter({ balance: { [Op.lt]: 0 } }, req.stationId) }),
-      Bill.sum("total_amount", {
-        where: addStationFilter({
-          createdAt: { [Op.between]: [startDate, endDate] },
-          status: "paid",
-        }, req.stationId),
+      Customer.count({
+        where: addStationFilter(
+          { createdAt: { [Op.between]: [prevStartDate, prevEndDate] } },
+          req.stationId
+        ),
+      }),
+      Wallet.count({
+        where: addStationFilter({ balance: { [Op.eq]: 0 } }, req.stationId),
+      }),
+      Wallet.count({
+        where: addStationFilter({ balance: { [Op.lt]: 0 } }, req.stationId),
       }),
       Bill.sum("total_amount", {
-        where: addStationFilter({
-          createdAt: { [Op.between]: [prevStartDate, prevEndDate] },
-          status: "paid",
-        }, req.stationId),
+        where: addStationFilter(
+          {
+            createdAt: { [Op.between]: [startDate, endDate] },
+            status: "paid",
+          },
+          req.stationId
+        ),
+      }),
+      Bill.sum("total_amount", {
+        where: addStationFilter(
+          {
+            createdAt: { [Op.between]: [prevStartDate, prevEndDate] },
+            status: "paid",
+          },
+          req.stationId
+        ),
       }),
       ActiveTable.count({
-        where: addStationFilter({ start_time: { [Op.between]: [startDate, endDate] } }, req.stationId),
+        where: addStationFilter(
+          { start_time: { [Op.between]: [startDate, endDate] } },
+          req.stationId
+        ),
       }),
-      ActiveTable.count({ where: addStationFilter({ status: "active" }, req.stationId) }),
+      ActiveTable.count({
+        where: addStationFilter({ status: "active" }, req.stationId),
+      }),
     ]);
 
     // Calculate trends
@@ -434,10 +497,13 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     const gameData = await Promise.all(
       games.map(async (game) => {
         const sessionCount = await ActiveTable.count({
-          where: addStationFilter({
-            game_id: game.game_id,
-            start_time: { [Op.between]: [startDate, endDate] },
-          }, req.stationId),
+          where: addStationFilter(
+            {
+              game_id: game.game_id,
+              start_time: { [Op.between]: [startDate, endDate] },
+            },
+            req.stationId
+          ),
         });
 
         const usage =
@@ -510,4 +576,4 @@ router.get("/summary", auth, stationContext, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

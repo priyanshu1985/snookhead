@@ -1,39 +1,40 @@
-const express = require("express");
+import express from "express";
+import QRCode from "qrcode";
+import { v4 as uuidv4 } from "uuid";
+import { Wallet, Customer } from "../models/index.js";
+import { auth, authorize } from "../middleware/auth.js";
+import {
+  stationContext,
+  requireStation,
+  addStationFilter,
+  addStationToData,
+} from "../middleware/stationContext.js";
+
 const router = express.Router();
-const QRCode = require("qrcode");
-const { v4: uuidv4 } = require("uuid");
-const { Wallet, Customer } = require("../models");
-const { auth, authorize } = require("../middleware/auth");
-const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
 
 /* =====================================================
    GET Wallet by Customer ID - filtered by station
    ===================================================== */
-router.get(
-  "/customer/:customer_id",
-  auth,
-  stationContext,
-  async (req, res) => {
-    try {
-      const { customer_id } = req.params;
+router.get("/customer/:customer_id", auth, stationContext, async (req, res) => {
+  try {
+    const { customer_id } = req.params;
 
-      const where = addStationFilter({ customer_id }, req.stationId);
-      const wallet = await Wallet.findOne({
-        where,
-        include: [{ model: Customer }],
-      });
+    const where = addStationFilter({ customerid: customer_id }, req.stationId);
+    const wallet = await Wallet.findOne({
+      where,
+      include: [{ model: Customer }],
+    });
 
-      if (!wallet) {
-        return res.status(404).json({ error: "Wallet not found" });
-      }
-
-      res.json(wallet);
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: err.message });
+    if (!wallet) {
+      return res.status(404).json({ error: "Wallet not found" });
     }
+
+    res.json(wallet);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
-);
+});
 
 /* =====================================================
    CREATE Wallet + Generate QR - with station_id
@@ -53,13 +54,16 @@ router.post(
       }
 
       // Check customer exists and belongs to this station
-      const customerWhere = addStationFilter({ id: customer_id }, req.stationId);
+      const customerWhere = addStationFilter(
+        { id: customer_id },
+        req.stationId
+      );
       const customer = await Customer.findOne({ where: customerWhere });
       if (!customer) {
         return res.status(404).json({ error: "Customer not found" });
       }
 
-      const existsWhere = addStationFilter({ customer_id }, req.stationId);
+      const existsWhere = addStationFilter({ customerid: customer_id }, req.stationId);
       const exists = await Wallet.findOne({ where: existsWhere });
       if (exists) {
         return res
@@ -79,24 +83,27 @@ router.post(
 
       const qrBase64 = await QRCode.toDataURL(qrPayload);
 
-      const walletData = addStationToData({
-        id: walletId,
-        customer_id,
-        phone_no,
-        qr_id: qrId,
-        qr_code: Buffer.from(qrBase64.split(",")[1], "base64"),
-        currency: currency || "INR",
-        balance: 0,
-        credit_limit: 0,
-        reserved_amount: 0,
-      }, req.stationId);
+      const walletData = addStationToData(
+        {
+          id: walletId,
+          customerid: customer_id,
+          phoneno: phone_no,
+          qrid: qrId,
+          qrcode: Buffer.from(qrBase64.split(",")[1], "base64"),
+          currency: currency || "INR",
+          balance: 0,
+          creditlimit: 0,
+          reservedamount: 0,
+        },
+        req.stationId
+      );
 
       const wallet = await Wallet.create(walletData);
 
       res.status(201).json({
         message: "Wallet created",
         wallet_id: wallet.id,
-        qr_id: wallet.qr_id,
+        qr_id: wallet.qrid,
         qr_code: qrBase64,
       });
     } catch (err) {
@@ -122,15 +129,20 @@ router.post(
         return res.status(400).json({ error: "Invalid amount" });
       }
 
-      const where = addStationFilter({ customer_id }, req.stationId);
+      const where = addStationFilter({ customerid: customer_id }, req.stationId);
       const wallet = await Wallet.findOne({ where });
       if (!wallet) {
         return res.status(404).json({ error: "Wallet not found" });
       }
 
-      wallet.balance = Number(wallet.balance) + Number(amount);
-      wallet.last_transaction_at = new Date();
-      await wallet.save();
+      const newBalance = Number(wallet.balance) + Number(amount);
+      await Wallet.update({
+        balance: newBalance,
+        lasttransactionat: new Date()
+      }, { where: { id: wallet.id } });
+      
+      // Update local object for response
+      wallet.balance = newBalance;
 
       res.json({
         message: "Amount added",
@@ -166,9 +178,14 @@ router.post(
         return res.status(404).json({ error: "Wallet not found" });
       }
 
-      wallet.balance = Number(wallet.balance) + Number(amount);
-      wallet.last_transaction_at = new Date();
-      await wallet.save();
+      const newBalance = Number(wallet.balance) + Number(amount);
+      await Wallet.update({
+        balance: newBalance,
+        lasttransactionat: new Date()
+      }, { where: { id: wallet.id } });
+
+      // Update local object for response
+      wallet.balance = newBalance;
 
       res.json({
         message: "Amount added",
@@ -197,22 +214,26 @@ router.post(
         return res.status(400).json({ error: "Invalid amount" });
       }
 
-      const where = addStationFilter({ customer_id }, req.stationId);
+      const where = addStationFilter({ customerid: customer_id }, req.stationId);
       const wallet = await Wallet.findOne({ where });
       if (!wallet) {
         return res.status(404).json({ error: "Wallet not found" });
       }
 
-      const available =
-        Number(wallet.balance) + Number(wallet.credit_limit);
+      const available = Number(wallet.balance) + Number(wallet.creditlimit);
 
       if (available < amount) {
         return res.status(400).json({ error: "Insufficient balance" });
       }
 
-      wallet.balance = Number(wallet.balance) - Number(amount);
-      wallet.last_transaction_at = new Date();
-      await wallet.save();
+      const newBalance = Number(wallet.balance) - Number(amount);
+      await Wallet.update({
+        balance: newBalance,
+        lasttransactionat: new Date()
+      }, { where: { id: wallet.id } });
+
+      // Update local object for response
+      wallet.balance = newBalance;
 
       res.json({
         message: "Amount deducted",
@@ -305,4 +326,4 @@ router.get(
   }
 );
 
-module.exports = router;
+export default router;

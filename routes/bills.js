@@ -1,6 +1,5 @@
-const express = require("express");
-const router = express.Router();
-const {
+import express from "express";
+import {
   Bill,
   Order,
   ActiveTable,
@@ -8,9 +7,16 @@ const {
   MenuItem,
   TableAsset,
   Game,
-} = require("../models");
-const { auth, authorize } = require("../middleware/auth");
-const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
+} from "../models/index.js";
+import { auth, authorize } from "../middleware/auth.js";
+import {
+  stationContext,
+  requireStation,
+  addStationFilter,
+  addStationToData,
+} from "../middleware/stationContext.js";
+
+const router = express.Router();
 
 // list bills
 router.get(
@@ -62,15 +68,16 @@ router.get(
 
         // Handle bills created via auto-release (no Order, has bill_items JSON)
         const hasOrder = bill.orderId && orderItems.length > 0;
-        const billItemsFromJson = bill.bill_items || [];
+        const billItemsFromJson = bill.billitems || [];
 
         // Generate items summary - prefer stored summary, then from Order, then from bill_items
-        let itemsSummary = bill.items_summary;
+        let itemsSummary = bill.itemssummary;
         if (!itemsSummary) {
           if (hasOrder) {
-            itemsSummary = orderItems
-              .map((item) => (item.MenuItem || {}).name || "Item")
-              .join(", ") || "Items";
+            itemsSummary =
+              orderItems
+                .map((item) => (item.MenuItem || {}).name || "Item")
+                .join(", ") || "Items";
           } else if (billItemsFromJson.length > 0) {
             itemsSummary = billItemsFromJson
               .map((item) => `${item.name} x${item.quantity}`)
@@ -107,14 +114,14 @@ router.get(
 
         return {
           id: bill.id,
-          bill_number: bill.bill_number || `B${bill.id}`,
-          total_amount: bill.total_amount || bill.amount || bill.total || 0,
-          table_charges: bill.table_charges || 0,
-          menu_charges: bill.menu_charges || 0,
-          session_duration: bill.session_duration || 0,
+          bill_number: bill.billnumber || `B${bill.id}`,
+          total_amount: bill.totalamount || bill.amount || bill.total || 0,
+          table_charges: bill.tablecharges || 0,
+          menu_charges: bill.menucharges || 0,
+          session_duration: bill.sessionduration || 0,
           status: bill.status,
-          customer_name: bill.customer_name || "Unknown Customer",
-          customer_phone: bill.customer_phone || "+91 XXXXXXXXXX",
+          customer_name: bill.customername || "Unknown Customer",
+          customer_phone: bill.customerphone || "+91 XXXXXXXXXX",
           items_summary: itemsSummary,
           order_items: orderItemsFormatted,
           table_info: {
@@ -122,7 +129,7 @@ router.get(
             game_name: game.name || game.gamename || "Unknown Game",
           },
           wallet_amount: bill.wallet_amount || 0,
-          order_amount: bill.total_amount || bill.total || 0,
+          order_amount: bill.totalamount || bill.total || 0,
           createdAt: bill.createdAt,
           updatedAt: bill.updatedAt,
         };
@@ -185,15 +192,16 @@ router.get(
 
       // Handle bills created via auto-release (no Order, has bill_items JSON)
       const hasOrder = bill.orderId && orderItems.length > 0;
-      const billItemsFromJson = bill.bill_items || [];
+      const billItemsFromJson = bill.billitems || [];
 
       // Generate items summary - prefer stored summary, then from Order, then from bill_items
-      let itemsSummary = bill.items_summary;
+      let itemsSummary = bill.itemssummary;
       if (!itemsSummary) {
         if (hasOrder) {
-          itemsSummary = orderItems
-            .map((item) => (item.MenuItem || {}).name || "Item")
-            .join(", ") || "Items";
+          itemsSummary =
+            orderItems
+              .map((item) => (item.MenuItem || {}).name || "Item")
+              .join(", ") || "Items";
         } else if (billItemsFromJson.length > 0) {
           itemsSummary = billItemsFromJson
             .map((item) => `${item.name} x${item.quantity}`)
@@ -230,14 +238,14 @@ router.get(
 
       const transformedBill = {
         id: bill.id,
-        bill_number: bill.bill_number || `B${bill.id}`,
-        total_amount: bill.total_amount || bill.amount || bill.total || 0,
-        table_charges: bill.table_charges || 0,
-        menu_charges: bill.menu_charges || 0,
-        session_duration: bill.session_duration || 0,
+        bill_number: bill.billnumber || `B${bill.id}`,
+        total_amount: bill.totalamount || bill.amount || bill.total || 0,
+        table_charges: bill.tablecharges || 0,
+        menu_charges: bill.menucharges || 0,
+        session_duration: bill.sessionduration || 0,
         status: bill.status,
-        customer_name: bill.customer_name || "Unknown Customer",
-        customer_phone: bill.customer_phone || "+91 XXXXXXXXXX",
+        customer_name: bill.customername || "Unknown Customer",
+        customer_phone: bill.customerphone || "+91 XXXXXXXXXX",
         items_summary: itemsSummary,
         order_items: orderItemsFormatted,
         table_info: {
@@ -245,7 +253,7 @@ router.get(
           game_name: game.name || game.gamename || "Unknown Game",
         },
         wallet_amount: bill.wallet_amount || 0,
-        order_amount: bill.total_amount || bill.total || 0,
+        order_amount: bill.totalamount || bill.total || 0,
         createdAt: bill.createdAt,
         updatedAt: bill.updatedAt,
       };
@@ -273,9 +281,10 @@ router.post(
         return res.status(400).json({ error: "Bill is already paid" });
       }
 
-      bill.status = "paid";
-      bill.paid_at = new Date();
-      await bill.save();
+      await Bill.update(
+        { status: "paid", paidat: new Date() }, // paidat lowercase
+        { where: { id: bill.id } }
+      );
 
       res.json({
         success: true,
@@ -283,9 +292,10 @@ router.post(
         bill: {
           id: bill.id,
           status: bill.status,
-          total_amount: bill.total_amount,
-          paid_at: bill.paid_at,
+          total_amount: bill.totalamount,
+          paid_at: bill.paidat,
         },
+        // ...
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -327,13 +337,18 @@ router.post(
         }
 
         // Use provided price per min, or fallback to table's price
-        actualPricePerMin = table_price_per_min !== undefined ? Number(table_price_per_min) : Number(table.pricePerMin || 0);
+        actualPricePerMin =
+          table_price_per_min !== undefined
+            ? Number(table_price_per_min)
+            : Number(table.pricePerMin || 0);
 
         // Only use frame charges if explicitly provided (not from table defaults)
         // frame_charges of 0 means no frame charges, don't fallback to table.frameCharge
-        actualFrameCharges = frame_charges !== undefined ? Number(frame_charges) : 0;
+        actualFrameCharges =
+          frame_charges !== undefined ? Number(frame_charges) : 0;
 
-        table_charges = session_duration * actualPricePerMin + actualFrameCharges;
+        table_charges =
+          session_duration * actualPricePerMin + actualFrameCharges;
       }
 
       // 2. Calculate menu charges
@@ -391,31 +406,34 @@ router.post(
           .join(", ") || "Service charges";
 
       // 6. Create the bill with station_id
-      const billData = addStationToData({
-        bill_number,
-        customer_name,
-        customer_phone,
-        table_id,
-        session_id,
-        table_charges,
-        menu_charges,
-        total_amount,
-        status: "pending",
-        bill_items,
-        items_summary,
-        session_duration,
-        details: JSON.stringify({
-          booking_time,
-          table_price_per_min: actualPricePerMin,
-          frame_charges: actualFrameCharges,
-          calculation_breakdown: {
-            table_charges,
-            menu_charges,
-            total_amount,
-            session_duration,
-          },
-        }),
-      }, req.stationId);
+      const billData = addStationToData(
+        {
+          billnumber: bill_number, // Mapped to lowercase schema
+          customername: customer_name,
+          customerphone: customer_phone,
+          tableid: table_id,
+          sessionid: session_id,
+          tablecharges: table_charges,
+          menucharges: menu_charges,
+          totalamount: total_amount,
+          status: "pending",
+          billitems: bill_items,
+          itemssummary: items_summary,
+          sessionduration: session_duration,
+          details: JSON.stringify({
+            booking_time,
+            table_price_per_min: actualPricePerMin,
+            frame_charges: actualFrameCharges,
+            calculation_breakdown: {
+              table_charges,
+              menu_charges,
+              total_amount,
+              session_duration,
+            },
+          }),
+        },
+        req.stationId
+      );
       const bill = await Bill.create(billData);
 
       res.status(201).json({
@@ -492,7 +510,7 @@ router.post("/calculate-pricing", auth, stationContext, async (req, res) => {
     if (selected_menu_items.length > 0) {
       for (const item of selected_menu_items) {
         const menuItem = await MenuItem.findByPk(item.menu_item_id);
-        if (menuItem && menuItem.is_available) {
+        if (menuItem && menuItem.isavailable) {
           const quantity = item.quantity || 1;
           const itemTotal = parseFloat(menuItem.price) * quantity;
           pricing.menu_charges += itemTotal;
@@ -544,4 +562,4 @@ router.get(
   }
 );
 
-module.exports = router;
+export default router;

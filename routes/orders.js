@@ -1,8 +1,14 @@
-const express = require("express");
+import express from "express";
+import { Order, OrderItem, MenuItem } from "../models/index.js";
+import { auth, authorize } from "../middleware/auth.js";
+import {
+  stationContext,
+  requireStation,
+  addStationFilter,
+  addStationToData,
+} from "../middleware/stationContext.js";
+
 const router = express.Router();
-const { Order, OrderItem, MenuItem } = require("../models");
-const { auth, authorize } = require("../middleware/auth");
-const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
 
 // --------------------------------------------------
 // CREATE NEW ORDER (with cart items from menu)
@@ -35,25 +41,28 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
     }
 
     // Create order with station_id for multi-tenancy
-    const orderData = addStationToData({
-      userId: req.user.id, // from auth token
-      personName,
-      orderTotal: Number(orderTotal) || 0,
-      paymentMethod,
-      cashAmount:
-        paymentMethod === "offline" || paymentMethod === "hybrid"
-          ? Number(cashAmount)
-          : 0,
-      onlineAmount:
-        paymentMethod === "online" || paymentMethod === "hybrid"
-          ? Number(onlineAmount)
-          : 0,
-      status: "pending", // pending, completed, cancelled
-      order_source,
-      session_id: session_id ? parseInt(session_id) : null,
-      table_id: table_id ? parseInt(table_id) : null,
-      orderDate: new Date(),
-    }, req.stationId);
+    const orderData = addStationToData(
+      {
+        userId: req.user.id, // from auth token
+        personName,
+        orderTotal: Number(orderTotal) || 0,
+        paymentMethod,
+        cashAmount:
+          paymentMethod === "offline" || paymentMethod === "hybrid"
+            ? Number(cashAmount)
+            : 0,
+        onlineAmount:
+          paymentMethod === "online" || paymentMethod === "hybrid"
+            ? Number(onlineAmount)
+            : 0,
+        status: "pending", // pending, completed, cancelled
+        order_source,
+        session_id: session_id ? parseInt(session_id) : null,
+        table_id: table_id ? parseInt(table_id) : null,
+        orderDate: new Date(),
+      },
+      req.stationId
+    );
 
     const order = await Order.create(orderData);
 
@@ -167,7 +176,10 @@ router.get("/by-session/:sessionId", auth, stationContext, async (req, res) => {
     const { sessionId } = req.params;
 
     // Apply station filter
-    const where = addStationFilter({ session_id: parseInt(sessionId) }, req.stationId);
+    const where = addStationFilter(
+      { session_id: parseInt(sessionId) },
+      req.stationId
+    );
 
     const orders = await Order.findAll({
       where,
@@ -340,23 +352,29 @@ router.patch("/:id/status", auth, stationContext, async (req, res) => {
 // --------------------------------------------------
 // DELETE ORDER
 // --------------------------------------------------
-router.delete("/:id", auth, stationContext, authorize("admin", "owner"), async (req, res) => {
-  try {
-    // Find order with station filter
-    const where = addStationFilter({ id: req.params.id }, req.stationId);
-    const order = await Order.findOne({ where });
-    if (!order) {
-      return res.status(404).json({ error: "Order not found" });
+router.delete(
+  "/:id",
+  auth,
+  stationContext,
+  authorize("admin", "owner"),
+  async (req, res) => {
+    try {
+      // Find order with station filter
+      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const order = await Order.findOne({ where });
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+
+      // Also delete associated OrderItems
+      await OrderItem.destroy({ where: { orderId: order.id } });
+      await order.destroy();
+
+      res.json({ message: "Order deleted successfully" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
-
-    // Also delete associated OrderItems
-    await OrderItem.destroy({ where: { orderId: order.id } });
-    await order.destroy();
-
-    res.json({ message: "Order deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
-});
+);
 
-module.exports = router;
+export default router;

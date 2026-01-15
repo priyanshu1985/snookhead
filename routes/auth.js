@@ -1,18 +1,20 @@
-const express = require("express");
-const router = express.Router();
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
-const { User, Station } = require("../models");
-const tokenStore = require("../utils/tokenStore");
-const { auth, validateRefreshToken } = require("../middleware/auth");
-const {
+import express from "express";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import crypto from "crypto";
+import { User, Station } from "../models/index.js";
+import tokenStore from "../utils/tokenStore.js";
+import { auth, validateRefreshToken } from "../middleware/auth.js";
+import {
   validateRequired,
   validateEmailFormat,
   validatePasswordStrength,
-} = require("../middleware/validation");
-const { rateLimit } = require("../middleware/rateLimiter");
-require("dotenv").config();
+} from "../middleware/validation.js";
+import { rateLimit } from "../middleware/rateLimiter.js";
+import dotenv from "dotenv";
+
+const router = express.Router();
+dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXP = process.env.JWT_EXP || "15m"; // access token expiry - short lived
@@ -25,7 +27,7 @@ function makeAccessToken(user) {
       id: user.id,
       email: user.email,
       role: user.role,
-      station_id: user.station_id || null, // Include station_id for multi-tenancy
+      station_id: user.stationid || null, // Include station_id for multi-tenancy
       iat: Math.floor(Date.now() / 1000),
     },
     JWT_SECRET,
@@ -93,14 +95,14 @@ router.post(
       let stationId = null;
       if (userRole === "owner") {
         const station = await Station.create({
-          station_name: `${name}'s Cafe`,
-          subscription_type: "free",
-          subscription_status: "active",
-          location_city: req.body.city || "Not Set",
-          location_state: req.body.state || "Not Set",
-          owner_name: name,
-          owner_phone: phone || "Not Set",
-          onboarding_date: new Date(),
+          stationname: `${name}'s Cafe`,
+          subscriptiontype: "free",
+          subscriptionstatus: "active",
+          locationcity: req.body.city || "Not Set",
+          locationstate: req.body.state || "Not Set",
+          ownername: name,
+          ownerphone: phone || "Not Set",
+          onboardingdate: new Date(),
           status: "active",
         });
         stationId = station.id;
@@ -109,16 +111,16 @@ router.post(
       const user = await User.create({
         name,
         email,
-        passwordHash: hash,
+        passwordhash: hash, // passwordHash -> passwordhash
         phone,
         role: userRole,
-        station_id: stationId,
+        stationid: stationId,
       });
 
       // Link station to owner user
       if (stationId) {
         await Station.update(
-          { owner_user_id: user.id },
+          { owneruserid: user.id },
           { where: { id: stationId } }
         );
       }
@@ -142,7 +144,7 @@ router.post(
           email: user.email,
           role: user.role,
           phone: user.phone,
-          station_id: user.station_id || null,
+          station_id: user.stationid || null,
         },
       });
     } catch (err) {
@@ -163,7 +165,7 @@ router.post(
       const user = await User.findOne({ where: { email } });
       if (!user) return res.status(400).json({ error: "Invalid credentials" });
 
-      const ok = await user.checkPassword(password);
+      const ok = await bcrypt.compare(password, user.passwordHash || user.passwordhash);
       if (!ok) return res.status(400).json({ error: "Invalid credentials" });
 
       const access = makeAccessToken(user);
@@ -184,7 +186,7 @@ router.post(
           email: user.email,
           role: user.role,
           phone: user.phone,
-          station_id: user.station_id || null,
+          station_id: user.stationid || null,
         },
       });
     } catch (err) {
@@ -250,7 +252,7 @@ router.post("/refresh", async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        station_id: user.station_id || null,
+        station_id: user.stationid || null,
       },
     });
   } catch (err) {
@@ -302,7 +304,7 @@ router.get("/me", auth, async (req, res) => {
         email: user.email,
         role: user.role,
         phone: user.phone,
-        station_id: user.station_id || null,
+        station_id: user.stationid || null,
       },
     });
   } catch (err) {
@@ -353,7 +355,7 @@ router.post(
       const user = await User.findByPk(info.userId);
       if (!user) return res.status(400).json({ error: "User not found" });
       const hash = await bcrypt.hash(newPassword, 10);
-      await user.update({ passwordHash: hash });
+      await User.update({ passwordhash: hash }, { where: { id: user.id } }); // passwordHash -> passwordhash
       tokenStore.revokeResetToken(token);
       res.json({ success: true });
     } catch (err) {
@@ -362,4 +364,4 @@ router.post(
   }
 );
 
-module.exports = router;
+export default router;

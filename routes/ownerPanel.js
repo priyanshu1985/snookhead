@@ -1,13 +1,14 @@
-const express = require("express");
+import express from "express";
+import bcrypt from "bcrypt";
+import { auth, authorize } from "../middleware/auth.js";
+
 const router = express.Router();
-const bcrypt = require("bcrypt");
-const { auth, authorize } = require("../middleware/auth");
 
 // Get models
 let models;
-const getModels = () => {
+const getModels = async () => {
   if (!models) {
-    models = require("../models");
+    models = await import("../models/index.js");
   }
   return models;
 };
@@ -15,7 +16,7 @@ const getModels = () => {
 // POST /api/owner/check-setup-status - Check if user has set up owner panel password
 router.post("/check-setup-status", auth, async (req, res) => {
   try {
-    const { User } = getModels();
+    const { User } = await getModels();
     const userId = req.user.id;
 
     const user = await User.findByPk(userId);
@@ -25,8 +26,8 @@ router.post("/check-setup-status", auth, async (req, res) => {
 
     res.json({
       success: true,
-      needsSetup: !user.owner_panel_setup,
-      message: user.owner_panel_setup
+      needsSetup: !user.ownerpanelsetup,
+      message: user.ownerpanelsetup
         ? "Owner panel password is already set up"
         : "Owner panel password needs to be set up",
     });
@@ -61,7 +62,7 @@ router.post("/setup-password", auth, async (req, res) => {
       });
     }
 
-    const { User } = getModels();
+    const { User } = await getModels();
     const user = await User.findByPk(userId);
 
     if (!user) {
@@ -69,7 +70,7 @@ router.post("/setup-password", auth, async (req, res) => {
     }
 
     // Check if user has already set up password
-    if (user.owner_panel_setup) {
+    if (user.ownerpanelsetup) {
       return res.status(400).json({
         error: "Owner panel password has already been set up",
       });
@@ -79,8 +80,8 @@ router.post("/setup-password", auth, async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     await User.update(
       {
-        owner_panel_password: hashedPassword,
-        owner_panel_setup: true,
+        ownerpanelpassword: hashedPassword,
+        ownerpanelsetup: true,
         updatedAt: new Date(),
       },
       { where: { id: userId } }
@@ -106,7 +107,7 @@ router.post("/verify-password", auth, async (req, res) => {
       return res.status(400).json({ error: "Password is required" });
     }
 
-    const { User } = getModels();
+    const { User } = await getModels();
     const user = await User.findByPk(userId);
 
     if (!user) {
@@ -114,7 +115,7 @@ router.post("/verify-password", auth, async (req, res) => {
     }
 
     // Check if user has set up password
-    if (!user.owner_panel_setup || !user.owner_panel_password) {
+    if (!user.ownerpanelsetup || !user.ownerpanelpassword) {
       return res.status(400).json({
         error: "Owner panel password not set up. Please set up first.",
         needsSetup: true,
@@ -122,7 +123,7 @@ router.post("/verify-password", auth, async (req, res) => {
     }
 
     // Verify password
-    const isValid = await bcrypt.compare(password, user.owner_panel_password);
+    const isValid = await bcrypt.compare(password, user.ownerpanelpassword);
 
     if (isValid) {
       return res.json({
@@ -167,7 +168,7 @@ router.post("/change-password", auth, async (req, res) => {
       });
     }
 
-    const { User } = getModels();
+    const { User } = await getModels();
     const user = await User.findByPk(userId);
 
     if (!user) {
@@ -185,7 +186,7 @@ router.post("/change-password", auth, async (req, res) => {
     // Verify current password
     const isCurrentValid = await bcrypt.compare(
       currentPassword,
-      user.owner_panel_password
+      user.ownerpanelpassword
     );
 
     if (!isCurrentValid) {
@@ -198,7 +199,7 @@ router.post("/change-password", auth, async (req, res) => {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await User.update(
       {
-        owner_panel_password: hashedPassword,
+        ownerpanelpassword: hashedPassword,
         updatedAt: new Date(),
       },
       { where: { id: userId } }
@@ -228,7 +229,7 @@ router.post("/reset-password", auth, async (req, res) => {
       return res.status(400).json({ error: "Target user ID is required" });
     }
 
-    const { User } = getModels();
+    const { User } = await getModels();
     const targetUser = await User.findByPk(targetUserId);
 
     if (!targetUser) {
@@ -238,8 +239,8 @@ router.post("/reset-password", auth, async (req, res) => {
     // Reset owner panel password setup
     await User.update(
       {
-        owner_panel_password: null,
-        owner_panel_setup: false,
+        ownerpanelpassword: null,
+        ownerpanelsetup: false,
         updatedAt: new Date(),
       },
       { where: { id: targetUserId } }
@@ -255,4 +256,4 @@ router.post("/reset-password", auth, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

@@ -1,8 +1,14 @@
-const express = require("express");
+import express from "express";
+import { Bug, User } from "../models/index.js";
+import { auth, authorize } from "../middleware/auth.js";
+import {
+  stationContext,
+  requireStation,
+  addStationFilter,
+  addStationToData,
+} from "../middleware/stationContext.js";
+
 const router = express.Router();
-const { Bug, User } = require("../models");
-const { auth, authorize } = require("../middleware/auth");
-const { stationContext, requireStation, addStationFilter, addStationToData } = require('../middleware/stationContext');
 
 // Get all bugs - filtered by station
 router.get("/", auth, stationContext, async (req, res) => {
@@ -83,16 +89,19 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       return res.status(400).json({ error: "Title is required" });
     }
 
-    const bugData = addStationToData({
-      title: title.trim(),
-      description: description?.trim() || null,
-      category,
-      priority,
-      image_url,
-      audio_url,
-      reported_by: req.user?.id || null,
-      status: "pending",
-    }, req.stationId);
+    const bugData = addStationToData(
+      {
+        title: title.trim(),
+        description: description?.trim() || null,
+        category,
+        priority,
+        imageurl: image_url,
+        audiourl: audio_url,
+        reportedby: req.user?.id || null,
+        status: "pending",
+      },
+      req.stationId
+    );
 
     const bug = await Bug.create(bugData);
 
@@ -133,11 +142,11 @@ router.put(
       } = req.body;
 
       // Update resolved_at if status changes to resolved
-      let resolved_at = bug.resolved_at;
+      let resolvedat = bug.resolvedat;
       if (status === "resolved" && bug.status !== "resolved") {
-        resolved_at = new Date();
+        resolvedat = new Date();
       } else if (status !== "resolved") {
-        resolved_at = null;
+        resolvedat = null;
       }
 
       await bug.update({
@@ -146,10 +155,10 @@ router.put(
         category: category || bug.category,
         status: status || bug.status,
         priority: priority || bug.priority,
-        assigned_to: assigned_to !== undefined ? assigned_to : bug.assigned_to,
-        image_url: image_url !== undefined ? image_url : bug.image_url,
-        audio_url: audio_url !== undefined ? audio_url : bug.audio_url,
-        resolved_at,
+        assignedto: assigned_to !== undefined ? assigned_to : bug.assignedto,
+        imageurl: image_url !== undefined ? image_url : bug.imageurl,
+        audiourl: audio_url !== undefined ? audio_url : bug.audiourl,
+        resolvedat,
       });
 
       res.json({
@@ -184,14 +193,14 @@ router.patch(
         return res.status(400).json({ error: "Invalid status" });
       }
 
-      let resolved_at = bug.resolved_at;
+      let resolvedat = bug.resolved_at;
       if (status === "resolved" && bug.status !== "resolved") {
-        resolved_at = new Date();
+        resolvedat = new Date();
       } else if (status !== "resolved") {
-        resolved_at = null;
+        resolvedat = null;
       }
 
-      await bug.update({ status, resolved_at });
+      await bug.update({ status, resolvedat });
 
       res.json({
         success: true,
@@ -243,15 +252,26 @@ router.get(
       const baseWhere = addStationFilter({}, req.stationId);
 
       const total = await Bug.count({ where: baseWhere });
-      const pending = await Bug.count({ where: addStationFilter({ status: "pending" }, req.stationId) });
-      const inProgress = await Bug.count({ where: addStationFilter({ status: "in_progress" }, req.stationId) });
-      const resolved = await Bug.count({ where: addStationFilter({ status: "resolved" }, req.stationId) });
-      const closed = await Bug.count({ where: addStationFilter({ status: "closed" }, req.stationId) });
+      const pending = await Bug.count({
+        where: addStationFilter({ status: "pending" }, req.stationId),
+      });
+      const inProgress = await Bug.count({
+        where: addStationFilter({ status: "in_progress" }, req.stationId),
+      });
+      const resolved = await Bug.count({
+        where: addStationFilter({ status: "resolved" }, req.stationId),
+      });
+      const closed = await Bug.count({
+        where: addStationFilter({ status: "closed" }, req.stationId),
+      });
 
       const byCategory = await Bug.findAll({
         attributes: [
           "category",
-          [require("sequelize").fn("COUNT", require("sequelize").col("id")), "count"],
+          [
+            require("sequelize").fn("COUNT", require("sequelize").col("id")),
+            "count",
+          ],
         ],
         where: baseWhere,
         group: ["category"],
@@ -260,7 +280,10 @@ router.get(
       const byPriority = await Bug.findAll({
         attributes: [
           "priority",
-          [require("sequelize").fn("COUNT", require("sequelize").col("id")), "count"],
+          [
+            require("sequelize").fn("COUNT", require("sequelize").col("id")),
+            "count",
+          ],
         ],
         where: baseWhere,
         group: ["priority"],
@@ -289,4 +312,4 @@ router.get(
   }
 );
 
-module.exports = router;
+export default router;

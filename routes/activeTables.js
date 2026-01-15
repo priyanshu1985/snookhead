@@ -1,8 +1,14 @@
-const express = require("express");
+import express from "express";
+import { ActiveTable, TableAsset, Order, Bill } from "../models/index.js";
+import { auth, authorize } from "../middleware/auth.js";
+import {
+  stationContext,
+  requireStation,
+  addStationFilter,
+  addStationToData,
+} from "../middleware/stationContext.js";
+
 const router = express.Router();
-const { ActiveTable, TableAsset, Order, Bill } = require("../models");
-const { auth, authorize } = require("../middleware/auth");
-const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
 
 // Get all active table sessions
 router.get("/", auth, stationContext, async (req, res) => {
@@ -52,29 +58,37 @@ router.post(
       const startTime = new Date();
       let bookingEndTime = null;
       if (duration_minutes && duration_minutes > 0) {
-        bookingEndTime = new Date(startTime.getTime() + duration_minutes * 60000);
+        bookingEndTime = new Date(
+          startTime.getTime() + duration_minutes * 60000
+        );
       }
 
       // create active session with station_id
-      const sessionData = addStationToData({
-        table_id: String(table_id), // active_tables.table_id is VARCHAR
-        game_id,
-        start_time: startTime,
-        booking_end_time: bookingEndTime,
-        duration_minutes: duration_minutes || null,
-        status: "active",
-      }, req.stationId);
+      const sessionData = addStationToData(
+        {
+          tableid: table_id,
+          gameid: game_id,
+          starttime: startTime,
+          bookingendtime: bookingEndTime,
+          durationminutes: duration_minutes || null,
+          status: "active",
+        },
+        req.stationId
+      );
       const session = await ActiveTable.create(sessionData);
 
       // create order linked to this session with station_id
-      const orderData = addStationToData({
-        userId: user_id ?? req.user.id ?? null,
-        total: 0,
-        status: "pending",
-      }, req.stationId);
+      const orderData = addStationToData(
+        {
+          userId: user_id ?? req.user.id ?? null,
+          total: 0,
+          status: "pending",
+        },
+        req.stationId
+      );
       const order = await Order.create(orderData);
 
-      await table.update({ status: "reserved" });
+      await TableAsset.update({ status: "reserved" }, { where: { id: table.id } });
 
       res.status(201).json({
         message: "Session started",
@@ -99,7 +113,8 @@ router.post(
     try {
       const { active_id, skip_bill = false } = req.body;
 
-      const sessionWhere = addStationFilter({ active_id }, req.stationId);
+      // Map active_id to activeid for database lookup
+      const sessionWhere = addStationFilter({ activeid: active_id }, req.stationId);
       const session = await ActiveTable.findOne({ where: sessionWhere });
       if (!session) {
         return res.status(404).json({ error: "Session not found" });
@@ -111,13 +126,13 @@ router.post(
 
       // close session
       const endTime = new Date();
-      const startTime = new Date(session.start_time);
-      session.end_time = endTime;
+      const startTime = new Date(session.starttime); // Use starttime from DB
+      session.endtime = endTime;
       session.status = "completed";
-      await session.save();
+      await ActiveTable.update({ endtime: endTime, status: "completed" }, { where: { activeid: session.activeid } });
 
-      // get table info (pricePerMin + frameCharge)
-      const table = await TableAsset.findByPk(session.table_id);
+      // get table info
+      const table = await TableAsset.findByPk(session.tableid); // Use tableid from DB
 
       if (!table) {
         return res
@@ -126,7 +141,7 @@ router.post(
       }
 
       // free the table
-      await table.update({ status: "available" });
+      await TableAsset.update({ status: "available" }, { where: { id: table.id } });
 
       // If skip_bill is true, just return session info without creating a bill
       if (skip_bill) {
@@ -147,19 +162,22 @@ router.post(
       const grandTotal = tableAmount;
 
       // create bill record with station_id
-      const billData = addStationToData({
-        orderId: null,
-        total: grandTotal,
-        status: "pending",
-        details: JSON.stringify({
-          table_id: session.table_id,
-          game_id: session.game_id,
-          minutes,
-          pricePerMin,
-          frameCharge,
-          tableAmount,
-        }),
-      }, req.stationId);
+      const billData = addStationToData(
+        {
+          orderId: null,
+          total: grandTotal,
+          status: "pending",
+          details: JSON.stringify({
+            table_id: session.tableid,
+            game_id: session.gameid,
+            minutes,
+            pricePerMin,
+            frameCharge,
+            tableAmount,
+          }),
+        },
+        req.stationId
+      );
       const bill = await Bill.create(billData);
 
       res.json({
@@ -190,7 +208,7 @@ router.post(
     try {
       const { active_id, cart_items = [] } = req.body;
 
-      const sessionWhere = addStationFilter({ active_id }, req.stationId);
+      const sessionWhere = addStationFilter({ activeid: active_id }, req.stationId);
       const session = await ActiveTable.findOne({ where: sessionWhere });
       if (!session) {
         return res.status(404).json({ error: "Session not found" });
@@ -202,22 +220,22 @@ router.post(
 
       // Close session
       const endTime = new Date();
-      session.end_time = endTime;
-      session.status = "completed";
-      await session.save();
+      // session.endtime = endTime;
+      // session.status = "completed";
+      await ActiveTable.update({ endtime: endTime, status: "completed" }, { where: { activeid: session.activeid } });
 
       // Free the table
-      const table = await TableAsset.findByPk(session.table_id);
+      const table = await TableAsset.findByPk(session.tableid);
       if (table) {
-        await table.update({ status: "available" });
+        await TableAsset.update({ status: "available" }, { where: { id: table.id } });
       }
 
       // Compute table charges
       // Use booked duration if available (timer mode), otherwise use elapsed time
-      const startTime = new Date(session.start_time);
+      const startTime = new Date(session.starttime);
       const diffMs = endTime - startTime;
       const elapsedMinutes = Math.ceil(diffMs / 60000);
-      const minutes = session.duration_minutes || elapsedMinutes;
+      const minutes = session.durationminutes || elapsedMinutes;
       const pricePerMin = Number(table?.pricePerMin || 0);
       // Don't add frame charges for timer-based sessions (only for frame-based bookings)
       const table_charges = minutes * pricePerMin;
@@ -257,27 +275,30 @@ router.post(
         .join(", ");
 
       // Create bill record with proper structure and station_id
-      const billData = addStationToData({
-        bill_number,
-        orderId: null,
-        customer_name: "Walk-in Customer",
-        table_id: table?.id || null,
-        session_id: session.active_id,
-        table_charges,
-        menu_charges,
-        total_amount,
-        status: "pending",
-        bill_items: bill_items.length > 0 ? bill_items : null,
-        items_summary,
-        session_duration: minutes,
-        details: JSON.stringify({
-          table_id: session.table_id,
-          game_id: session.game_id,
-          minutes,
-          pricePerMin,
-          auto_released: true,
-        }),
-      }, req.stationId);
+      const billData = addStationToData(
+        {
+          bill_number,
+          orderId: null,
+          customer_name: "Walk-in Customer",
+          table_id: table?.id || null,
+          session_id: session.active_id,
+          table_charges,
+          menu_charges,
+          total_amount,
+          status: "pending",
+          bill_items: bill_items.length > 0 ? bill_items : null,
+          items_summary,
+          session_duration: minutes,
+          details: JSON.stringify({
+            table_id: session.table_id,
+            game_id: session.game_id,
+            minutes,
+            pricePerMin,
+            auto_released: true,
+          }),
+        },
+        req.stationId
+      );
       const bill = await Bill.create(billData);
 
       res.json({
@@ -318,4 +339,4 @@ router.get("/:id", auth, stationContext, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

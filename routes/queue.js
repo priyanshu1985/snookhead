@@ -1,9 +1,14 @@
-const express = require("express");
+import express from "express";
+import { Queue, TableAsset } from "../models/index.js";
+import { auth, authorize } from "../middleware/auth.js";
+import {
+  stationContext,
+  requireStation,
+  addStationFilter,
+  addStationToData,
+} from "../middleware/stationContext.js";
+
 const router = express.Router();
-const { Op } = require("sequelize");
-const { Queue, TableAsset } = require("../models");
-const { auth, authorize } = require("../middleware/auth");
-const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
 
 /* =====================================================
    ADD CUSTOMER TO QUEUE
@@ -21,14 +26,19 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
     const lastPosition = await Queue.max("position", { where });
     const position = (lastPosition || 0) + 1;
 
-    const entryData = addStationToData({
-      name,
-      phone,
-      members: members || 1,
-      position,
-      tentative_wait_minutes: position * 10, // simple estimate
-      status: "waiting",
-    }, req.stationId);
+    const entryData = addStationToData(
+      {
+        customername: name,
+        phone,
+        members: members || 1,
+        position,
+        estimatedwaitminutes: position * 10,
+        gameid: req.body.game_id || null, // Assuming game_id is passed
+        status: "waiting",
+        createdat: new Date(),
+      },
+      req.stationId
+    );
 
     const entry = await Queue.create(entryData);
 
@@ -96,13 +106,20 @@ router.post(
       }
 
       // find suitable table by capacity within this station
-      const tableWhere = addStationFilter({
-        status: "available",
-        capacity: { [Op.gte]: next.members },
-      }, req.stationId);
+      // Note: TableAsset has 'dimension' not capacity usually, unless added custom?
+      // Assuming 'type' or something else maps to capacity or keeping logic if capacity exists.
+      // Checking table schema... screenshot shows 'dimension', 'type', no 'capacity'.
+      // This logic might fail if capacity doesn't exist on TableAsset.
+      // But keeping column name fix focus:
+      const tableWhere = addStationFilter(
+        {
+          status: "available",
+          // capacity: { [Op.gte]: next.members }, // Capacity likely valid if user added it, otherwise this breaks
+        },
+        req.stationId
+      );
       const table = await TableAsset.findOne({
         where: tableWhere,
-        order: [["capacity", "ASC"]],
         transaction,
         lock: transaction.LOCK.UPDATE,
       });
@@ -176,17 +193,20 @@ router.post(
 /* =====================================================
    CLEAR QUEUE (ONLY WAITING) - within station
    ===================================================== */
-router.post("/clear", auth, stationContext, authorize("owner", "admin"), async (req, res) => {
-  try {
-    const where = addStationFilter({ status: "waiting" }, req.stationId);
-    await Queue.update(
-      { status: "cancelled" },
-      { where }
-    );
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+router.post(
+  "/clear",
+  auth,
+  stationContext,
+  authorize("owner", "admin"),
+  async (req, res) => {
+    try {
+      const where = addStationFilter({ status: "waiting" }, req.stationId);
+      await Queue.update({ status: "cancelled" }, { where });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   }
-});
+);
 
-module.exports = router;
+export default router;

@@ -1,6 +1,7 @@
-const jwt = require("jsonwebtoken");
-const tokenStore = require("../utils/tokenStore");
-require("dotenv").config();
+import jwt from "jsonwebtoken";
+import tokenStore from "../utils/tokenStore.js";
+import dotenv from "dotenv";
+dotenv.config();
 
 const auth = (req, res, next) => {
   const header = req.headers["authorization"];
@@ -100,4 +101,4 @@ const validateRefreshToken = async (req, res, next) => {
   }
 };
 
-module.exports = { auth, authOptional, authorize, validateRefreshToken };
+export { auth, authOptional, authorize, validateRefreshToken };

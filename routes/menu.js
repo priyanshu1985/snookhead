@@ -1,10 +1,14 @@
-const express = require("express");
+import express from "express";
+import { MenuItem } from "../models/index.js";
+import { auth, authorize } from "../middleware/auth.js";
+import {
+  stationContext,
+  requireStation,
+  addStationFilter,
+  addStationToData,
+} from "../middleware/stationContext.js";
+
 const router = express.Router();
-const { MenuItem } = require("../models");
-const { auth, authorize } = require("../middleware/auth");
-const { stationContext, requireStation, addStationFilter, addStationToData } = require("../middleware/stationContext");
-const { Op } = require("sequelize");
-const { sequelize } = require("../config/database");
 
 // --------------------------------------------------
 // GET ALL MENU ITEMS + Filters + Search + Pagination
@@ -24,9 +28,9 @@ router.get("/", auth, stationContext, async (req, res) => {
     let where = {};
 
     // Only filter by availability if not explicitly requesting all items
-    if (includeUnavailable !== 'true') {
-      where.is_available = true; // Only show available items
-    }
+    // if (includeUnavailable !== "true") {
+    //   where.is_available = true; // Only show available items
+    // }
 
     if (category) where.category = category;
     if (minPrice || maxPrice) {
@@ -113,8 +117,24 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       return res.status(400).json({ error: "Invalid category" });
     }
 
-    // Add station_id to the item for multi-tenancy
-    const itemData = addStationToData(req.body, req.stationId);
+    // Add station_id for multi-tenancy
+    // Using snakeless 'stationid' based on previous findings
+    const itemData = addStationToData(
+      {
+        name,
+        category,
+        description: req.body.description,
+        price,
+        stock: req.body.stock || 0,
+        threshold: req.body.threshold || 5,
+        supplierPhone: req.body.supplierPhone, // Map correctly if present
+        imageurl: req.body.image_url || req.body.imageUrl, // imageUrl -> imageurl
+        // isavailable:
+        //   req.body.is_available !== undefined ? req.body.is_available : true,
+      },
+      req.stationId
+    );
+
     const item = await MenuItem.create(itemData);
 
     res.status(201).json({
@@ -129,43 +149,56 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
 // --------------------------------------------------
 // UPDATE MENU ITEM
 // --------------------------------------------------
-router.put("/:id", auth, stationContext, authorize("staff", "admin", "owner"), async (req, res) => {
-  try {
-    // Find item with station filter to ensure owner can only update their items
-    const where = addStationFilter({ id: req.params.id }, req.stationId);
-    const item = await MenuItem.findOne({ where });
+router.put(
+  "/:id",
+  auth,
+  stationContext,
+  authorize("staff", "admin", "owner"),
+  async (req, res) => {
+    try {
+      // Find item with station filter to ensure owner can only update their items
+      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const item = await MenuItem.findOne({ where });
 
-    if (!item) return res.status(404).json({ error: "Menu item not found" });
+      if (!item) return res.status(404).json({ error: "Menu item not found" });
 
-    await item.update(req.body);
+      await MenuItem.update(req.body, { where: { id: req.params.id } });
+      const updatedItem = await MenuItem.findByPk(req.params.id);
 
-    res.json({
-      message: "Menu item updated successfully",
-      item,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+      res.json({
+        message: "Menu item updated successfully",
+        item: updatedItem,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   }
-});
+);
 
 // --------------------------------------------------
 // DELETE MENU ITEM
 // --------------------------------------------------
-router.delete("/:id", auth, stationContext, authorize("admin", "owner"), async (req, res) => {
-  try {
-    // Find item with station filter to ensure owner can only delete their items
-    const where = addStationFilter({ id: req.params.id }, req.stationId);
-    const item = await MenuItem.findOne({ where });
+router.delete(
+  "/:id",
+  auth,
+  stationContext,
+  authorize("admin", "owner"),
+  async (req, res) => {
+    try {
+      // Find item with station filter to ensure owner can only delete their items
+      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const item = await MenuItem.findOne({ where });
 
-    if (!item) return res.status(404).json({ error: "Menu item not found" });
+      if (!item) return res.status(404).json({ error: "Menu item not found" });
 
-    await item.destroy();
+      await MenuItem.destroy({ where: { id: req.params.id } });
 
-    res.json({ message: "Menu item deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+      res.json({ message: "Menu item deleted successfully" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   }
-});
+);
 
 // --------------------------------------------------
 // UPDATE STOCK (increase / decrease)
@@ -190,11 +223,10 @@ router.patch(
       if (!item) return res.status(404).json({ error: "Menu item not found" });
 
       // Update stock
-      item.stock = item.stock + Number(quantity);
+      const newStock = item.stock + Number(quantity);
+      const finalStock = newStock < 0 ? 0 : newStock;
 
-      if (item.stock < 0) item.stock = 0;
-
-      await item.save();
+      await MenuItem.update({ stock: finalStock }, { where: { id: req.params.id } });
 
       res.json({
         message: "Stock updated",
@@ -226,10 +258,7 @@ router.get(
       // If station filter is needed, combine conditions
       if (req.stationId) {
         where = {
-          [Op.and]: [
-            where,
-            { station_id: req.stationId }
-          ]
+          [Op.and]: [where, { stationid: req.stationId }],
         };
       }
 
@@ -247,4 +276,4 @@ router.get(
   }
 );
 
-module.exports = router;
+export default router;
