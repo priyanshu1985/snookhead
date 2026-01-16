@@ -46,6 +46,8 @@ process.on("unhandledRejection", (reason, promise) => {
 // Middleware
 app.use(cors());
 app.use(express.json());
+// Serve static files from public directory
+app.use("/static", express.static("public"));
 
 // Get Supabase client
 const supabase = getSupabase();

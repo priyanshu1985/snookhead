@@ -349,6 +349,13 @@ router.post(
 
         table_charges =
           session_duration * actualPricePerMin + actualFrameCharges;
+        
+        console.log("DEBUG: Table Charges Calc:", {
+            session_duration,
+            actualPricePerMin,
+            actualFrameCharges,
+            table_charges
+        });
       }
 
       // 2. Calculate menu charges
@@ -367,6 +374,7 @@ router.post(
           const quantity = item.quantity || 1;
           const itemTotal = parseFloat(menuItem.price) * quantity;
           menu_charges += itemTotal;
+          console.log(`DEBUG: Item ${menuItem.name}, Price: ${menuItem.price}, Qty: ${quantity}, Total: ${itemTotal}`);
 
           bill_items.push({
             menu_item_id: menuItem.id,

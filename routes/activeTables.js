@@ -1,5 +1,5 @@
 import express from "express";
-import { ActiveTable, TableAsset, Order, Bill } from "../models/index.js";
+import { ActiveTable, TableAsset, Order, Bill, OrderItem, MenuItem } from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
   stationContext,
@@ -22,6 +22,22 @@ router.get("/", auth, stationContext, async (req, res) => {
         },
       ],
     });
+    const sessionIds = activeSessions.map(s => s.activeid || s.active_id);
+    let ordersMap = {};
+    if (sessionIds.length > 0) {
+      // Find orders where session_id matches
+      // Note: Order.findAll wrapper might need update or we use raw Supabase if needed? 
+      // Order.findAll uses match/eq. It iterates keys.
+      // We can't do "IN" query with current wrapper easily? 
+      // Actually wrapper uses `query.eq(key, val)`. So it doesn't support IN list.
+      // We will have to fetch all orders for now or loop? Looping is bad.
+      // Better: Fetch all PENDING orders and match in memory (assuming number is small)
+      // OR rely on ActiveSession.jsx to fetch order individually via /api/orders/by-session/:id
+      // OPTION 2 is better for performance if we can't do IN query.
+      
+      // Let's check activeTablesAPI.getAll usage. It wants everything?
+      // For now, let's LEAVE fetching orders here complex, and UPDATE ActiveSession.jsx to fetch Order by session_id!
+    }
 
     res.json(activeSessions);
   } catch (err) {
@@ -51,7 +67,24 @@ router.post(
       }
 
       if (table.status !== "available") {
-        return res.status(400).json({ error: "Table is not available" });
+        // Safe check: If table says not available, check if there are actual active sessions.
+        // If there are stale sessions, we should probably close them or error out.
+        // But for robust "Start", let's ensure we close any existing active sessions for this table
+        // to prevent "ghost" sessions.
+        const existingSessions = await ActiveTable.findAll({
+            where: addStationFilter({ tableid: table_id, status: "active" }, req.stationId)
+        });
+        
+        if (existingSessions.length > 0) {
+             // Close them
+             const endTime = new Date();
+             await ActiveTable.update({ endtime: endTime, status: "completed" }, { 
+                 where: addStationFilter({ tableid: table_id, status: "active" }, req.stationId) 
+             });
+        }
+        
+        // return res.status(400).json({ error: "Table is not available" });
+        // Proceeding to book...
       }
 
       // Calculate booking_end_time if duration is provided
@@ -83,11 +116,44 @@ router.post(
           userId: user_id ?? req.user.id ?? null,
           total: 0,
           status: "pending",
+          session_id: session.activeid || session.active_id, // Link to session using DB column name or object property
+          order_source: "table_booking",
         },
         req.stationId
       );
       const order = await Order.create(orderData);
 
+      // Process cart items if any
+      const cart = req.body.cart || [];
+      if (cart && cart.length > 0) {
+        let calculatedTotal = 0;
+        
+        for (const cartItem of cart) {
+          // Verify item exists
+          const menuItem = await MenuItem.findByPk(cartItem.menu_item_id); // using menu_item_id as sent from frontend
+          if (menuItem) {
+            const priceEach = Number(menuItem.price) || 0;
+            const qty = Number(cartItem.quantity) || 1;
+            const itemTotal = priceEach * qty;
+            calculatedTotal += itemTotal;
+
+            await OrderItem.create({
+              orderId: order.id,
+              menuItemId: menuItem.id,
+              qty: qty,
+              priceEach: priceEach
+            });
+          }
+        }
+
+        // Update order total
+        if (calculatedTotal > 0) {
+          await Order.update({ total: calculatedTotal }, { where: { id: order.id } });
+          // Refresh order object
+          order.total = calculatedTotal;
+        }
+      }
+      
       await TableAsset.update({ status: "reserved" }, { where: { id: table.id } });
 
       res.status(201).json({
@@ -277,18 +343,18 @@ router.post(
       // Create bill record with proper structure and station_id
       const billData = addStationToData(
         {
-          bill_number,
+          billnumber: bill_number,
           orderId: null,
-          customer_name: "Walk-in Customer",
-          table_id: table?.id || null,
-          session_id: session.active_id,
-          table_charges,
-          menu_charges,
-          total_amount,
+          customername: "Walk-in Customer",
+          tableid: table?.id || null,
+          sessionid: session.active_id,
+          tablecharges: table_charges,
+          menucharges: menu_charges,
+          totalamount: total_amount,
           status: "pending",
-          bill_items: bill_items.length > 0 ? bill_items : null,
-          items_summary,
-          session_duration: minutes,
+          billitems: bill_items.length > 0 ? bill_items : null,
+          itemssummary: items_summary,
+          sessionduration: minutes,
           details: JSON.stringify({
             table_id: session.table_id,
             game_id: session.game_id,

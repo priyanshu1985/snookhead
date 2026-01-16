@@ -45,7 +45,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       {
         userId: req.user.id, // from auth token
         personName,
-        orderTotal: Number(orderTotal) || 0,
+        total: Number(orderTotal) || 0,
         paymentMethod,
         cashAmount:
           paymentMethod === "offline" || paymentMethod === "hybrid"
@@ -59,7 +59,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         order_source,
         session_id: session_id ? parseInt(session_id) : null,
         table_id: table_id ? parseInt(table_id) : null,
-        orderDate: new Date(),
+        // orderDate: new Date(), // Removing as column doesn't exist. DB uses createdAt.
       },
       req.stationId
     );
@@ -94,15 +94,17 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       });
 
       // Optional: Decrease stock if MenuItem has stock field
+      // Optional: Decrease stock if MenuItem has stock field
       if (menuItem.stock !== undefined) {
-        menuItem.stock = Math.max(0, menuItem.stock - qty);
-        await menuItem.save();
+        const newStock = Math.max(0, menuItem.stock - qty);
+        await MenuItem.update({ stock: newStock }, { where: { id: menuItem.id } });
       }
     }
 
     // Update order total with calculated amount
-    order.total = calculatedTotal;
-    await order.save();
+    // order is a plain object, so no .save() method
+    await Order.update({ total: calculatedTotal }, { where: { id: order.id } });
+    order.total = calculatedTotal; // update local object for response
 
     res.status(201).json({
       message: "Order created successfully",
@@ -113,7 +115,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         paymentMethod: order.paymentMethod,
         status: order.status,
         order_source: order.order_source,
-        orderDate: order.orderDate,
+        orderDate: order.createdAt, // key mapped to createdAt
       },
     });
   } catch (err) {
@@ -149,13 +151,8 @@ router.get("/", auth, stationContext, async (req, res) => {
       where,
       offset: (page - 1) * limit,
       limit: parseInt(limit),
-      include: [
-        {
-          model: OrderItem,
-          include: [MenuItem],
-        },
-      ],
-      order: [["createdAt", "DESC"]],
+      select: "*, OrderItems:orderitems(*, MenuItem:menuitems(*))",
+      order: [["createdAt", "DESC"]], // Ensure ordering works with new select
     });
 
     res.json({
@@ -183,12 +180,7 @@ router.get("/by-session/:sessionId", auth, stationContext, async (req, res) => {
 
     const orders = await Order.findAll({
       where,
-      include: [
-        {
-          model: OrderItem,
-          include: [MenuItem],
-        },
-      ],
+      select: "*, OrderItems:orderitems(*, MenuItem:menuitems(*))",
       order: [["createdAt", "ASC"]],
     });
 
@@ -247,12 +239,7 @@ router.get("/:id", auth, stationContext, async (req, res) => {
 
     const order = await Order.findOne({
       where,
-      include: [
-        {
-          model: OrderItem,
-          include: [MenuItem],
-        },
-      ],
+      select: "*, OrderItems:orderitems(*, MenuItem:menuitems(*))",
     });
 
     if (!order) {
@@ -337,8 +324,8 @@ router.patch("/:id/status", auth, stationContext, async (req, res) => {
       return res.status(404).json({ error: "Order not found" });
     }
 
+    await Order.update({ status }, { where: { id: order.id } });
     order.status = status;
-    await order.save();
 
     res.json({
       message: "Order status updated",
@@ -368,7 +355,7 @@ router.delete(
 
       // Also delete associated OrderItems
       await OrderItem.destroy({ where: { orderId: order.id } });
-      await order.destroy();
+      await Order.destroy({ where: { id: order.id } });
 
       res.json({ message: "Order deleted successfully" });
     } catch (err) {

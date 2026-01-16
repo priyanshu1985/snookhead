@@ -17,7 +17,7 @@ const router = express.Router();
 dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXP = process.env.JWT_EXP || "15m"; // access token expiry - short lived
+const JWT_EXP = process.env.JWT_EXP || "7d"; // access token expiry
 const REFRESH_EXP = 30 * 24 * 60 * 60 * 1000; // 30 days in ms for refresh token - users stay logged in until manual logout
 const NODE_ENV = process.env.NODE_ENV || "development";
 
@@ -27,7 +27,7 @@ function makeAccessToken(user) {
       id: user.id,
       email: user.email,
       role: user.role,
-      station_id: user.stationid || null, // Include station_id for multi-tenancy
+      station_id: user.station_id || null, // Include station_id for multi-tenancy
       iat: Math.floor(Date.now() / 1000),
     },
     JWT_SECRET,
@@ -111,10 +111,10 @@ router.post(
       const user = await User.create({
         name,
         email,
-        passwordhash: hash, // passwordHash -> passwordhash
+        passwordHash: hash,
         phone,
         role: userRole,
-        stationid: stationId,
+        station_id: stationId,
       });
 
       // Link station to owner user
@@ -355,7 +355,7 @@ router.post(
       const user = await User.findByPk(info.userId);
       if (!user) return res.status(400).json({ error: "User not found" });
       const hash = await bcrypt.hash(newPassword, 10);
-      await User.update({ passwordhash: hash }, { where: { id: user.id } }); // passwordHash -> passwordhash
+      await User.update({ passwordHash: hash }, { where: { id: user.id } });
       tokenStore.revokeResetToken(token);
       res.json({ success: true });
     } catch (err) {

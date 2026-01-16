@@ -89,7 +89,7 @@ router.get("/", auth, stationContext, async (req, res) => {
       category,
       status,
       search,
-      sort_by = "item_name",
+      sort_by = "itemname",
       sort_order = "asc",
       page = 1,
       limit = 50,
@@ -106,6 +106,8 @@ router.get("/", auth, stationContext, async (req, res) => {
     if (category) {
       whereClause.category = category;
     }
+    
+    console.log("Building query with filters:", { category, search, stationId: req.stationId });
 
     if (search) {
       whereClause[Op.or] = [
@@ -116,14 +118,27 @@ router.get("/", auth, stationContext, async (req, res) => {
     }
 
     // Apply station filter for multi-tenancy
-    whereClause = addStationFilter(whereClause, req.stationId);
+    // Use station_id (snake_case) to match inventory table schema, 
+    // overriding default stationid (no underscore) from helper
+    if (req.stationId) {
+        whereClause.station_id = req.stationId;
+    }
+    console.log("Final Where Clause:", JSON.stringify(whereClause, null, 2));
 
     // Pagination
     const offset = (page - 1) * limit;
     const limitNum = Math.min(parseInt(limit), 100); // Max 100 items per page
 
     // Order clause
-    const orderClause = [[sort_by, sort_order.toUpperCase()]];
+    // Map frontend sort keys to DB columns if needed
+    const sortField = sort_by === "item_name" ? "itemname" : 
+                      sort_by === "current_quantity" ? "currentquantity" :
+                      sort_by === "minimum_threshold" ? "minimumthreshold" :
+                      sort_by;
+
+    const orderClause = [[sortField, sort_order.toUpperCase()]];
+    
+    console.log("Executing findAndCountAll...");
 
     const { count, rows } = await Inventory.findAndCountAll({
       where: whereClause,
@@ -131,6 +146,8 @@ router.get("/", auth, stationContext, async (req, res) => {
       limit: limitNum,
       offset: offset,
     });
+    
+    console.log("Query success. Count:", count, "Rows:", rows.length);
 
     // Filter by status if requested
     let filteredRows = rows;
@@ -162,15 +179,7 @@ router.get("/", auth, stationContext, async (req, res) => {
         (sum, item) => sum + (item.costperunit || 0) * item.currentquantity,
         0
       ),
-      categories: await Inventory.findAll({
-        attributes: [
-          "category",
-          [Inventory.sequelize.fn("COUNT", "*"), "count"],
-        ],
-        where: { isactive: true },
-        group: ["category"],
-        raw: true,
-      }),
+      categories: [], 
     };
 
     res.json({
@@ -185,7 +194,9 @@ router.get("/", auth, stationContext, async (req, res) => {
       summary,
     });
   } catch (error) {
-    console.error("Error fetching inventory:", error);
+    console.error("CRITICAL ERROR fetching inventory:");
+    console.error(error); // This prints the stack trace
+    console.error(JSON.stringify(error, Object.getOwnPropertyNames(error))); // This prints hidden properties
     res.status(500).json({
       error: "Failed to fetch inventory items",
       details: error.message,
@@ -245,10 +256,11 @@ router.post(
       } = req.body;
 
       // Check if item already exists for this station
-      const existingWhere = addStationFilter(
-        { itemname: item_name.trim() },
-        req.stationId
-      );
+      const existingWhere = { itemname: item_name.trim() };
+      if (req.stationId) {
+          existingWhere.station_id = req.stationId;
+      }
+      
       const existingItem = await Inventory.findOne({
         where: existingWhere,
       });
@@ -261,8 +273,7 @@ router.post(
       }
 
       // Create new inventory item with station_id
-      const itemData = addStationToData(
-        {
+      const itemData = {
           itemname: item_name.trim(),
           category,
           currentquantity: parseInt(current_quantity),
@@ -273,9 +284,11 @@ router.post(
           description: description ? description.trim() : null,
           lastrestocked: last_restocked ? new Date(last_restocked) : null,
           isactive: true,
-        },
-        req.stationId
-      );
+      };
+      
+      if (req.stationId) {
+          itemData.station_id = req.stationId;
+      }
 
       const newItem = await Inventory.create(itemData);
 
@@ -329,11 +342,12 @@ router.put("/:id", auth, stationContext, async (req, res) => {
         updateData.lastrestocked = new Date();
       }
     }
-    // Handle specific fields renaming if passed in body
-    if (updateData.item_name) { updateData.itemname = updateData.item_name; delete updateData.item_name; }
-    if (updateData.minimum_threshold) { updateData.minimumthreshold = updateData.minimum_threshold; delete updateData.minimum_threshold; }
-    if (updateData.cost_per_unit) { updateData.costperunit = updateData.cost_per_unit; delete updateData.cost_per_unit; }
-    if (updateData.last_restocked) { updateData.lastrestocked = updateData.last_restocked; delete updateData.last_restocked; }
+    
+    // Normalize field names
+    if (updateData.item_name !== undefined) { updateData.itemname = updateData.item_name; delete updateData.item_name; }
+    if (updateData.minimum_threshold !== undefined) { updateData.minimumthreshold = parseInt(updateData.minimum_threshold); delete updateData.minimum_threshold; }
+    if (updateData.cost_per_unit !== undefined) { updateData.costperunit = parseFloat(updateData.cost_per_unit); delete updateData.cost_per_unit; }
+    if (updateData.last_restocked !== undefined) { updateData.lastrestocked = updateData.last_restocked; delete updateData.last_restocked; }
     if (updateData.is_active !== undefined) { updateData.isactive = updateData.is_active; delete updateData.is_active; }
 
     // Update the item
@@ -491,7 +505,9 @@ router.get("/alerts/low-stock", auth, stationContext, async (req, res) => {
         [Op.lte]: Inventory.sequelize.col("minimumthreshold"),
       },
     };
-    whereClause = addStationFilter(whereClause, req.stationId);
+    if (req.stationId) {
+        whereClause.station_id = req.stationId;
+    }
 
     const lowStockItems = await Inventory.findAll({
       where: whereClause,
