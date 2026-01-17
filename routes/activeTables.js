@@ -47,7 +47,8 @@ router.get("/", auth, stationContext, async (req, res) => {
 });
 
 // Start a table session
-// body: { table_id, game_id, user_id?, duration_minutes? }
+// body: { table_id, game_id, user_id?, duration_minutes?, customer_name?, booking_type? }
+// booking_type: 'timer' (countdown), 'set' (stopwatch - count up), 'frame' (frame-based)
 router.post(
   "/start",
   auth,
@@ -56,7 +57,7 @@ router.post(
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
-      const { table_id, game_id, user_id, duration_minutes } = req.body;
+      const { table_id, game_id, user_id, duration_minutes, customer_name, booking_type } = req.body;
 
       // verify table exists and belongs to this station
       const tableWhere = addStationFilter({ id: table_id }, req.stationId);
@@ -97,6 +98,7 @@ router.post(
       }
 
       // create active session with station_id
+      // booking_type: 'timer' = countdown with auto-release, 'set' = stopwatch (count up, manual release), 'frame' = frame-based
       const sessionData = addStationToData(
         {
           tableid: table_id,
@@ -105,6 +107,8 @@ router.post(
           bookingendtime: bookingEndTime,
           durationminutes: duration_minutes || null,
           status: "active",
+          customer_name: customer_name || null, // Save customer name
+          bookingtype: booking_type || 'timer' // Save booking type (default: timer for backward compatibility)
         },
         req.stationId
       );
@@ -231,6 +235,7 @@ router.post(
       const billData = addStationToData(
         {
           orderId: null,
+          customername: session.customer_name || "Walk-in Customer", // Use saved customer name or default
           total: grandTotal,
           status: "pending",
           details: JSON.stringify({
@@ -345,7 +350,7 @@ router.post(
         {
           billnumber: bill_number,
           orderId: null,
-          customername: "Walk-in Customer",
+          customername: session.customer_name || "Walk-in Customer", // Use saved customer name or default
           tableid: table?.id || null,
           sessionid: session.active_id,
           tablecharges: table_charges,

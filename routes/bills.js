@@ -27,95 +27,102 @@ router.get(
   async (req, res) => {
     try {
       const where = addStationFilter({}, req.stationId);
-      const list = await Bill.findAll({
+      const bills = await Bill.findAll({
         where,
-        include: [
-          {
-            model: Order,
-            include: [
-              {
-                model: OrderItem,
-                include: [
-                  {
-                    model: MenuItem,
-                  },
-                ],
-              },
-              {
-                model: ActiveTable,
-                include: [
-                  {
-                    model: TableAsset,
-                  },
-                  {
-                    model: Game,
-                  },
-                ],
-              },
-            ],
-          },
-        ],
         order: [["createdAt", "DESC"]],
       });
 
-      // Transform the data to match frontend expectations
-      const transformedBills = list.map((bill) => {
-        const order = bill.Order || {};
-        const activeTable = order.ActiveTable || {};
-        const table = activeTable.TableAsset || {};
-        const game = activeTable.Game || {};
-        const orderItems = order.OrderItems || [];
+      // Manually fetch related data (Tables, Games) since custom ORM lacks 'include'
+      // 1. Get unique Table IDs and Session IDs
+      const tableIds = [...new Set(bills.map((b) => b.tableid).filter(Boolean))];
+      const sessionIds = [...new Set(bills.map((b) => b.sessionid).filter(Boolean))];
 
-        // Handle bills created via auto-release (no Order, has bill_items JSON)
-        const hasOrder = bill.orderId && orderItems.length > 0;
-        const billItemsFromJson = bill.billitems || [];
+      // 2. Fetch all Tables
+      let tablesMap = {};
+      if (tableIds.length > 0) {
+        // Since ORM findAll doesn't support IN clause easily (or requires loop), we'll hack it or just fetch all Tables for station?
+        // Fetching all tables for station is safer/easier if not too many.
+        // Or loop findByPk.
+        // Let's try fetching all tables for the station.
+        const allTables = await TableAsset.findAll({ where: addStationFilter({}, req.stationId) });
+        allTables.forEach(t => tablesMap[t.id] = t);
+      }
 
-        // Generate items summary - prefer stored summary, then from Order, then from bill_items
+      // 3. Fetch specific sessions and their games
+      let sessionsMap = {}; // sessionId -> { ...session, game: {...} }
+      let gameIds = new Set();
+      
+      // We need sessions to get game_id.
+      // But bills usually have 'details' with game information if we updated them.
+      // Legacy bills might rely on session.
+      // Let's fetch sessions by ID. Since no IN clause in efficient wrapper, Promise.all might be heavy if many bills.
+      // Optimization: Fetch all ActiveTables for station? Might be huge.
+      // Optimization: For now, we will live with Promise.all for unique session lookup or fetch all 'completed' sessions?
+      // Actually, if we just want Game Name...
+      // Let's rely on Table -> Game mapping? No, Table can change games.
+      
+      // Alternative: Verify if Bill.details usually has game_id?
+      // If not, we SHOULD fetch session.
+      // Let's do a simplified approach: Fetch ALL Games. Games are few.
+      const games = await Game.findAll();
+      const gamesMap = {}; 
+      games.forEach(g => gamesMap[g.gameid] = g);
+
+      // We still need to know WHICH game a session was.
+      // If `sessionid` is present, we can look it up.
+      // Optimization: For the List View, maybe we don't need accurate historical Game Name if it's too expensive?
+      // BUT user complained "Unknown Game".
+      // Let's use `Promise.all` to fetch sessions for the displayed bills (or all).
+      // Given pagination isn't implemented (limit/offset manually handled?), we are fetching ALL bills?
+      // Step 1850 showed manual limit/offset support. Current route does findAll without limit.
+      // If bills are many, this is slow. 
+      // Proceeding with Promise.all for sessions of *fetched* bills.
+      
+      const distinctSessionIds = sessionIds;
+      const sessionPromises = distinctSessionIds.map(id => ActiveTable.findByPk(id));
+      const sessions = await Promise.all(sessionPromises);
+      sessions.forEach(s => {
+          if(s) sessionsMap[s.activeid || s.active_id] = s;
+      });
+
+      // Transform
+      const transformedBills = bills.map((bill) => {
+        const table = tablesMap[bill.tableid] || {};
+        const session = sessionsMap[bill.sessionid] || {};
+        const gameId = session.gameid || session.game_id;
+        const game = gamesMap[gameId] || {};
+        const details = typeof bill.details === 'string' ? JSON.parse(bill.details) : (bill.details || {});
+
+        // Prefer Game Name from details (if we start saving it there) or resolved via session
+        // If we don't have session (deleted?), we fallback to "Unknown Game" or maybe details has it?
+        
+        const gameName = game.name || game.gamename || "Unknown Game";
+        
         let itemsSummary = bill.itemssummary;
+        const billItems = bill.billitems || [];
+        
         if (!itemsSummary) {
-          if (hasOrder) {
-            itemsSummary =
-              orderItems
-                .map((item) => (item.MenuItem || {}).name || "Item")
-                .join(", ") || "Items";
-          } else if (billItemsFromJson.length > 0) {
-            itemsSummary = billItemsFromJson
-              .map((item) => `${item.name} x${item.quantity}`)
-              .join(", ");
-          } else {
-            itemsSummary = "Table charges";
-          }
+           if (billItems.length > 0) {
+             itemsSummary = billItems.map((item) => `${item.name} x${item.quantity}`).join(", ");
+           } else {
+             itemsSummary = "Table charges";
+           }
         }
 
-        // Generate order_items array from Order or bill_items JSON
-        let orderItemsFormatted;
-        if (hasOrder) {
-          orderItemsFormatted = orderItems.map((item) => {
-            const menuItem = item.MenuItem || {};
-            return {
-              name: menuItem.name || "Item",
-              quantity: `${item.quantity || 1} ${menuItem.unit || "unit"}`,
-              price: item.price || menuItem.price || 0,
-              item_name: menuItem.name,
-              qty: item.quantity,
-              amount: item.price || menuItem.price || 0,
-            };
-          });
-        } else {
-          orderItemsFormatted = billItemsFromJson.map((item) => ({
-            name: item.name || "Item",
-            quantity: `${item.quantity || 1} unit`,
-            price: item.price || 0,
-            item_name: item.name,
-            qty: item.quantity || 1,
-            amount: item.total || item.price || 0,
-          }));
-        }
+        // Order Items formatting
+        const orderItemsFormatted = billItems.map((item) => ({
+             name: item.name || "Item",
+             quantity: `${item.quantity || 1} unit`,
+             price: item.price || 0,
+             item_name: item.name,
+             qty: item.quantity || 1,
+             amount: item.total || item.price || 0,
+        }));
 
         return {
           id: bill.id,
           bill_number: bill.billnumber || `B${bill.id}`,
-          total_amount: bill.totalamount || bill.amount || bill.total || 0,
+          total_amount: bill.totalamount || bill.amount || 0,
           table_charges: bill.tablecharges || 0,
           menu_charges: bill.menucharges || 0,
           session_duration: bill.sessionduration || 0,
@@ -126,10 +133,10 @@ router.get(
           order_items: orderItemsFormatted,
           table_info: {
             name: table.name || "Unknown Table",
-            game_name: game.name || game.gamename || "Unknown Game",
+            game_name: gameName,
           },
           wallet_amount: bill.wallet_amount || 0,
-          order_amount: bill.totalamount || bill.total || 0,
+          order_amount: bill.totalamount || 0,
           createdAt: bill.createdAt,
           updatedAt: bill.updatedAt,
         };
@@ -137,6 +144,7 @@ router.get(
 
       res.json(transformedBills);
     } catch (err) {
+      console.error(err); // Log error
       res.status(500).json({ error: err.message });
     }
   }
@@ -151,95 +159,44 @@ router.get(
   async (req, res) => {
     try {
       const where = addStationFilter({ id: req.params.id }, req.stationId);
-      const bill = await Bill.findOne({
-        where,
-        include: [
-          {
-            model: Order,
-            include: [
-              {
-                model: OrderItem,
-                include: [
-                  {
-                    model: MenuItem,
-                  },
-                ],
-              },
-              {
-                model: ActiveTable,
-                include: [
-                  {
-                    model: TableAsset,
-                  },
-                  {
-                    model: Game,
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      });
+      const bill = await Bill.findOne({ where });
 
       if (!bill) return res.status(404).json({ error: "Bill not found" });
 
-      // Transform the data similar to the list endpoint
-      const order = bill.Order || {};
-      const activeTable = order.ActiveTable || {};
-      const table = activeTable.TableAsset || {};
-      const game = activeTable.Game || {};
-      const orderItems = order.OrderItems || [];
+      // Fetch related data manually
+      const table = bill.tableid ? await TableAsset.findByPk(bill.tableid) : {};
+      const session = bill.sessionid ? await ActiveTable.findByPk(bill.sessionid) : {};
+      const gameId = session ? (session.gameid || session.game_id) : null;
+      const game = gameId ? await Game.findByPk(gameId) : {};
 
-      // Handle bills created via auto-release (no Order, has bill_items JSON)
-      const hasOrder = bill.orderId && orderItems.length > 0;
-      const billItemsFromJson = bill.billitems || [];
-
-      // Generate items summary - prefer stored summary, then from Order, then from bill_items
+      const gameName = game ? (game.name || game.gamename) : "Unknown Game";
+      
+      // Parse details/items
+      const details = typeof bill.details === 'string' ? JSON.parse(bill.details) : (bill.details || {});
+      const billItems = bill.billitems || [];
+      
       let itemsSummary = bill.itemssummary;
       if (!itemsSummary) {
-        if (hasOrder) {
-          itemsSummary =
-            orderItems
-              .map((item) => (item.MenuItem || {}).name || "Item")
-              .join(", ") || "Items";
-        } else if (billItemsFromJson.length > 0) {
-          itemsSummary = billItemsFromJson
-            .map((item) => `${item.name} x${item.quantity}`)
-            .join(", ");
-        } else {
-          itemsSummary = "Table charges";
-        }
+           if (billItems.length > 0) {
+             itemsSummary = billItems.map((item) => `${item.name} x${item.quantity}`).join(", ");
+           } else {
+             itemsSummary = "Table charges";
+           }
       }
 
-      // Generate order_items array from Order or bill_items JSON
-      let orderItemsFormatted;
-      if (hasOrder) {
-        orderItemsFormatted = orderItems.map((item) => {
-          const menuItem = item.MenuItem || {};
-          return {
-            name: menuItem.name || "Item",
-            quantity: `${item.quantity || 1} ${menuItem.unit || "unit"}`,
-            price: item.price || menuItem.price || 0,
-            item_name: menuItem.name,
-            qty: item.quantity,
-            amount: item.price || menuItem.price || 0,
-          };
-        });
-      } else {
-        orderItemsFormatted = billItemsFromJson.map((item) => ({
-          name: item.name || "Item",
-          quantity: `${item.quantity || 1} unit`,
-          price: item.price || 0,
-          item_name: item.name,
-          qty: item.quantity || 1,
-          amount: item.total || item.price || 0,
-        }));
-      }
+      const orderItemsFormatted = billItems.map((item) => ({
+           name: item.name || "Item",
+           quantity: `${item.quantity || 1} unit`,
+           price: item.price || 0,
+           item_name: item.name,
+           qty: item.quantity || 1,
+           amount: item.total || item.price || 0,
+      }));
 
       const transformedBill = {
         id: bill.id,
         bill_number: bill.billnumber || `B${bill.id}`,
-        total_amount: bill.totalamount || bill.amount || bill.total || 0,
+        total_amount: bill.totalamount || bill.amount || 0,
         table_charges: bill.tablecharges || 0,
         menu_charges: bill.menucharges || 0,
         session_duration: bill.sessionduration || 0,
@@ -249,11 +206,11 @@ router.get(
         items_summary: itemsSummary,
         order_items: orderItemsFormatted,
         table_info: {
-          name: table.name || "Unknown Table",
-          game_name: game.name || game.gamename || "Unknown Game",
+          name: table ? table.name : "Unknown Table",
+          game_name: gameName,
         },
         wallet_amount: bill.wallet_amount || 0,
-        order_amount: bill.totalamount || bill.total || 0,
+        order_amount: bill.totalamount || 0,
         createdAt: bill.createdAt,
         updatedAt: bill.updatedAt,
       };

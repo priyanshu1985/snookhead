@@ -25,12 +25,16 @@ router.get("/", auth, stationContext, async (req, res) => {
       includeUnavailable, // New param to include unavailable items (for setup menu)
     } = req.query;
 
+    console.log("GET /menu query:", req.query);
+
     let where = {};
 
     // Only filter by availability if not explicitly requesting all items
-    // if (includeUnavailable !== "true") {
-    //   where.is_available = true; // Only show available items
-    // }
+    if (includeUnavailable !== "true") {
+      where.is_available = true; // Only show available items
+    }
+
+    console.log("GET /menu where:", where);
 
     if (category) where.category = category;
     if (minPrice || maxPrice) {
@@ -129,8 +133,8 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         threshold: req.body.threshold || 5,
         supplierPhone: req.body.supplierPhone, // Map correctly if present
         imageurl: req.body.image_url || req.body.imageUrl, // imageUrl -> imageurl
-        // isavailable:
-        //   req.body.is_available !== undefined ? req.body.is_available : true,
+        is_available:
+          req.body.is_available !== undefined ? req.body.is_available : true,
       },
       req.stationId
     );
@@ -162,7 +166,31 @@ router.put(
 
       if (!item) return res.status(404).json({ error: "Menu item not found" });
 
-      await MenuItem.update(req.body, { where: { id: req.params.id } });
+      console.log(`PUT /menu/${req.params.id} body:`, req.body);
+
+      // Explicitly construct update payload to avoid missing fields or security issues
+      const updateData = {
+        name: req.body.name,
+        category: req.body.category,
+        price: req.body.price,
+        description: req.body.description,
+        imageurl: req.body.image_url || req.body.imageUrl,
+        stock: req.body.stock,
+        threshold: req.body.threshold,
+        supplierPhone: req.body.supplierPhone,
+      };
+
+      // Only update fields that are present in the request
+      Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+
+      // Explicitly handle is_available boolean
+      if (req.body.is_available !== undefined) {
+        updateData.is_available = req.body.is_available;
+      }
+
+      console.log("Updating menu item with:", updateData);
+
+      await MenuItem.update(updateData, { where: { id: req.params.id } });
       const updatedItem = await MenuItem.findByPk(req.params.id);
 
       res.json({
