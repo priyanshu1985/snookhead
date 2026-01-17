@@ -29,27 +29,36 @@ router.get("/", auth, stationContext, async (req, res) => {
 
     // Sort by reservation time
     filteredList.sort((a, b) => {
-      const timeA = new Date(a.reservationtime);
-      const timeB = new Date(b.reservationtime);
+      // Use both new and old fields for backward compatibility/migration
+      const timeA = new Date(a.fromTime || a.reservationtime);
+      const timeB = new Date(b.fromTime || b.reservationtime);
       return timeA - timeB;
     });
 
     // Fetch related data for each reservation
     const enrichedList = await Promise.all(
       filteredList.map(async (reservation) => {
-        const result = { ...reservation };
+        const result = { 
+          ...reservation,
+          // Normalize fields for frontend consistency if needed
+          reservationtime: reservation.fromTime || reservation.reservationtime,
+          durationminutes: reservation.durationminutes || (reservation.toTime && reservation.fromTime ? (new Date(reservation.toTime) - new Date(reservation.fromTime)) / 60000 : 60)
+        };
 
         // Fetch table info
-        if (reservation.tableId || reservation.tableid) {
-          const tableId = reservation.tableId || reservation.tableid;
-          const table = await TableAsset.findByPk(tableId);
-          if (table) {
-            result.TableAsset = table;
-            // Fetch game info for the table
-            if (table.gameid) {
-              const game = await Game.findByPk(table.gameid);
-              if (game) {
-                result.TableAsset.Game = game;
+        const tableIdRaw = reservation.tableId || reservation.tableid;
+        if (tableIdRaw !== undefined && tableIdRaw !== null) {
+          const tableId = parseInt(tableIdRaw, 10); // Ensure integer
+          if (!isNaN(tableId)) {
+            const table = await TableAsset.findByPk(tableId);
+            if (table) {
+              result.TableAsset = table;
+              // Fetch game info for the table
+              if (table.gameid) {
+                const game = await Game.findByPk(table.gameid);
+                if (game) {
+                  result.TableAsset.Game = game;
+                }
               }
             }
           }
@@ -110,19 +119,17 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
     }
 
     // Check for conflicting reservations within same station
-    // Fetch all reservations for this table, then filter in JS to avoid enum array issues
+    // Fetch all reservations for this table
     const tableReservations = await Reservation.findAll({
-      where: addStationFilter({ tableid: table_id }, req.stationId),
+      where: addStationFilter({ tableId: table_id }, req.stationId), // Use tableId (camelCase match DB)
     });
 
     // Filter for pending/active status and check time conflicts
     const conflictingReservation = tableReservations.find((r) => {
       if (r.status !== "pending" && r.status !== "active") return false;
 
-      const existingStart = new Date(r.reservationtime);
-      const existingEnd = new Date(
-        existingStart.getTime() + (r.durationminutes || 60) * 60000
-      );
+      const existingStart = new Date(r.fromTime || r.reservationtime);
+      const existingEnd = r.toTime ? new Date(r.toTime) : new Date(existingStart.getTime() + (r.durationminutes || 60) * 60000);
 
       // Check for time overlap
       return fromTime < existingEnd && toTime > existingStart;
@@ -141,8 +148,8 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
           tableId: table_id,
           customerName: customer_name,
           customerPhone: customer_phone,
-          reservationtime: fromTime, // fromTime -> reservationtime
-          durationminutes: duration_minutes || 60, // toTime -> durationminutes
+          fromTime: fromTime, // Correct schema: fromTime
+          toTime: toTime,     // Correct schema: toTime
           status: "pending",
           notes: notes || "",
         },
@@ -156,41 +163,12 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         reservation,
       });
     } catch (createError) {
-      // If customerName/customerPhone columns don't exist (fallback)
-      if (
-        createError.message.includes("column") ||
-        createError.message.includes("customerName") ||
-        createError.message.includes("customerPhone")
-      ) {
-        // ... (logging)
-
-        const basicReservationData = addStationToData(
-          {
-            userId: req.user.id,
-            tableId: table_id,
-            reservationtime: fromTime, // fromTime -> reservationtime
-            durationminutes: duration_minutes || 60, // toTime -> durationminutes
-            status: "pending",
-            notes: notes
-              ? `${notes} | Customer: ${customer_name} | Phone: ${customer_phone}`
-              : `Customer: ${customer_name} | Phone: ${customer_phone}`,
-          },
-          req.stationId
-        );
-        const basicReservation = await Reservation.create(basicReservationData);
-
-        res.status(201).json({
-          success: true,
-          message: "Reservation created successfully (customer info in notes)",
-          reservation: basicReservation,
-          warning:
-            "Customer fields not available in database. Please update schema.",
-        });
-      } else {
-        throw createError; // Re-throw if it's a different error
-      }
+      // In case of any schema issues that persist
+      console.error("Create reservation error:", createError);
+      throw createError;
     }
   } catch (err) {
+    console.error("Reservation handler error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -199,7 +177,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
 router.get("/user/:id", auth, stationContext, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const where = addStationFilter({ user_id: id }, req.stationId);
+    const where = addStationFilter({ userId: id }, req.stationId); // Check userId casing
     const list = await Reservation.findAll({ where });
     res.json(list);
   } catch (err) {
