@@ -57,7 +57,7 @@ router.post(
   authorize("staff", "owner", "admin"),
   async (req, res) => {
     try {
-      const { table_id, game_id, user_id, duration_minutes, customer_name, booking_type } = req.body;
+      const { table_id, game_id, user_id, duration_minutes, customer_name, booking_type, frame_count } = req.body;
 
       // verify table exists and belongs to this station
       const tableWhere = addStationFilter({ id: table_id }, req.stationId);
@@ -108,7 +108,8 @@ router.post(
           durationminutes: duration_minutes || null,
           status: "active",
           customer_name: customer_name || null, // Save customer name
-          bookingtype: booking_type || 'timer' // Save booking type (default: timer for backward compatibility)
+          bookingtype: booking_type || 'timer', // Save booking type (default: timer for backward compatibility)
+          framecount: frame_count || null // Save frame count for frame-based bookings
         },
         req.stationId
       );
