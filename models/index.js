@@ -202,7 +202,13 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const value = filter.where[key];
+          // Use .in() for arrays, .eq() for single values
+          if (Array.isArray(value)) {
+            query = query.in(key, value);
+          } else {
+            query = query.eq(key, value);
+          }
         });
       }
       const { data, error } = await query;

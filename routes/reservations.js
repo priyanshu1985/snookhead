@@ -13,33 +13,62 @@ const router = express.Router();
 // list reservations
 router.get("/", auth, stationContext, async (req, res) => {
   try {
-    const where = addStationFilter(
-      {
-        status: ["pending", "active"],
-      },
-      req.stationId
+    // Build filter - fetch pending and active reservations
+    const baseFilter = {};
+    if (req.stationId) {
+      baseFilter.stationid = req.stationId;
+    }
+
+    // Get all reservations with pending or active status
+    const allReservations = await Reservation.findAll({ where: baseFilter });
+
+    // Filter by status in JavaScript (to avoid enum array issues with Supabase)
+    const filteredList = allReservations.filter(
+      (r) => r.status === "pending" || r.status === "active"
     );
-    const list = await Reservation.findAll({
-      where,
-      include: [
-        {
-          model: TableAsset,
-          attributes: ["id", "name", "gameid", "type"], // game_id -> gameid
-          include: [
-            {
-              model: Game,
-              attributes: ["gameid", "gamename"], // game_id -> gameid, game_name -> gamename
-            },
-          ],
-        },
-        {
-          model: User,
-          attributes: ["id", "name"],
-        },
-      ],
-      order: [["reservationtime", "ASC"]], // fromTime -> reservationtime
+
+    // Sort by reservation time
+    filteredList.sort((a, b) => {
+      const timeA = new Date(a.reservationtime);
+      const timeB = new Date(b.reservationtime);
+      return timeA - timeB;
     });
-    res.json(list);
+
+    // Fetch related data for each reservation
+    const enrichedList = await Promise.all(
+      filteredList.map(async (reservation) => {
+        const result = { ...reservation };
+
+        // Fetch table info
+        if (reservation.tableId || reservation.tableid) {
+          const tableId = reservation.tableId || reservation.tableid;
+          const table = await TableAsset.findByPk(tableId);
+          if (table) {
+            result.TableAsset = table;
+            // Fetch game info for the table
+            if (table.gameid) {
+              const game = await Game.findByPk(table.gameid);
+              if (game) {
+                result.TableAsset.Game = game;
+              }
+            }
+          }
+        }
+
+        // Fetch user info
+        if (reservation.userId || reservation.userid) {
+          const userId = reservation.userId || reservation.userid;
+          const user = await User.findByPk(userId);
+          if (user) {
+            result.User = { id: user.id, name: user.name };
+          }
+        }
+
+        return result;
+      })
+    );
+
+    res.json(enrichedList);
   } catch (err) {
     console.error("Error fetching reservations:", err);
     res.status(500).json({ error: err.message });
@@ -81,17 +110,23 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
     }
 
     // Check for conflicting reservations within same station
-    const conflictingReservations = await Reservation.findAll({
-      where: addStationFilter(
-        {
-          tableId: table_id,
-          status: ["pending", "active"],
-        },
-        req.stationId
-      ),
+    // Fetch all reservations for this table, then filter in JS to avoid enum array issues
+    const tableReservations = await Reservation.findAll({
+      where: addStationFilter({ tableid: table_id }, req.stationId),
     });
 
-    // ... (conflict check remains same as it relies on JS Date objects)
+    // Filter for pending/active status and check time conflicts
+    const conflictingReservation = tableReservations.find((r) => {
+      if (r.status !== "pending" && r.status !== "active") return false;
+
+      const existingStart = new Date(r.reservationtime);
+      const existingEnd = new Date(
+        existingStart.getTime() + (r.durationminutes || 60) * 60000
+      );
+
+      // Check for time overlap
+      return fromTime < existingEnd && toTime > existingStart;
+    });
 
     if (conflictingReservation) {
       return res.status(400).json({
