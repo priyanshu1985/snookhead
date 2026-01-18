@@ -1,5 +1,5 @@
 import express from "express";
-import { ActiveTable, TableAsset, Order, Bill, OrderItem, MenuItem } from "../models/index.js";
+import { ActiveTable, TableAsset, Order, Bill, OrderItem, MenuItem, Queue } from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
   stationContext,
@@ -7,6 +7,55 @@ import {
   addStationFilter,
   addStationToData,
 } from "../middleware/stationContext.js";
+
+// Helper function to check queue and auto-assign next person when table is freed
+async function checkQueueAndAssign(tableId, gameId, stationId) {
+  try {
+    // Get all waiting queue entries for this game in this station
+    const allQueueEntries = await Queue.findAll({
+      where: stationId ? { stationid: stationId } : {},
+      order: [["createdat", "ASC"]],
+    });
+
+    // Filter waiting entries for this specific game
+    const waitingForGame = allQueueEntries.filter(
+      (entry) => entry.status === "waiting" && entry.gameid === gameId
+    );
+
+    // Check if someone specifically requested this table
+    const preferredEntry = waitingForGame.find(
+      (entry) => entry.preferredtableid === tableId
+    );
+
+    // Get first in queue (either preferred table match or first waiting)
+    const nextInQueue = preferredEntry || waitingForGame[0];
+
+    if (nextInQueue) {
+      // Auto-assign this table to the next person in queue
+      await Queue.update(
+        {
+          preferredtableid: tableId,
+          status: "seated",
+        },
+        { where: { id: nextInQueue.id } }
+      );
+
+      // Mark table as occupied (will be changed to reserved when they start session)
+      await TableAsset.update({ status: "occupied" }, { where: { id: tableId } });
+
+      return {
+        assigned: true,
+        queueEntry: nextInQueue,
+        message: `Table assigned to ${nextInQueue.customername} from queue`,
+      };
+    }
+
+    return { assigned: false, message: "No one in queue for this game" };
+  } catch (err) {
+    console.error("Error checking queue:", err);
+    return { assigned: false, error: err.message };
+  }
+}
 
 const router = express.Router();
 
@@ -211,14 +260,22 @@ router.post(
           .json({ error: "Linked table not found for billing" });
       }
 
-      // free the table
-      await TableAsset.update({ status: "available" }, { where: { id: table.id } });
+      // Check queue for this game - if someone is waiting, assign to them
+      const queueResult = await checkQueueAndAssign(table.id, session.gameid, req.stationId);
+
+      if (!queueResult.assigned) {
+        // No one in queue - free the table
+        await TableAsset.update({ status: "available" }, { where: { id: table.id } });
+      }
 
       // If skip_bill is true, just return session info without creating a bill
       if (skip_bill) {
         return res.json({
-          message: "Session stopped and table released",
+          message: queueResult.assigned
+            ? `Session stopped. ${queueResult.message}`
+            : "Session stopped and table released",
           session,
+          queueAssignment: queueResult.assigned ? queueResult : null,
         });
       }
 
@@ -253,7 +310,9 @@ router.post(
       const bill = await Bill.create(billData);
 
       res.json({
-        message: "Bill generated",
+        message: queueResult.assigned
+          ? `Bill generated. ${queueResult.message}`
+          : "Bill generated",
         session,
         bill,
         breakdown: {
@@ -261,6 +320,7 @@ router.post(
           tableAmount,
           total: grandTotal,
         },
+        queueAssignment: queueResult.assigned ? queueResult : null,
       });
     } catch (err) {
       console.error(err);
@@ -296,10 +356,18 @@ router.post(
       // session.status = "completed";
       await ActiveTable.update({ endtime: endTime, status: "completed" }, { where: { activeid: session.activeid } });
 
-      // Free the table
+      // Get table info
       const table = await TableAsset.findByPk(session.tableid);
+
+      // Check queue for this game - if someone is waiting, assign to them
+      let queueResult = { assigned: false };
       if (table) {
-        await TableAsset.update({ status: "available" }, { where: { id: table.id } });
+        queueResult = await checkQueueAndAssign(table.id, session.gameid, req.stationId);
+
+        if (!queueResult.assigned) {
+          // No one in queue - free the table
+          await TableAsset.update({ status: "available" }, { where: { id: table.id } });
+        }
       }
 
       // Compute table charges
@@ -374,7 +442,9 @@ router.post(
       const bill = await Bill.create(billData);
 
       res.json({
-        message: "Session auto-released",
+        message: queueResult.assigned
+          ? `Session auto-released. ${queueResult.message}`
+          : "Session auto-released",
         session,
         bill,
         breakdown: {
@@ -383,6 +453,7 @@ router.post(
           menu_charges,
           total_amount,
         },
+        queueAssignment: queueResult.assigned ? queueResult : null,
       });
     } catch (err) {
       console.error(err);

@@ -542,7 +542,17 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const value = filter.where[key];
+          if (Array.isArray(value)) {
+            query = query.in(key, value);
+          } else {
+            query = query.eq(key, value);
+          }
+        });
+      }
+      if (filter.order) {
+        filter.order.forEach(([col, dir]) => {
+          query = query.order(col, { ascending: dir === "ASC" });
         });
       }
       const { data, error } = await query;
@@ -550,10 +560,54 @@ const models = {
       return data || [];
     },
 
+    async findOne(filter) {
+      let query = getDb().from(this.tableName).select("*");
+      if (filter.where) {
+        Object.keys(filter.where).forEach((key) => {
+          const value = filter.where[key];
+          if (Array.isArray(value)) {
+            query = query.in(key, value);
+          } else {
+            query = query.eq(key, value);
+          }
+        });
+      }
+      if (filter.order) {
+        filter.order.forEach(([col, dir]) => {
+          query = query.order(col, { ascending: dir === "ASC" });
+        });
+      }
+      query = query.limit(1).single();
+      const { data, error } = await query;
+      if (error && error.code !== "PGRST116") throw error;
+      return data;
+    },
+
+    async findByPk(id) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .select("*")
+        .eq("id", id)
+        .single();
+      if (error && error.code !== "PGRST116") throw error;
+      return data;
+    },
+
     async create(queueData) {
       const { data, error } = await getDb()
         .from(this.tableName)
         .insert(queueData)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+
+    async update(queueData, filter) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .update(queueData)
+        .match(filter.where || filter)
         .select()
         .single();
       if (error) throw error;
@@ -567,6 +621,19 @@ const models = {
         .match(filter.where || filter);
       if (error) throw error;
       return true;
+    },
+
+    async max(column, filter = {}) {
+      let query = getDb().from(this.tableName).select(column);
+      if (filter.where) {
+        Object.keys(filter.where).forEach((key) => {
+          query = query.eq(key, filter.where[key]);
+        });
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      if (!data || data.length === 0) return null;
+      return Math.max(...data.map((row) => row[column] || 0));
     },
   },
 

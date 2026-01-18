@@ -1,5 +1,5 @@
 import express from "express";
-import { TableAsset } from "../models/index.js";
+import { TableAsset, Queue, ActiveTable } from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
   stationContext,
@@ -12,6 +12,7 @@ const router = express.Router();
 
 // -------------------------------------------------
 // GET ALL TABLES + Filters + Pagination
+// Includes queue booking info and active session info
 // -------------------------------------------------
 router.get("/", auth, stationContext, async (req, res) => {
   try {
@@ -30,10 +31,49 @@ router.get("/", auth, stationContext, async (req, res) => {
       limit: parseInt(limit),
     });
 
+    // Get queue entries that are "seated" (assigned from queue, waiting to start)
+    const queueEntries = await Queue.findAll({
+      where: req.stationId ? { stationid: req.stationId } : {},
+    });
+    const seatedQueue = queueEntries.filter((q) => q.status === "seated");
+
+    // Get active sessions
+    const activeSessions = await ActiveTable.findAll({
+      where: req.stationId ? { stationid: req.stationId } : {},
+    });
+    const activeSessionsFiltered = activeSessions.filter((s) => s.status === "active");
+
+    // Enrich tables with booking info
+    const enrichedTables = tables.map((table) => {
+      const result = { ...table };
+
+      // Check if table has an active session
+      const activeSession = activeSessionsFiltered.find(
+        (s) => s.tableid === table.id
+      );
+      if (activeSession) {
+        result.activeSession = activeSession;
+        result.bookedBy = activeSession.customer_name || "Customer";
+        result.bookingType = "active_session";
+      }
+
+      // Check if table is assigned from queue (waiting to start session)
+      const queueBooking = seatedQueue.find(
+        (q) => q.preferredtableid === table.id
+      );
+      if (queueBooking && !activeSession) {
+        result.queueBooking = queueBooking;
+        result.bookedBy = queueBooking.customername;
+        result.bookingType = "queue";
+      }
+
+      return result;
+    });
+
     res.json({
-      total: tables.length,
+      total: enrichedTables.length,
       currentPage: page,
-      data: tables,
+      data: enrichedTables,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
