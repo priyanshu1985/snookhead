@@ -180,6 +180,10 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       members,
       gameid,
       preferredtableid,
+      booking_type,
+      duration_minutes,
+      frame_count,
+      set_time,
     } = req.body;
 
     // Validation
@@ -226,6 +230,10 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         estimatedwaitminutes: estimatedWait,
         status: "waiting",
         createdat: new Date(),
+        booking_type,
+        duration_minutes,
+        frame_count,
+        set_time,
       },
       req.stationId
     );

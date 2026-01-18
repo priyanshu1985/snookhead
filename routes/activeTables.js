@@ -40,13 +40,72 @@ async function checkQueueAndAssign(tableId, gameId, stationId) {
         { where: { id: nextInQueue.id } }
       );
 
-      // Mark table as occupied (will be changed to reserved when they start session)
+      // Start the session automatically
+      const currentTimestamp = new Date();
+      const bookingType = nextInQueue.booking_type || "timer";
+      let endTime = null;
+
+      // Calculate end time based on booking type if applicable
+      if (bookingType === "timer") {
+        const duration = nextInQueue.duration_minutes || 60;
+         endTime = new Date(currentTimestamp.getTime() + duration * 60000);
+      } else if (bookingType === "set") {
+          // If set time is provided (e.g. "14:00"), calculate date object
+          // For simplicty/robustness, we might treat it as open-ended stopwatch if logic requires, 
+          // or parse the time. The existing logic in /start seems to rely on empty endTime for stopwatch?
+          // Let's assume stopwatch mode implies no fixed end time initially unless 'set' implies specific end.
+          // In TableBooking, 'set' usually means "Target End Time". 
+          // If set_time is a string "HH:MM", we parse it for today.
+          if (nextInQueue.set_time) {
+             const [hours, minutes] = nextInQueue.set_time.split(':');
+             const targetTime = new Date();
+             targetTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+             // If target is in past (e.g. next day), add day? For now assume today.
+             if (targetTime < currentTimestamp) {
+                 targetTime.setDate(targetTime.getDate() + 1);
+             }
+             endTime = targetTime;
+          }
+      } 
+      // frame mode usually has no fixed end time, just frame count.
+
+      const sessionData = addStationToData(
+        {
+          tableid: tableId,
+          starttimer: currentTimestamp,
+          endtimer: endTime, // Null for stopwatch/frame often? Or calculated?
+          customer_name: nextInQueue.customername,
+          gameid: gameId,
+          bookingtype: bookingType, // Ensure column name matches DB (bookingtype vs booking_type)
+          framecount: nextInQueue.frame_count,
+        },
+        stationId
+      );
+
+      // Create active session
+      const newSession = await ActiveTable.create(sessionData);
+
+      // Create linked order for the new session
+      const orderData = addStationToData(
+        {
+          userId: null, // No specific user ID for queue auto-assign (or use owner/admin?)
+          total: 0,
+          status: "pending",
+          session_id: newSession.activeid || newSession.active_id, 
+          order_source: "queue_auto_assign",
+        },
+        stationId
+      );
+      await Order.create(orderData);
+
+      // Mark table as occupied
       await TableAsset.update({ status: "occupied" }, { where: { id: tableId } });
 
       return {
         assigned: true,
         queueEntry: nextInQueue,
-        message: `Table assigned to ${nextInQueue.customername} from queue`,
+        session: newSession,
+        message: `Table assigned to ${nextInQueue.customername} from queue. Session started (${bookingType}).`,
       };
     }
 
