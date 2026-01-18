@@ -500,7 +500,7 @@ const models = {
       const { data, error } = await getDb()
         .from(this.tableName)
         .select("*")
-        .eq("id", id)
+        .eq("activeid", id)
         .single();
       if (error && error.code !== "PGRST116") throw error;
       return data;
