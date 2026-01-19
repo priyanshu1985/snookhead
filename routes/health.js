@@ -7,7 +7,7 @@ router.get("/", async (req, res) => {
     const supabase = getSupabase();
     // Test Supabase connection by making a simple storage query (no RLS issues)
     const { error } = await supabase.storage.listBuckets();
-    if (error && !error.message.includes('JWT')) {
+    if (error && !error.message.includes("JWT")) {
       throw error;
     }
     res.json({
@@ -16,13 +16,11 @@ router.get("/", async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    res
-      .status(503)
-      .json({
-        status: "Error",
-        database: "Disconnected",
-        error: error.message,
-      });
+    res.status(503).json({
+      status: "Error",
+      database: "Disconnected",
+      error: error.message,
+    });
   }
 });
 

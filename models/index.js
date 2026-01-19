@@ -408,6 +408,15 @@ const models = {
       if (error) throw error;
       return data;
     },
+
+    async destroy(filter) {
+      const { error } = await getDb()
+        .from(this.tableName)
+        .delete()
+        .match(filter.where || filter);
+      if (error) throw error;
+      return true;
+    },
   },
 
   Game: {

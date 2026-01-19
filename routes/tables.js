@@ -1,5 +1,5 @@
 import express from "express";
-import { TableAsset, Queue, ActiveTable } from "../models/index.js";
+import { TableAsset, Queue, ActiveTable, Bill } from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
   stationContext,
@@ -203,18 +203,64 @@ router.delete(
   authorize("owner", "admin"),
   async (req, res) => {
     try {
+      const tableId = req.params.id;
+
+      // Validate tableId
+      if (!tableId || tableId === 'undefined' || tableId === 'null') {
+        return res.status(400).json({ error: "Valid Table ID is required" });
+      }
+
+      const parsedTableId = parseInt(tableId);
+
       // Apply station filter
-      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const where = addStationFilter({ id: parsedTableId }, req.stationId);
       const table = await TableAsset.findOne({ where });
 
       if (!table) {
         return res.status(404).json({ error: "Table not found" });
       }
 
-      await TableAsset.destroy({ where: { id: req.params.id } });
+      // Check for active sessions on this table
+      const activeSessions = await ActiveTable.findAll({
+        where: addStationFilter({ tableid: parsedTableId, status: "active" }, req.stationId),
+      });
+
+      if (activeSessions.length > 0) {
+        return res.status(400).json({
+          error: "Cannot delete table with active sessions",
+          message: "Please end all active sessions on this table before deleting.",
+        });
+      }
+
+      // Delete related completed sessions first (to avoid FK constraint)
+      const completedSessions = await ActiveTable.findAll({
+        where: addStationFilter({ tableid: parsedTableId }, req.stationId),
+      });
+
+      // Delete bills that reference these sessions
+      for (const session of completedSessions) {
+        const sessionId = session.activeid;
+        if (sessionId) {
+          await Bill.destroy({ where: { sessionid: sessionId } });
+        }
+      }
+
+      // Delete all sessions for this table
+      await ActiveTable.destroy({
+        where: addStationFilter({ tableid: parsedTableId }, req.stationId),
+      });
+
+      // Delete any queue entries for this table
+      await Queue.destroy({
+        where: addStationFilter({ preferredtableid: parsedTableId }, req.stationId),
+      });
+
+      // Now delete the table
+      await TableAsset.destroy({ where: { id: parsedTableId } });
 
       res.json({ message: "Table deleted successfully" });
     } catch (err) {
+      console.error("Table delete error:", err);
       res.status(500).json({ error: err.message });
     }
   }

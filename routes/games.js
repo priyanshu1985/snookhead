@@ -1,5 +1,5 @@
 import express from "express";
-import { Game } from "../models/index.js";
+import { Game, TableAsset, ActiveTable, Bill, Queue } from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
   stationContext,
@@ -155,17 +155,78 @@ router.delete(
   authorize("owner", "admin"),
   async (req, res) => {
     try {
-      const dbFilter = {};
-      if (req.params.id) dbFilter.gameid = req.params.id;
+      const gameId = req.params.id;
+
+      // Validate gameId
+      if (!gameId || gameId === 'undefined' || gameId === 'null') {
+        return res.status(400).json({ error: "Valid Game ID is required" });
+      }
+
+      const dbFilter = { gameid: parseInt(gameId) };
       const where = addStationFilter(dbFilter, req.stationId);
-      
+
       const g = await Game.findOne({ where });
       if (!g) return res.status(404).json({ error: "Game not found" });
-      await Game.destroy({ where: { gameid: req.params.id } });
-      res.json({ success: true });
+
+      // Check for tables using this game
+      const tables = await TableAsset.findAll({
+        where: addStationFilter({ gameid: parseInt(gameId) }, req.stationId),
+      });
+
+      // Check for active sessions using this game
+      const activeSessions = await ActiveTable.findAll({
+        where: addStationFilter({ gameid: parseInt(gameId), status: "active" }, req.stationId),
+      });
+
+      if (activeSessions.length > 0) {
+        return res.status(400).json({
+          error: "Cannot delete game with active sessions",
+          message: "Please end all active sessions for this game before deleting.",
+        });
+      }
+
+      // Delete all related data in correct order to avoid FK constraints
+
+      // 1. Delete bills referencing sessions for this game
+      const allSessions = await ActiveTable.findAll({
+        where: addStationFilter({ gameid: parseInt(gameId) }, req.stationId),
+      });
+
+      for (const session of allSessions) {
+        // Session from Supabase returns plain object with 'activeid' field
+        const sessionId = session.activeid;
+        if (sessionId) {
+          await Bill.destroy({ where: { sessionid: sessionId } });
+        }
+      }
+
+      // 2. Delete all sessions for this game
+      await ActiveTable.destroy({
+        where: addStationFilter({ gameid: parseInt(gameId) }, req.stationId),
+      });
+
+      // 3. Delete queue entries for this game
+      await Queue.destroy({
+        where: addStationFilter({ gameid: parseInt(gameId) }, req.stationId),
+      });
+
+      // 4. Delete all tables for this game
+      for (const table of tables) {
+        if (table.id) {
+          await TableAsset.destroy({ where: { id: table.id } });
+        }
+      }
+
+      // 5. Finally delete the game
+      await Game.destroy({ where: { gameid: parseInt(gameId) } });
+
+      res.json({
+        success: true,
+        message: `Game deleted successfully along with ${tables.length} table(s)`
+      });
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: "Server error" });
+      console.error("Game delete error:", err);
+      res.status(500).json({ error: "Server error", details: err.message });
     }
   }
 );
