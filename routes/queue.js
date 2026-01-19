@@ -56,33 +56,29 @@ router.get("/", auth, stationContext, async (req, res) => {
       filteredEntries = allEntries.filter((e) => e.status === "waiting");
     }
 
-    // Enrich with game and table info
-    const enrichedList = await Promise.all(
-      filteredEntries.map(async (entry, index) => {
-        const result = {
-          ...entry,
-          position: index + 1, // Dynamic position based on FIFO order
+    // Extract IDs for bulk fetching
+    const gameIds = [...new Set(filteredEntries.map(e => e.gameid).filter(Boolean))];
+    const tableIds = [...new Set(filteredEntries.map(e => e.preferredtableid).filter(Boolean))];
+
+    // Bulk fetch games and tables
+    const [games, tables] = await Promise.all([
+        gameIds.length > 0 ? Game.findAll({ where: { gameid: gameIds } }) : [],
+        tableIds.length > 0 ? TableAsset.findAll({ where: { id: tableIds } }) : []
+    ]);
+
+    // Create lookup maps
+    const gamesMap = games.reduce((acc, g) => ({ ...acc, [g.gameid]: g }), {});
+    const tablesMap = tables.reduce((acc, t) => ({ ...acc, [t.id]: t }), {});
+
+    // Enrich list in memory
+    const enrichedList = filteredEntries.map((entry, index) => {
+        return {
+            ...entry,
+            position: index + 1,
+            Game: entry.gameid ? gamesMap[entry.gameid] : null,
+            PreferredTable: entry.preferredtableid ? tablesMap[entry.preferredtableid] : null
         };
-
-        // Fetch game info
-        if (entry.gameid) {
-          const game = await Game.findByPk(entry.gameid);
-          if (game) {
-            result.Game = game;
-          }
-        }
-
-        // Fetch preferred table info
-        if (entry.preferredtableid) {
-          const table = await TableAsset.findByPk(entry.preferredtableid);
-          if (table) {
-            result.PreferredTable = table;
-          }
-        }
-
-        return result;
-      })
-    );
+    });
 
     res.json(enrichedList);
   } catch (err) {
@@ -137,24 +133,30 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     }
 
     // Enrich playing entries with table info
-    const playingEnriched = await Promise.all(
-      playing.map(async (entry) => {
+    // Extract IDs for bulk fetching
+    const gameIds = [...new Set(playing.map(e => e.gameid).filter(Boolean))];
+    const tableIds = [...new Set(playing.map(e => e.preferredtableid).filter(Boolean))];
+
+    // Bulk fetch games and tables
+    const [games, tables] = await Promise.all([
+        gameIds.length > 0 ? Game.findAll({ where: { gameid: gameIds } }) : [],
+        tableIds.length > 0 ? TableAsset.findAll({ where: { id: tableIds } }) : []
+    ]);
+
+    // Create lookup maps
+    const gamesMap = games.reduce((acc, g) => ({ ...acc, [g.gameid]: g }), {});
+    const tablesMap = tables.reduce((acc, t) => ({ ...acc, [t.id]: t }), {});
+
+    const playingEnriched = playing.map((entry) => {
         const result = { ...entry };
         if (entry.preferredtableid) {
-          const table = await TableAsset.findByPk(entry.preferredtableid);
-          if (table) {
-            result.Table = table;
-          }
+            result.Table = tablesMap[entry.preferredtableid];
         }
         if (entry.gameid) {
-          const game = await Game.findByPk(entry.gameid);
-          if (game) {
-            result.Game = game;
-          }
+            result.Game = gamesMap[entry.gameid];
         }
         return result;
-      })
-    );
+    });
 
     res.json({
       totalWaiting: waiting.length,

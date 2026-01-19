@@ -128,7 +128,13 @@ const router = express.Router();
 // Get all active table sessions
 router.get("/", auth, stationContext, async (req, res) => {
   try {
-    const where = addStationFilter({ status: "active" }, req.stationId);
+    // Filter for active sessions only by default if no other status provided
+    // This prevents fetching entire history
+    const baseFilter = { status: "active" };
+    
+    // Allow overriding status via query param if needed (e.g. for reports later) but default to active
+    const where = addStationFilter({ ...baseFilter, ...req.query }, req.stationId);
+
     const activeSessions = await ActiveTable.findAll({
       where,
       include: [
