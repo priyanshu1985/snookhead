@@ -129,10 +129,11 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         category,
         description: req.body.description,
         price,
+        purchasePrice: req.body.purchasePrice || 0,
         stock: req.body.stock || 0,
         threshold: req.body.threshold || 5,
         supplierPhone: req.body.supplierPhone, // Map correctly if present
-        imageurl: req.body.image_url || req.body.imageUrl, // imageUrl -> imageurl
+        imageUrl: req.body.image_url || req.body.imageUrl, // imageUrl -> imageUrl
         is_available:
           req.body.is_available !== undefined ? req.body.is_available : true,
       },
@@ -173,8 +174,9 @@ router.put(
         name: req.body.name,
         category: req.body.category,
         price: req.body.price,
+        purchasePrice: req.body.purchasePrice,
         description: req.body.description,
-        imageurl: req.body.image_url || req.body.imageUrl,
+        imageUrl: req.body.image_url || req.body.imageUrl,
         stock: req.body.stock,
         threshold: req.body.threshold,
         supplierPhone: req.body.supplierPhone,

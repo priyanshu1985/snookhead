@@ -86,6 +86,7 @@ async function checkQueueAndAssign(tableId, gameId, stationId) {
       const orderData = addStationToData(
         {
           userId: null,
+          personName: nextInQueue.customername || "Queue Customer",
           total: 0,
           status: "pending",
           session_id: newSession.activeid || newSession.active_id,
@@ -240,6 +241,7 @@ router.post(
       const orderData = addStationToData(
         {
           userId: user_id ?? req.user.id ?? null,
+          personName: customer_name || "Table Customer",
           total: 0,
           status: "pending",
           session_id: session.activeid || session.active_id, // Link to session using DB column name or object property
@@ -269,6 +271,12 @@ router.post(
               qty: qty,
               priceEach: priceEach
             });
+
+            // Decrease stock
+            if (menuItem.stock !== undefined) {
+              const newStock = Math.max(0, menuItem.stock - qty);
+              await MenuItem.update({ stock: newStock }, { where: { id: menuItem.id } });
+            }
           }
         }
 
@@ -458,6 +466,16 @@ router.post(
 
       if (cart_items && cart_items.length > 0) {
         for (const item of cart_items) {
+          // Fetch menu item to update stock
+          const menuWhere = addStationFilter({ id: item.id }, req.stationId);
+          const menuItem = await MenuItem.findOne({ where: menuWhere });
+          
+          if (menuItem && menuItem.stock !== undefined) {
+             const qty = Number(item.qty || 1);
+             const newStock = Math.max(0, menuItem.stock - qty);
+             await MenuItem.update({ stock: newStock }, { where: { id: menuItem.id } });
+          }
+
           const itemTotal = Number(item.price || 0) * Number(item.qty || 1);
           menu_charges += itemTotal;
           bill_items.push({
