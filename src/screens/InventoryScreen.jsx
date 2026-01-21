@@ -565,9 +565,9 @@ const InventoryScreen = ({ navigation, route }) => {
         <Icon name="add" size={28} color="#fff" />
       </TouchableOpacity>
 
-      {/* Add Item Modal */}
-      <Modal visible={showAddModal} animationType="slide">
-        <View style={styles.modalContainer}>
+      {/* Add Item Modal - Replaced with Absolute View */}
+      {showAddModal && (
+        <View style={[styles.modalContainer, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, elevation: 10 }]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Add New Item</Text>
             <TouchableOpacity
@@ -601,11 +601,11 @@ const InventoryScreen = ({ navigation, route }) => {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      )}
 
-      {/* Edit Item Modal */}
-      <Modal visible={showEditModal} animationType="slide">
-        <View style={styles.modalContainer}>
+      {/* Edit Item Modal - Replaced with Absolute View */}
+      {showEditModal && (
+        <View style={[styles.modalContainer, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, elevation: 10 }]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Edit Item</Text>
             <TouchableOpacity
@@ -639,11 +639,11 @@ const InventoryScreen = ({ navigation, route }) => {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      )}
 
-      {/* Quantity Update Modal */}
-      <Modal visible={showQuantityModal} animationType="slide">
-        <View style={styles.modalContainer}>
+      {/* Quantity Update Modal - Replaced with Absolute View */}
+      {showQuantityModal && (
+        <View style={[styles.modalContainer, { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, elevation: 10 }]}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Update Stock</Text>
             <TouchableOpacity
@@ -729,7 +729,7 @@ const InventoryScreen = ({ navigation, route }) => {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      )}
     </View>
   );
 };

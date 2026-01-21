@@ -66,28 +66,14 @@ export default function SignUpScreen({ navigation }) {
       if (res.ok && data.success && data.accessToken) {
         await login(data.accessToken, data.refreshToken, data.user);
 
-        const roleMessage =
-          role === 'customer'
-            ? 'Account created successfully!'
-            : role === 'owner'
-            ? 'Owner account created! Welcome to your dashboard.'
-            : 'Staff account created! Welcome to staff features.';
-
-        Alert.alert('Success', roleMessage, [
-          {
-            text: 'OK',
-            onPress: () => {
-              const userRole = data.user.role;
-              if (userRole === 'admin') {
-                navigation.replace('AdminDashboard');
-              } else if (userRole === 'staff') {
-                navigation.replace('StaffMember');
-              } else {
-                navigation.replace('MainTabs');
-              }
-            },
-          },
-        ]);
+        const userRole = data.user.role;
+        if (userRole === 'admin') {
+          navigation.replace('AdminDashboard');
+        } else if (userRole === 'staff') {
+          navigation.replace('StaffMember');
+        } else {
+          navigation.replace('MainTabs');
+        }
       } else {
         Alert.alert('Sign up error', data.error || 'Could not sign up');
       }
@@ -337,13 +323,22 @@ export default function SignUpScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Role Selection Modal */}
-      <Modal
-        visible={showRoleModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowRoleModal(false)}
-      >
+      {/* Role Selection Modal - Replaced with Absolute View */}
+      {showRoleModal && (
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -402,7 +397,8 @@ export default function SignUpScreen({ navigation }) {
             </Text>
           </View>
         </View>
-      </Modal>
+        </View>
+      )}
     </View>
   );
 }

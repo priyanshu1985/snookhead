@@ -324,13 +324,22 @@ const Members = ({ navigation }) => {
           />
         )}
 
-        {/* Add Member Modal */}
-        <Modal
-          visible={showAddModal}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setShowAddModal(false)}
-        >
+        {/* Add Member Modal - Replaced with Absolute View */}
+        {showAddModal && (
+          <View
+            style={[
+              styles.modalOverlay,
+              {
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 9999,
+                elevation: 10,
+              },
+            ]}
+          >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
@@ -445,7 +454,8 @@ const Members = ({ navigation }) => {
               </View>
             </View>
           </View>
-        </Modal>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );

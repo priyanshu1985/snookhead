@@ -38,11 +38,17 @@ export default function AfterBooking({ route, navigation }) {
 
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [totalDurationSeconds, setTotalDurationSeconds] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0); // For stopwatch mode
   const [timerExpired, setTimerExpired] = useState(false);
   const [sessionData, setSessionData] = useState(session);
   const [frameCount, setFrameCount] = useState(
     timeDetails?.selectedFrame ? parseInt(timeDetails.selectedFrame) : 0,
   );
+
+  // Determine booking type: 'Set Time' = countdown, 'Timer' = stopwatch, 'Select Frame' = frame-based
+  const isStopwatchMode = timeOption === 'Timer';
+  const isFrameMode = timeOption === 'Select Frame';
+  const isCountdownMode = timeOption === 'Set Time' || (!isStopwatchMode && !isFrameMode);
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('Food');
@@ -55,55 +61,81 @@ export default function AfterBooking({ route, navigation }) {
   const [isCalculatingBill, setIsCalculatingBill] = useState(false);
   const [billData, setBillData] = useState(null);
 
-  // Initialize countdown timer based on booking_end_time or duration_minutes
+  // Queue State
+  const [nextInQueue, setNextInQueue] = useState(null);
+
+  // Initialize timer based on booking type
   useEffect(() => {
-    if (sessionData?.booking_end_time) {
-      // Calculate remaining time from booking_end_time
-      const endTime = new Date(sessionData.booking_end_time);
+    if (isStopwatchMode || isFrameMode) {
+      // Stopwatch/Frame mode: Calculate elapsed time from start
+      const startTime = new Date(sessionData?.start_time || sessionData?.starttime || new Date());
+      const now = new Date();
+      const elapsedSecs = Math.max(0, Math.floor((now - startTime) / 1000));
+      setElapsedSeconds(elapsedSecs);
+      setTotalDurationSeconds(0); // No fixed duration
+      setRemainingSeconds(0); // Not used in stopwatch mode
+    } else if (sessionData?.booking_end_time || sessionData?.bookingendtime) {
+      // Countdown mode: Calculate remaining time from booking_end_time
+      const endTime = new Date(sessionData.booking_end_time || sessionData.bookingendtime);
       const now = new Date();
       const remainingMs = endTime - now;
       const remainingSecs = Math.max(0, Math.floor(remainingMs / 1000));
       setRemainingSeconds(remainingSecs);
 
       // Set total duration for display
-      if (sessionData?.duration_minutes) {
-        setTotalDurationSeconds(sessionData.duration_minutes * 60);
+      if (sessionData?.duration_minutes || sessionData?.durationminutes) {
+        setTotalDurationSeconds((sessionData.duration_minutes || sessionData.durationminutes) * 60);
       } else {
         setTotalDurationSeconds(remainingSecs);
       }
-    } else if (sessionData?.duration_minutes) {
-      // Fallback: use duration_minutes from start_time
-      const durationSecs = sessionData.duration_minutes * 60;
-      const startTime = new Date(sessionData.start_time);
+    } else if (sessionData?.duration_minutes || sessionData?.durationminutes) {
+      // Fallback countdown: use duration_minutes from start_time
+      const durationSecs = (sessionData.duration_minutes || sessionData.durationminutes) * 60;
+      const startTime = new Date(sessionData.start_time || sessionData.starttime);
       const now = new Date();
       const elapsedSecs = Math.floor((now - startTime) / 1000);
       const remainingSecs = Math.max(0, durationSecs - elapsedSecs);
       setRemainingSeconds(remainingSecs);
       setTotalDurationSeconds(durationSecs);
     }
-  }, [sessionData]);
+  }, [sessionData, isStopwatchMode, isFrameMode]);
 
-  // Countdown timer - decrements every second
+  // Timer logic - different behavior based on mode
   useEffect(() => {
-    if (remainingSeconds <= 0 && totalDurationSeconds > 0 && !timerExpired) {
-      // Timer has expired - auto-generate bill
-      setTimerExpired(true);
-      handleTimerExpired();
+    // Skip timer for Frame mode (no automatic timer)
+    if (isFrameMode) {
       return;
     }
 
-    const interval = setInterval(() => {
-      setRemainingSeconds(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    if (isStopwatchMode) {
+      // Stopwatch mode: Count UP every second (no auto-release)
+      const interval = setInterval(() => {
+        setElapsedSeconds(prev => prev + 1);
+      }, 1000);
 
-    return () => clearInterval(interval);
-  }, [remainingSeconds, totalDurationSeconds, timerExpired]);
+      return () => clearInterval(interval);
+    } else {
+      // Countdown mode: Check for expiration and auto-release
+      if (remainingSeconds <= 0 && totalDurationSeconds > 0 && !timerExpired) {
+        // Timer has expired - auto-generate bill (only for countdown mode)
+        setTimerExpired(true);
+        handleTimerExpired();
+        return;
+      }
+
+      const interval = setInterval(() => {
+        setRemainingSeconds(prev => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [remainingSeconds, totalDurationSeconds, timerExpired, isStopwatchMode, isFrameMode]);
 
   // Handle timer expiration - auto generate bill silently
   const handleTimerExpired = async () => {
@@ -125,7 +157,8 @@ export default function AfterBooking({ route, navigation }) {
       }
 
       let validSessionId = null;
-      const rawSessionId = sessionData?.active_id || sessionData?.id;
+      const rawSessionId =
+        sessionData?.active_id || sessionData?.id || sessionData?.activeid;
       if (rawSessionId) {
         const sessionIdInt = parseInt(rawSessionId);
         if (!isNaN(sessionIdInt) && sessionIdInt > 0) {
@@ -137,10 +170,12 @@ export default function AfterBooking({ route, navigation }) {
         customer_name:
           route.params?.customerName ||
           sessionData?.customer_name ||
+          sessionData?.customername ||
           'Walk-in Customer',
         customer_phone:
           route.params?.customerPhone ||
           sessionData?.customer_phone ||
+          sessionData?.customerphone ||
           '+91 XXXXXXXXXX',
         table_id: table?.id ? parseInt(table.id) : null,
         session_id: validSessionId,
@@ -149,7 +184,7 @@ export default function AfterBooking({ route, navigation }) {
           quantity: item.quantity || 1,
         })),
         session_duration: Math.ceil(totalDurationSeconds / 60),
-        booking_time: sessionData?.start_time,
+        booking_time: sessionData?.start_time || sessionData?.starttime,
         table_price_per_min: parseFloat(
           table?.pricePerMin || table?.price_per_min || 10,
         ),
@@ -174,16 +209,35 @@ export default function AfterBooking({ route, navigation }) {
       const result = await response.json();
 
       if (response.ok) {
-        // End the session silently
+        // End the session and free the table using auto-release
         try {
-          await fetch(`${API_URL}/api/activeTables/stop`, {
+          await fetch(`${API_URL}/api/activeTables/auto-release`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify({ active_id: validSessionId }),
+            body: JSON.stringify({
+              active_id: validSessionId,
+              cart_items: billItems.map(item => ({
+                menu_item_id: item.id,
+                quantity: item.quantity || 1,
+              })),
+            }),
           });
+          console.log('Session ended, table is now available for next booking');
+          
+          if (releaseResponse.ok) {
+              const releaseResult = await releaseResponse.json();
+              if (releaseResult.queueAssignment && releaseResult.queueAssignment.assigned) {
+                  Alert.alert(
+                      'Queue Assigned',
+                      `Table has been automatically assigned to ${releaseResult.queueAssignment.queueEntry.customername}.`,
+                      [{ text: 'OK', onPress: () => navigation.navigate('MainTabs', { screen: 'Bill' }) }]
+                  );
+                  return; // Stop here, wait for user to click OK
+              }
+          }
         } catch (sessionError) {
           console.warn('Failed to end session:', sessionError);
         }
@@ -206,7 +260,7 @@ export default function AfterBooking({ route, navigation }) {
   // Calculate pricing in real-time
   useEffect(() => {
     calculatePricing();
-  }, [remainingSeconds, totalDurationSeconds, billItems, table]);
+  }, [remainingSeconds, totalDurationSeconds, elapsedSeconds, billItems, table, isStopwatchMode]);
 
   // Initialize with pre-selected food items from TableBookingScreen
   useEffect(() => {
@@ -231,12 +285,43 @@ export default function AfterBooking({ route, navigation }) {
   useEffect(() => {
     fetchMenuItems();
     fetchExistingOrders();
+    fetchMenuItems();
+    fetchExistingOrders();
+    fetchQueue();
   }, []);
+
+  // Fetch queue for this game/table
+  const fetchQueue = async () => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) return;
+
+      const gameId = table?.game_id || table?.gameid;
+      if (!gameId) return;
+
+      const response = await fetch(`${API_URL}/api/queue?gameid=${gameId}&status=waiting`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const queueList = await response.json();
+        // Priority: 1. Preferred this table, 2. No preference
+        const nextForThisTable = queueList.find(q => 
+          q.preferredtableid && String(q.preferredtableid) === String(table.id)
+        ) || queueList.find(q => !q.preferredtableid);
+
+        setNextInQueue(nextForThisTable || null);
+      }
+    } catch (err) {
+      console.log('Error fetching queue:', err);
+    }
+  };
 
   // Fetch existing orders for this session (to include food already ordered)
   const fetchExistingOrders = async () => {
     try {
-      const sessionId = sessionData?.active_id || sessionData?.id;
+      const sessionId =
+        sessionData?.active_id || sessionData?.id || sessionData?.activeid;
       if (!sessionId) {
         console.log('No session ID available, skipping order fetch');
         return;
@@ -309,11 +394,17 @@ export default function AfterBooking({ route, navigation }) {
   // Calculate comprehensive pricing
   const calculatePricing = async () => {
     try {
-      // Calculate table charges based on TOTAL booked duration (not remaining time)
+      // Calculate table charges based on booked duration or elapsed time
       let calculatedTableCharges = 0;
-      const bookedDurationMinutes = Math.ceil(totalDurationSeconds / 60);
+      let billableMinutes = 0;
 
-      if (table && bookedDurationMinutes > 0) {
+      if (isStopwatchMode) {
+        billableMinutes = Math.ceil(elapsedSeconds / 60);
+      } else {
+        billableMinutes = Math.ceil(totalDurationSeconds / 60);
+      }
+
+      if (table && billableMinutes > 0) {
         let pricePerMin = parseFloat(
           table.pricePerMin || table.price_per_min || 10,
         );
@@ -321,7 +412,7 @@ export default function AfterBooking({ route, navigation }) {
 
         // Debug logging
         console.log('Frontend pricing debug:', {
-          bookedDurationMinutes,
+          billableMinutes,
           original_pricePerMin: pricePerMin,
           frameCharge,
         });
@@ -333,11 +424,12 @@ export default function AfterBooking({ route, navigation }) {
         }
 
         if (timeOption === 'Select Frame' && frameCount > 0) {
-          const pricePerFrame = parseFloat(table.pricePerFrame || 100);
-          calculatedTableCharges = frameCount * pricePerFrame + frameCharge;
+          // Use frameCharge as the price per frame
+          const pricePerFrame = parseFloat(table.frameCharge || table.pricePerFrame || 100);
+          calculatedTableCharges = frameCount * pricePerFrame;
         } else {
           calculatedTableCharges =
-            bookedDurationMinutes * pricePerMin + frameCharge;
+            billableMinutes * pricePerMin + frameCharge;
         }
 
         console.log('Calculated table charges:', calculatedTableCharges);
@@ -522,20 +614,40 @@ export default function AfterBooking({ route, navigation }) {
         return;
       }
 
-      // Calculate actual time used (for early bill generation)
-      const actualTimeUsedSeconds = totalDurationSeconds - remainingSeconds;
-      const actualTimeUsedMinutes = Math.ceil(actualTimeUsedSeconds / 60);
-      const isEarlyGeneration = remainingSeconds > 0;
+      // Calculate billable time based on booking mode
+      let billableDuration = 0;
+      let tableCharges = 0;
+      let isEarlyGeneration = false;
 
-      console.log('Bill generation timing:', {
-        totalDuration: totalDurationSeconds,
-        remainingSeconds,
-        actualTimeUsedMinutes,
-        isEarlyGeneration,
-      });
+      const pricePerMin = parseFloat(table?.pricePerMin || table?.price_per_min || 10);
+      // Use frameCharge as price per frame
+      const pricePerFrame = parseFloat(table?.frameCharge || table?.pricePerFrame || table?.price_per_frame || 100);
+
+      if (isFrameMode) {
+        // Frame mode: Bill based on frames played, not time
+        billableDuration = 0; // No time-based billing
+        tableCharges = frameCount * pricePerFrame;
+        console.log('Frame mode billing:', { frameCount, pricePerFrame, tableCharges });
+      } else if (isStopwatchMode) {
+        // Stopwatch mode: Bill based on elapsed time (counting up)
+        billableDuration = Math.ceil(elapsedSeconds / 60); // Minutes played
+        tableCharges = billableDuration * pricePerMin;
+        console.log('Stopwatch mode billing:', { elapsedSeconds, billableDuration, pricePerMin, tableCharges });
+      } else {
+        // Countdown mode: Bill based on booked duration or actual time used
+        const actualTimeUsedSeconds = totalDurationSeconds - remainingSeconds;
+        const actualTimeUsedMinutes = Math.ceil(actualTimeUsedSeconds / 60);
+        isEarlyGeneration = remainingSeconds > 0;
+        billableDuration = isEarlyGeneration
+          ? actualTimeUsedMinutes
+          : Math.ceil(totalDurationSeconds / 60);
+        tableCharges = billableDuration * pricePerMin;
+        console.log('Countdown mode billing:', { billableDuration, isEarlyGeneration, tableCharges });
+      }
 
       let validSessionId = null;
-      const rawSessionId = sessionData?.active_id || sessionData?.id;
+      const rawSessionId =
+        sessionData?.active_id || sessionData?.id || sessionData?.activeid;
       if (rawSessionId) {
         const sessionIdInt = parseInt(rawSessionId);
         if (!isNaN(sessionIdInt) && sessionIdInt > 0) {
@@ -543,19 +655,16 @@ export default function AfterBooking({ route, navigation }) {
         }
       }
 
-      // For early generation, use actual time used; otherwise use total booked duration
-      const billableDuration = isEarlyGeneration
-        ? actualTimeUsedMinutes
-        : Math.ceil(totalDurationSeconds / 60);
-
       const billRequest = {
         customer_name:
           route.params?.customerName ||
           sessionData?.customer_name ||
+          sessionData?.customername ||
           'Walk-in Customer',
         customer_phone:
           route.params?.customerPhone ||
           sessionData?.customer_phone ||
+          sessionData?.customerphone ||
           '+91 XXXXXXXXXX',
         table_id: table?.id ? parseInt(table.id) : null,
         session_id: validSessionId,
@@ -564,15 +673,11 @@ export default function AfterBooking({ route, navigation }) {
           quantity: item.quantity || 1,
         })),
         session_duration: billableDuration,
-        booking_time: sessionData?.start_time,
-        table_price_per_min: parseFloat(
-          table?.pricePerMin || table?.price_per_min || 10,
-        ),
-        frame_charges:
-          timeOption === 'Select Frame'
-            ? frameCount *
-              parseFloat(table?.pricePerFrame || table?.price_per_frame || 100)
-            : 0,
+        booking_time: sessionData?.start_time || sessionData?.starttime,
+        table_price_per_min: pricePerMin,
+        frame_charges: isFrameMode ? tableCharges : 0,
+        booking_type: isFrameMode ? 'frame' : isStopwatchMode ? 'set' : 'timer',
+        frame_count: isFrameMode ? frameCount : null,
         is_early_checkout: isEarlyGeneration,
       };
 
@@ -594,23 +699,63 @@ export default function AfterBooking({ route, navigation }) {
         setTimerExpired(true);
         setRemainingSeconds(0);
 
-        // End the session and free the table
+        // End the session and free the table using auto-release
+        let autoAssigned = false;
         try {
-          await fetch(`${API_URL}/api/activeTables/stop`, {
+          const releaseResponse = await fetch(`${API_URL}/api/activeTables/auto-release`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify({ active_id: validSessionId }),
+            body: JSON.stringify({
+              active_id: validSessionId,
+              cart_items: billItems.map(item => ({
+                menu_item_id: item.id,
+                quantity: item.quantity || 1,
+              })),
+            }),
           });
-          console.log('Session ended, table is now available for next booking');
+          
+          if (releaseResponse.ok) {
+              const releaseResult = await releaseResponse.json();
+              if (releaseResult.queueAssignment && releaseResult.queueAssignment.assigned) {
+                  autoAssigned = true;
+                  Alert.alert(
+                      'Queue Assigned',
+                      `Table has been automatically assigned to ${releaseResult.queueAssignment.queueEntry.customername}.`,
+                      [{ text: 'OK', onPress: () => navigation.navigate('MainTabs', { screen: 'Bill' }) }]
+                  );
+              }
+          }
+          console.log('Session ended, table released. Auto-assigned:', autoAssigned);
         } catch (sessionError) {
           console.warn('Failed to end session:', sessionError);
         }
 
-        // Navigate directly to Bill screen
-        navigation.navigate('MainTabs', { screen: 'Bill' });
+        // Only prompt if NOT auto-assigned
+        if (!autoAssigned) {
+            if (nextInQueue) {
+              Alert.alert(
+                'Assign Next in Queue?',
+                `${nextInQueue.customername} is waiting for this table.\nAssign them now?`,
+                [
+                  {
+                    text: 'No, Just Clear',
+                    onPress: () => navigation.navigate('MainTabs', { screen: 'Bill' }),
+                    style: 'cancel'
+                  },
+                  {
+                    text: 'Yes, Assign',
+                    onPress: () => assignTableToQueue(nextInQueue, validSessionId)
+                  }
+                ]
+              );
+            } else {
+              // Navigate directly to Bill screen
+              navigation.navigate('MainTabs', { screen: 'Bill' });
+            }
+        }
       } else {
         throw new Error(result.error || 'Failed to create bill');
       }
@@ -622,6 +767,42 @@ export default function AfterBooking({ route, navigation }) {
       );
     } finally {
       setIsCalculatingBill(false);
+    }
+  };
+
+  const assignTableToQueue = async (queueEntry, previousSessionId) => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      
+      // 1. Assign table to queue entry (this starts the session logically in backend queue)
+      // But actually, backend /assign endpoint updates Queue status to 'seated' AND Table status to 'occupied'
+      // It does NOT create a Session entry in 'active_table_sessions' (which frontend relies on).
+      // We need to call /activeTables/start separately or rely on /assign to do it (backend analysis showed it passes 'tableid' and updates status).
+      // Backend /assign only updates TableAsset status. It does NOT seem to insert into active_game_sessions.
+      // So we should probably navigate to TableBookingScreen or manually start session.
+      
+      // Let's use the standard booking flow to ensure session is created correctly.
+      navigation.navigate('TableBookingScreen', {
+        table: { ...table, status: 'available' }, // Fake available so we don't get blocked
+        gameType: gameType,
+        color: route.params?.color,
+        prefillCustomer: {
+          name: queueEntry.customername,
+          phone: queueEntry.phone
+        },
+        queueEntryId: queueEntry.id // Pass ID to mark as served/seated later if needed
+      });
+
+      // Alternatively, we could call the backend to "Seat" them which might be enough if backend handles session creation?
+      // Looking at backend `assign` endpoint: 
+      // await Queue.update({ status: "seated" }...)
+      // await TableAsset.update({ status: "occupied" }...)
+      // It does NOT create a session.
+      
+      // So navigating to TableBookingScreen is safer, but we need to pass the "Queue Context".
+    } catch (error) {
+       console.error("Error assigning queue:", error);
+       navigation.navigate('MainTabs', { screen: 'Bill' });
     }
   };
 
@@ -642,46 +823,127 @@ export default function AfterBooking({ route, navigation }) {
           <Text style={styles.tableName}>{table?.name || 'Table'}</Text>
         </View>
 
-        {/* Countdown Timer Display */}
-        <View
-          style={[
-            styles.timerContainer,
-            remainingSeconds <= 60 &&
-              remainingSeconds > 0 &&
-              styles.timerContainerWarning,
-          ]}
-        >
-          <Text style={styles.timerLabel}>Time Remaining</Text>
-          <Text
-            style={[
-              styles.timerValue,
-              remainingSeconds <= 60 && styles.timerValueWarning,
-              remainingSeconds <= 0 && styles.timerValueExpired,
-            ]}
-          >
-            {formatCountdownTime(remainingSeconds)}
-          </Text>
-          <View style={styles.timerStatus}>
-            <Icon
-              name={remainingSeconds <= 0 ? 'alert-circle' : 'radio-button-on'}
-              size={12}
-              color={getTimerStatus().color}
-            />
-            <Text
-              style={[
-                styles.timerStatusText,
-                { color: getTimerStatus().color },
-              ]}
-            >
-              {getTimerStatus().text}
+        {/* Timer Display - Different modes */}
+        {isFrameMode ? (
+          /* Frame Mode Display */
+          <View style={styles.timerContainer}>
+            <Text style={styles.timerLabel}>Frame-Based Session</Text>
+            <View style={styles.frameDisplay}>
+              <Text style={styles.frameCountLarge}>{frameCount}</Text>
+              <Text style={styles.frameCountLabel}>
+                {frameCount === 1 ? 'Frame' : 'Frames'}
+              </Text>
+              <Text style={[styles.timerDurationInfo, { marginTop: 4 }]}>
+                Elapsed: {formatCountdownTime(elapsedSeconds)}
+              </Text>
+            </View>
+            <View style={styles.timerStatus}>
+              <Icon name="apps-outline" size={12} color="#4CAF50" />
+              <Text style={[styles.timerStatusText, { color: '#4CAF50' }]}>
+                Manual billing when done
+              </Text>
+            </View>
+            <View style={styles.frameControls}>
+              <TouchableOpacity
+                style={styles.frameControlBtn}
+                onPress={() => setFrameCount(prev => Math.max(1, prev - 1))}
+              >
+                <Icon name="remove" size={20} color="#FF8C42" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.frameControlBtn}
+                onPress={() => setFrameCount(prev => prev + 1)}
+              >
+                <Icon name="add" size={20} color="#FF8C42" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.frameHint}>
+              Adjust frame count as games are played
             </Text>
           </View>
-          {totalDurationSeconds > 0 && (
-            <Text style={styles.timerDurationInfo}>
-              Booked: {Math.ceil(totalDurationSeconds / 60)} minutes
+        ) : isStopwatchMode ? (
+          /* Stopwatch Mode Display - Counts UP */
+          <View style={styles.timerContainer}>
+            <Text style={styles.timerLabel}>Time Elapsed</Text>
+            <Text style={[styles.timerValue, styles.timerValueStopwatch]}>
+              {formatCountdownTime(elapsedSeconds)}
             </Text>
-          )}
-        </View>
+            <View style={styles.timerStatus}>
+              <Icon name="stopwatch-outline" size={12} color="#2196F3" />
+              <Text style={[styles.timerStatusText, { color: '#2196F3' }]}>
+                Running - Generate bill when done
+              </Text>
+            </View>
+            <Text style={styles.timerDurationInfo}>
+              Bill = ₹{table?.pricePerMin || table?.price_per_min || 10}/min ×{' '}
+              {Math.ceil(elapsedSeconds / 60)} min
+            </Text>
+          </View>
+        ) : (
+          /* Countdown Mode Display - Original behavior */
+          <View
+            style={[
+              styles.timerContainer,
+              remainingSeconds <= 60 &&
+                remainingSeconds > 0 &&
+                styles.timerContainerWarning,
+            ]}
+          >
+            <Text style={styles.timerLabel}>Time Remaining</Text>
+            <Text
+              style={[
+                styles.timerValue,
+                remainingSeconds <= 60 && styles.timerValueWarning,
+                remainingSeconds <= 0 && styles.timerValueExpired,
+              ]}
+            >
+              {formatCountdownTime(remainingSeconds)}
+            </Text>
+            <View style={styles.timerStatus}>
+              <Icon
+                name={remainingSeconds <= 0 ? 'alert-circle' : 'radio-button-on'}
+                size={12}
+                color={getTimerStatus().color}
+              />
+              <Text
+                style={[
+                  styles.timerStatusText,
+                  { color: getTimerStatus().color },
+                ]}
+              >
+                {getTimerStatus().text}
+              </Text>
+            </View>
+            {totalDurationSeconds > 0 && (
+              <Text style={styles.timerDurationInfo}>
+                Booked: {Math.ceil(totalDurationSeconds / 60)} minutes
+              </Text>
+            )}
+          </View>
+
+        )}
+
+        {/* Next in Queue Indicator */}
+        {nextInQueue && (
+          <View style={{
+            backgroundColor: '#E3F2FD',
+            padding: 12,
+            borderRadius: 12,
+            marginBottom: 20,
+            borderLeftWidth: 4,
+            borderLeftColor: '#2196F3',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <View>
+              <Text style={{fontSize: 12, color: '#1976D2', fontWeight: '700'}}>NEXT IN QUEUE</Text>
+              <Text style={{fontSize: 16, color: '#0D47A1', fontWeight: '700', marginTop: 2}}>{nextInQueue.customername}</Text>
+              <Text style={{fontSize: 12, color: '#555'}}>Waited: {Math.floor((new Date() - new Date(nextInQueue.createdat))/60000)} mins</Text>
+            </View>
+            <Icon name="people-circle" size={32} color="#2196F3" />
+          </View>
+        )}
 
         {/* Time Selection Options */}
         <View style={styles.timeOptionsContainer}>
@@ -795,7 +1057,7 @@ export default function AfterBooking({ route, navigation }) {
             <View style={styles.foodListContainer}>
               {getFilteredMenuItems().map((item, index) => {
                 const billItem = billItems.find(bi => bi.id === item.id);
-                const imageUrl = getMenuImageUrl(item.imageUrl);
+                const imageUrl = getMenuImageUrl(item.imageUrl || item.imageurl);
                 return (
                   <View key={item.id || index} style={styles.foodCard}>
                     {/* Food Image */}
@@ -961,26 +1223,38 @@ export default function AfterBooking({ route, navigation }) {
         <TouchableOpacity
           style={[
             styles.generateBillButton,
-            (totalBill <= 0 || isCalculatingBill) &&
+            (totalBill < 0 || isCalculatingBill || (isStopwatchMode && elapsedSeconds < 60)) &&
               styles.generateBillButtonDisabled,
           ]}
           onPress={totalBill > 0 ? handleGenerateBill : handleShowBillPreview}
-          disabled={isCalculatingBill}
+          disabled={isCalculatingBill || (isStopwatchMode && elapsedSeconds < 60)}
         >
           <Text style={styles.generateBillButtonText}>
-            {isCalculatingBill ? 'Creating Bill...' : 'Generate & Pay Bill'}
+            {isCalculatingBill 
+              ? 'Creating Bill...' 
+              : isStopwatchMode && elapsedSeconds < 60
+                ? `Wait ${60 - elapsedSeconds}s`
+                : 'Generate & Pay Bill'}
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Bill Preview Modal */}
-      <Modal
-        visible={showBillPreview}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowBillPreview(false)}
-      >
-        <View style={styles.modalOverlay}>
+      {/* Bill Preview Modal - Replaced with Absolute View */}
+      {showBillPreview && (
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
           <View style={styles.billPreviewModal}>
             <View style={styles.billPreviewHeader}>
               <Text style={styles.billPreviewTitle}>Final Bill Preview</Text>
@@ -1067,7 +1341,7 @@ export default function AfterBooking({ route, navigation }) {
             </View>
           </View>
         </View>
-      </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -1175,6 +1449,49 @@ const styles = StyleSheet.create({
   },
   timerValueExpired: {
     color: '#FF4444',
+  },
+  timerValueStopwatch: {
+    color: '#2196F3',
+  },
+  // Frame mode styles
+  frameDisplay: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  frameCountLarge: {
+    fontSize: 64,
+    fontWeight: '800',
+    color: '#4CAF50',
+    lineHeight: 70,
+  },
+  frameCountLabel: {
+    fontSize: 18,
+    color: '#666',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  frameControls: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 24,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  frameControlBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFF5EE',
+    borderWidth: 2,
+    borderColor: '#FF8C42',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  frameHint: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
+    marginTop: 4,
   },
   timerDurationInfo: {
     fontSize: 13,

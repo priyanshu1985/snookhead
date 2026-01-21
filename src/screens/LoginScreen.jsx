@@ -65,7 +65,16 @@ export default function LoginScreen({ navigation }) {
         credentials: 'include',
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      console.log('Login response:', text); // Debug log
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        Alert.alert('Server Error', 'Received HTML instead of JSON. Check console or backend URL.');
+        console.error('Failed to parse:', text);
+        throw new Error('Invalid JSON response');
+      }
 
       if (res.ok && data.success && data.accessToken) {
         await login(data.accessToken, data.refreshToken, data.user);
@@ -363,7 +372,29 @@ const styles = StyleSheet.create({
   },
   signInButton: {
     width: '100%',
+    height: 56,
+    backgroundColor: ORANGE,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 32,
+    shadowColor: ORANGE,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  signInButtonDisabled: {
+    opacity: 0.7,
+  },
+  signInButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
   footer: {
     flexDirection: 'row',

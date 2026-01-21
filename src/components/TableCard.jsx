@@ -3,8 +3,16 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 export default function TableCard({ table, color, gameImageUrl, onPress }) {
+  if (!table) return null;
+
   const [currentTime, setCurrentTime] = React.useState(Date.now());
   const isOccupied = table.status === 'occupied' || table.status === 'reserved';
+
+  React.useEffect(() => {
+    if (!table.name) {
+      console.warn('TableCard received table with no name:', table);
+    }
+  }, [table]);
 
   // Format price to remove unnecessary decimals and extract currency/unit parts
   const formatPrice = () => {
@@ -38,6 +46,32 @@ export default function TableCard({ table, color, gameImageUrl, onPress }) {
 
   // Calculate remaining time (countdown)
   const getRemainingTime = () => {
+    const session = table.activeSession || {};
+    const bookingType = session.booking_type || session.bookingType || table.bookingType;
+
+    // Frame Mode Display
+    if (bookingType === 'frame') {
+      const frames = session.frame_count || session.frameCount || table.frame_count || table.frameCount || 0;
+      const startTime = session.start_time || session.starttime || table.startTime;
+      let elapsedText = '0m';
+
+      if (startTime) {
+        const elapsed = Math.floor((currentTime - new Date(startTime).getTime()) / 1000);
+        const hours = Math.floor(elapsed / 3600);
+        const minutes = Math.floor((elapsed % 3600) / 60);
+        elapsedText = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+      }
+
+      return {
+        text: `${frames} Frames • ${elapsedText}`,
+        isExpired: false,
+        isWarning: false,
+        isElapsed: true,
+        seconds: 0,
+        isFrame: true
+      };
+    }
+
     if (table.bookingEndTime) {
       // Use booking end time for countdown
       const endTime = new Date(table.bookingEndTime).getTime();
@@ -143,11 +177,14 @@ export default function TableCard({ table, color, gameImageUrl, onPress }) {
       startTime: table.startTime,
     });
 
-    if (isOccupied) {
-      console.log('Navigating to AfterBooking for occupied table');
+    // If table has an active session ID, it's running -> View Session (AfterBooking)
+    // If table is Occupied/Reserved/Available but NO session ID -> Start Session (Booking Screen)
+    // This handles the "Manual Seat" queue flow where table is Occupied but waiting for start.
+    if (table.sessionId) {
+      console.log('Navigating to AfterBooking for active session');
       onPress(table, 'stop');
     } else {
-      console.log('Navigating to TableBookingScreen for available table');
+      console.log('Navigating to TableBookingScreen to start session');
       onPress(table, 'book');
     }
   };
@@ -158,113 +195,125 @@ export default function TableCard({ table, color, gameImageUrl, onPress }) {
       activeOpacity={0.85}
       onPress={handlePress}
     >
-      {/* Status indicator */}
-      <View
-        style={[
-          styles.statusIndicator,
-          isOccupied ? styles.statusOccupied : styles.statusAvailable,
-        ]}
-      />
-
-      {/* Table image area */}
-      <View style={styles.imageWrapper}>
-        {gameImageUrl ? (
-          // Display actual game image from backend
+      {/* Safety Check: If table data is corrupt, show error */}
+      {(!table || !table.name) ? (
+          <View style={{flex:1, justifyContent:'center', alignItems:'center'}}>
+              <Text style={{color:'red', fontWeight:'bold'}}>Data Error</Text>
+              <Text style={{fontSize:10}}>ID: {table?.id || '?'}</Text>
+          </View>
+      ) : (
+        <View style={{flex: 1}}>
+          {/* Status indicator */}
           <View
             style={[
-              styles.imageContainer,
-              isOccupied && styles.tableImageOccupied,
+              styles.statusIndicator,
+              isOccupied ? styles.statusOccupied : styles.statusAvailable,
             ]}
-          >
-            <Image
-              source={{ uri: gameImageUrl }}
-              style={styles.actualImage}
-              resizeMode="cover"
-              onError={e =>
-                console.log('TableCard image error:', e.nativeEvent.error)
-              }
-            />
-          </View>
-        ) : (
-          // Fallback to colored placeholder
-          <View
-            style={[
-              styles.tableImage,
-              { backgroundColor: color || '#4A7C59' },
-              isOccupied && styles.tableImageOccupied,
-            ]}
-          >
-            {/* Fallback icon when no image */}
-            <Icon name="grid-outline" size={32} color="rgba(255,255,255,0.6)" />
-          </View>
-        )}
-
-        {/* Occupied overlay with countdown timer */}
-        {isOccupied && (
-          <View
-            style={[
-              styles.overlay,
-              timerInfo.isExpired && styles.overlayExpired,
-              timerInfo.isWarning && styles.overlayWarning,
-            ]}
-          >
-            <View
-              style={[
-                styles.overlayPulse,
-                timerInfo.isExpired && styles.pulseExpired,
-                timerInfo.isWarning && styles.pulseWarning,
-              ]}
-            />
-            <Icon
-              name={
-                timerInfo.isExpired
-                  ? 'alert-circle'
-                  : timerInfo.isElapsed
-                  ? 'time-outline'
-                  : 'hourglass-outline'
-              }
-              size={12}
-              color="#FFFFFF"
-              style={styles.overlayIcon}
-            />
-            <Text style={styles.overlayText}>
-              {timerInfo.isElapsed ? ' ' : ''}
-              {timerInfo.text}
-            </Text>
-          </View>
-        )}
-
-        {/* Available badge */}
-        {!isOccupied && (
-          <View style={styles.availableBadge}>
-            <Icon name="checkmark-circle" size={12} color="#4CAF50" />
-            <Text style={styles.availableText}>Available</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Bottom info section */}
-      <View style={styles.infoSection}>
-        <View style={styles.infoRow}>
-          <Text style={styles.tableName}>{table.name}</Text>
-          <View style={styles.priceContainer}>
-            <Text style={styles.priceText}>{priceText}</Text>
-            <Text style={styles.priceUnit}>/hr</Text>
-          </View>
-        </View>
-
-        {/* Action hint */}
-        <View style={styles.actionHint}>
-          <Text style={styles.actionText}>
-            {isOccupied ? 'Tap to view session' : 'Tap to book'}
-          </Text>
-          <Icon
-            name={isOccupied ? 'eye-outline' : 'arrow-forward'}
-            size={12}
-            color={isOccupied ? '#FF8C42' : '#4CAF50'}
           />
+
+          {/* Table image area */}
+          <View style={styles.imageWrapper}>
+            {gameImageUrl ? (
+              // Display actual game image from backend
+              <View
+                style={[
+                  styles.imageContainer,
+                  isOccupied && styles.tableImageOccupied,
+                ]}
+              >
+                <Image
+                  source={{ uri: gameImageUrl }}
+                  style={styles.actualImage}
+                  resizeMode="cover"
+                  onError={e =>
+                    console.log('TableCard image error:', e.nativeEvent.error)
+                  }
+                />
+              </View>
+            ) : (
+              // Fallback to colored placeholder
+              <View
+                style={[
+                  styles.tableImage,
+                  { backgroundColor: color || '#4A7C59' },
+                  isOccupied && styles.tableImageOccupied,
+                ]}
+              >
+                {/* Fallback icon when no image */}
+                <Icon name="grid-outline" size={32} color="rgba(255,255,255,0.6)" />
+              </View>
+            )}
+
+            {/* Occupied overlay with countdown timer */}
+            {isOccupied && (
+              <View
+                style={[
+                  styles.overlay,
+                  timerInfo.isExpired && styles.overlayExpired,
+                  timerInfo.isWarning && styles.overlayWarning,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.overlayPulse,
+                    timerInfo.isExpired && styles.pulseExpired,
+                    timerInfo.isWarning && styles.pulseWarning,
+                  ]}
+                />
+                <Icon
+                  name={
+                    timerInfo.isExpired
+                      ? 'alert-circle'
+                      : timerInfo.isFrame
+                      ? 'apps-outline'
+                      : timerInfo.isElapsed
+                      ? 'time-outline'
+                      : 'hourglass-outline'
+                  }
+                  size={12}
+                  color="#FFFFFF"
+                  style={styles.overlayIcon}
+                />
+                <Text style={styles.overlayText}>
+                  {timerInfo.isElapsed ? ' ' : ''}
+                  {timerInfo.text}
+                </Text>
+              </View>
+            )}
+
+            {/* Available badge */}
+            {!isOccupied && (
+              <View style={styles.availableBadge}>
+                <Icon name="checkmark-circle" size={12} color="#4CAF50" />
+                <Text style={styles.availableText}>Available</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Bottom info section */}
+          <View style={styles.infoSection}>
+            <View style={styles.infoRow}>
+              <Text style={styles.tableName}>{table.name || `Table ${table.id}`}</Text>
+              <View style={styles.priceContainer}>
+                <Text style={styles.priceText}>{priceText}</Text>
+                <Text style={styles.priceUnit}>/hr</Text>
+              </View>
+            </View>
+
+            {/* Action hint */}
+            <View style={styles.actionHint}>
+              <Text style={styles.actionText}>
+                {isOccupied ? 'Tap to view session' : 'Tap to book'}
+              </Text>
+              <Icon
+                name={isOccupied ? 'eye-outline' : 'arrow-forward'}
+                size={12}
+                color={isOccupied ? '#FF8C42' : '#4CAF50'}
+              />
+            </View>
+          </View>
         </View>
-      </View>
+      )}
     </TouchableOpacity>
   );
 }

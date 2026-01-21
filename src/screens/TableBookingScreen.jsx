@@ -58,6 +58,7 @@ export default function TableBookingScreen({ route, navigation }) {
   const [selectedTimeOption, setSelectedTimeOption] = useState('Set Time');
   const [showInstructionModal, setShowInstructionModal] = useState(false);
   const [foodInstructions, setFoodInstructions] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false); // New state for success modal
   const [showTimeModal, setShowTimeModal] = useState(false);
   const [selectedTime, setSelectedTime] = useState('12:00 PM');
   const [timerDuration, setTimerDuration] = useState('60');
@@ -109,12 +110,37 @@ export default function TableBookingScreen({ route, navigation }) {
   // Fetch menu items on mount
   useEffect(() => {
     fetchMenuItems();
+    // Pre-fill if this is a queue booking
+    if (safeTable.bookingType === 'queue' && safeTable.queueBooking) {
+        const q = safeTable.queueBooking;
+        console.log('Pre-filling from queue:', q);
+        setCustomerDetails({ 
+            name: q.customername || '', 
+            phone: q.phone || '' 
+        });
+        
+        // Map backend booking_type to frontend options
+        // Backend 'timer' -> Frontend 'Set Time' (Countdown)
+        // Backend 'set' -> Frontend 'Timer' (Stopwatch)
+        // Backend 'frame' -> Frontend 'Select Frame'
+        
+        if (q.booking_type === 'frame') {
+            setSelectedTimeOption('Select Frame');
+            if (q.frame_count) setSelectedFrame(String(q.frame_count));
+        } else if (q.booking_type === 'set') {
+            setSelectedTimeOption('Timer');
+        } else {
+             // Default to 'timer' (Set Time)
+            setSelectedTimeOption('Set Time');
+            if (q.duration_minutes) setTimerDuration(String(q.duration_minutes));
+        }
+    }
   }, []);
 
-  // Recalculate cost when billItems or time options change
+  // Calculate cost on change
   useEffect(() => {
     calculateEstimatedCost();
-  }, [billItems, selectedTimeOption, timerDuration, selectedFrame]);
+  }, [billItems, selectedTimeOption, timerDuration, selectedFrame, selectedDate]);
 
   // Fetch menu items from backend
   const fetchMenuItems = async () => {
@@ -174,10 +200,14 @@ export default function TableBookingScreen({ route, navigation }) {
     setSelectedTimeOption(option);
     if (
       option === 'Set Time' ||
-      option === 'Timer' ||
       option === 'Select Frame'
     ) {
-      setShowTimeModal(true);
+        // Only show modal for Set Time (Duration) or Select Frame
+        setShowTimeModal(true);
+    } else {
+        // Timer (Stopwatch) needs no input
+        setShowTimeModal(false);
+        calculateEstimatedCost();
     }
   };
 
@@ -252,15 +282,17 @@ export default function TableBookingScreen({ route, navigation }) {
       const frameCharge = parseFloat(safeTable.frameCharge || 0);
 
       if (selectedTimeOption === 'Timer') {
-        const duration = parseInt(timerDuration || 60);
-        tableCharges = duration * pricePerMin + frameCharge;
+        // Timer (Stopwatch) - Open ended, just estimate 60 mins for display
+        tableCharges = 60 * pricePerMin;
       } else if (selectedTimeOption === 'Select Frame') {
         const frames = parseInt(selectedFrame || 1);
-        const pricePerFrame = parseFloat(safeTable.pricePerFrame || 100);
-        tableCharges = frames * pricePerFrame + frameCharge;
+        // Use frameCharge as the price per frame
+        const pricePerFrame = parseFloat(safeTable.frameCharge || safeTable.pricePerFrame || 100);
+        tableCharges = frames * pricePerFrame;
       } else {
-        // Set Time - estimate 60 minutes
-        tableCharges = 60 * pricePerMin + frameCharge;
+        // Set Time (Countdown) - Exact duration
+        const duration = parseInt(timerDuration || 60);
+        tableCharges = duration * pricePerMin;
       }
     }
 
@@ -287,9 +319,9 @@ export default function TableBookingScreen({ route, navigation }) {
   const getTimeDisplayText = () => {
     switch (selectedTimeOption) {
       case 'Set Time':
-        return selectedTime;
+        return `${timerDuration} min`; // Set Time = Duration
       case 'Timer':
-        return `${timerDuration} min`;
+        return 'Starts at 00:00'; // Timer = Stopwatch
       case 'Select Frame':
         return `${selectedFrame} frame(s)`;
       default:
@@ -300,9 +332,9 @@ export default function TableBookingScreen({ route, navigation }) {
   const getTimeLabel = () => {
     switch (selectedTimeOption) {
       case 'Set Time':
-        return 'Start Time';
+        return 'Duration (min)';
       case 'Timer':
-        return 'Duration';
+        return 'Stopwatch';
       case 'Select Frame':
         return 'Frames';
       default:
@@ -321,15 +353,33 @@ export default function TableBookingScreen({ route, navigation }) {
       }
 
       // Check if table appears to be occupied in frontend
-      if (safeTable.status === 'occupied' || safeTable.status === 'reserved') {
+      // ALLOW if it is a queue booking (bookingType === 'queue')
+      const isQueueAssignment = safeTable.bookingType === 'queue';
+      
+      if ((safeTable.status === 'occupied' || safeTable.status === 'reserved') && !isQueueAssignment) {
         Alert.alert(
-          'Table Not Available',
-          'This table appears to be occupied. Please refresh and try again.',
+          'Table Occupied',
+          'This table is currently occupied. Would you like to join the waiting queue?',
           [
-            { text: 'OK' },
+            { text: 'Cancel', style: 'cancel' },
             {
-              text: 'Go Back',
-              onPress: () => navigation.goBack(),
+              text: 'Join Queue',
+              onPress: () => {
+                setIsBooking(false);
+                // Navigate to Queue Screen with prefilled details
+                navigation.navigate('MainTabs', {
+                  screen: 'Queue',
+                  params: {
+                    prefillData: {
+                      customerName: customerDetails.name,
+                      customerPhone: customerDetails.phone,
+                      gameId: safeTable.game_id || safeTable.gameid,
+                      tableId: safeTable.id,
+                      autoOpen: true
+                    }
+                  }
+                });
+              },
             },
           ],
         );
@@ -376,12 +426,24 @@ export default function TableBookingScreen({ route, navigation }) {
   };
 
   const processImmediateBooking = async token => {
-    // Calculate duration in minutes based on selected time option
+    // Calculate duration in minutes and booking type based on selected time option
     let durationMinutes = null;
-    if (selectedTimeOption === 'Timer') {
+    let bookingType = 'timer'; // default: countdown with auto-release
+    let frameCount = null;
+
+    if (selectedTimeOption === 'Set Time') {
+      // Set Time = countdown timer with duration, auto-releases when time expires
       durationMinutes = parseInt(timerDuration) || 60;
-    } else if (selectedTimeOption === 'Set Time') {
-      durationMinutes = 60;
+      bookingType = 'timer';
+    } else if (selectedTimeOption === 'Timer') {
+      // Timer = stopwatch mode (counts UP from 0), manual bill generation
+      durationMinutes = null; // No fixed duration - counts up
+      bookingType = 'set'; // 'set' in backend means stopwatch/manual release
+    } else if (selectedTimeOption === 'Select Frame') {
+      // Frame = frame-based billing, no timer, manual bill generation
+      durationMinutes = null;
+      bookingType = 'frame';
+      frameCount = parseInt(selectedFrame) || 1;
     }
 
     // Prepare booking data
@@ -390,6 +452,9 @@ export default function TableBookingScreen({ route, navigation }) {
       game_id: safeTable.game_id || safeTable.gameid || 1,
       user_id: null,
       duration_minutes: durationMinutes,
+      booking_type: bookingType,
+      frame_count: frameCount,
+      customer_name: customerDetails.name || 'Walk-in Customer',
     };
 
     console.log('Booking table with data:', bookingData);
@@ -410,25 +475,8 @@ export default function TableBookingScreen({ route, navigation }) {
       throw new Error(result.error || 'Booking failed');
     }
 
-    Alert.alert('Table Booked!', 'Table has been booked successfully.', [
-      {
-        text: 'Continue',
-        onPress: () => {
-          navigation.navigate('AfterBooking', {
-            table: safeTable,
-            session: result.session || result.activeTable,
-            gameType: safeGameType,
-            timeOption: selectedTimeOption,
-            timeDetails: {
-              selectedTime,
-              timerDuration,
-              selectedFrame,
-            },
-            preSelectedFoodItems: billItems, // Pass pre-selected food items
-          });
-        },
-      },
-    ]);
+    // Show success modal instead of alert
+    setShowSuccessModal(true);
   };
 
   const processFutureReservation = async () => {
@@ -445,9 +493,13 @@ export default function TableBookingScreen({ route, navigation }) {
       const selectedDateInfo = dates.find(d => d.id === selectedDate);
 
       // Calculate duration
-      let durationMinutes = 60; // default
+      let durationMinutes = parseInt(timerDuration) || 60; // Use the set duration
+      
+      // If Timer (Stopwatch) was selected for a future booking, default to 60 or user input?
+      // But now we mapped Timer to have NO input. So for future, 'Set Time' is preferred.
+      // If they somehow selected Timer, we'll just use 60.
       if (selectedTimeOption === 'Timer') {
-        durationMinutes = parseInt(timerDuration) || 60;
+         durationMinutes = 60;
       }
 
       // Convert 12-hour time to 24-hour format for API
@@ -535,6 +587,25 @@ export default function TableBookingScreen({ route, navigation }) {
         <View style={styles.tableBadge}>
           <Text style={styles.tableName}>{safeTable.name}</Text>
         </View>
+
+        {/* Queue Banner */}
+        {safeTable.bookingType === 'queue' && (
+            <View style={{ 
+                backgroundColor: '#E3F2FD', 
+                padding: 12, 
+                borderRadius: 8, 
+                marginBottom: 16,
+                borderWidth: 1,
+                borderColor: '#2196F3'
+            }}>
+                <Text style={{ color: '#0D47A1', fontWeight: 'bold', fontSize: 14 }}>
+                   <Icon name="people" size={16} /> Queue Assignment
+                </Text>
+                <Text style={{ color: '#1565C0', fontSize: 13, marginTop: 4 }}>
+                    Reserved for {safeTable.bookedBy || 'Customer'}
+                </Text>
+            </View>
+        )}
 
         {/* Date Selection */}
         <Text style={styles.sectionTitle}>Select Date</Text>
@@ -692,7 +763,7 @@ export default function TableBookingScreen({ route, navigation }) {
             <View style={styles.foodListContainer}>
               {getFilteredMenuItems().map((item, index) => {
                 const billItem = billItems.find(bi => bi.id === item.id);
-                const imageUrl = getMenuImageUrl(item.imageUrl);
+                const imageUrl = getMenuImageUrl(item.imageUrl || item.imageurl);
                 return (
                   <View key={item.id || index} style={styles.foodCard}>
                     {/* Food Image */}
@@ -863,13 +934,22 @@ export default function TableBookingScreen({ route, navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Food Instructions Modal */}
-      <Modal
-        visible={showInstructionModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowInstructionModal(false)}
-      >
+      {/* Food Instructions Modal - Replaced with Absolute View */}
+      {showInstructionModal && (
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
@@ -905,23 +985,33 @@ export default function TableBookingScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+        </View>
+      )}
 
-      {/* Time Selection Modal */}
-      <Modal
-        visible={showTimeModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowTimeModal(false)}
-      >
+      {/* Time Selection Modal - Replaced with Absolute View */}
+      {showTimeModal && (
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
+          style={{ flex: 1, justifyContent: 'center' }}
         >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {selectedTimeOption === 'Set Time' && 'Set Start Time'}
+                {selectedTimeOption === 'Set Time' && 'Set Duration'}
                 {selectedTimeOption === 'Timer' && 'Set Timer Duration'}
                 {selectedTimeOption === 'Select Frame' && 'Select Frame Count'}
               </Text>
@@ -930,138 +1020,146 @@ export default function TableBookingScreen({ route, navigation }) {
               </TouchableOpacity>
             </View>
 
-            {selectedTimeOption === 'Set Time' && (
-              <View>
-                <Text style={styles.modalSubtitle}>
-                  Choose your preferred start time
-                </Text>
-                <View style={styles.timePickerContainer}>
-                  {[
-                    '10:00 AM',
-                    '11:00 AM',
-                    '12:00 PM',
-                    '1:00 PM',
-                    '2:00 PM',
-                    '3:00 PM',
-                    '4:00 PM',
-                    '5:00 PM',
-                    '6:00 PM',
-                    '7:00 PM',
-                    '8:00 PM',
-                    '9:00 PM',
-                  ].map(time => (
-                    <TouchableOpacity
-                      key={time}
-                      style={[
-                        styles.timePickerButton,
-                        selectedTime === time && styles.timePickerButtonActive,
-                      ]}
-                      onPress={() => setSelectedTime(time)}
-                    >
-                      <Text
-                        style={[
-                          styles.timePickerText,
-                          selectedTime === time && styles.timePickerTextActive,
-                        ]}
-                      >
-                        {time}
+            <ScrollView contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
+              {selectedTimeOption === 'Set Time' && (
+                <View>
+                  {!dates.find(d => d.id === selectedDate)?.isToday && (
+                    <View>
+                      <Text style={styles.modalSubtitle}>
+                        Choose start time (Future Booking)
                       </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            )}
+                      <View style={styles.timePickerContainer}>
+                        {[
+                          '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM',
+                          '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM',
+                          '8:00 PM', '9:00 PM',
+                        ].map(time => (
+                          <TouchableOpacity
+                            key={time}
+                            style={[
+                              styles.timePickerButton,
+                              selectedTime === time && styles.timePickerButtonActive,
+                            ]}
+                            onPress={() => setSelectedTime(time)}
+                          >
+                            <Text
+                              style={[
+                                styles.timePickerText,
+                                selectedTime === time && styles.timePickerTextActive,
+                              ]}
+                            >
+                              {time}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  )}
 
-            {selectedTimeOption === 'Timer' && (
-              <View>
-                <Text style={styles.modalSubtitle}>
-                  Set playing duration in minutes
-                </Text>
-                <View style={styles.timerInputContainer}>
-                  <TextInput
-                    style={styles.timerInput}
-                    value={timerDuration}
-                    onChangeText={setTimerDuration}
-                    placeholder="60"
-                    keyboardType="numeric"
-                    placeholderTextColor="#999"
-                  />
-                  <Text style={styles.timerLabel}>minutes</Text>
-                </View>
-                <View style={styles.quickTimerOptions}>
-                  {['30', '60', '90', '120'].map(duration => (
-                    <TouchableOpacity
-                      key={duration}
-                      style={[
-                        styles.quickTimerButton,
-                        timerDuration === duration &&
-                          styles.quickTimerButtonActive,
-                      ]}
-                      onPress={() => setTimerDuration(duration)}
-                    >
-                      <Text
+                  <Text style={styles.modalSubtitle}>
+                    Set duration (Auto-bill at 00:00)
+                  </Text>
+                  
+                  {/* Duration Input for Set Time */}
+                  <View style={styles.timerInputContainer}>
+                    <TextInput
+                      style={styles.timerInput}
+                      value={timerDuration}
+                      onChangeText={setTimerDuration}
+                      placeholder="60"
+                      keyboardType="numeric"
+                      placeholderTextColor="#999"
+                      selectTextOnFocus={true}
+                    />
+                    <Text style={styles.timerLabel}>minutes</Text>
+                  </View>
+
+                  {/* Quick Options */}
+                  <View style={styles.quickTimerOptions}>
+                    {['30', '60', '90', '120'].map(duration => (
+                      <TouchableOpacity
+                        key={duration}
                         style={[
-                          styles.quickTimerText,
+                          styles.quickTimerButton,
                           timerDuration === duration &&
-                            styles.quickTimerTextActive,
+                            styles.quickTimerButtonActive,
                         ]}
+                        onPress={() => setTimerDuration(duration)}
                       >
-                        {duration}m
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        <Text
+                          style={[
+                            styles.quickTimerText,
+                            timerDuration === duration &&
+                              styles.quickTimerTextActive,
+                          ]}
+                        >
+                          {duration}m
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
-              </View>
-            )}
+              )}
 
-            {selectedTimeOption === 'Select Frame' && (
-              <View>
-                <Text style={styles.modalSubtitle}>
-                  How many frames will you play?
-                </Text>
-                <View style={styles.frameOptionsContainer}>
-                  {['1', '3', '5', '7', '9', '11'].map(frame => (
-                    <TouchableOpacity
-                      key={frame}
-                      style={[
-                        styles.frameButton,
-                        selectedFrame === frame && styles.frameButtonActive,
-                      ]}
-                      onPress={() => setSelectedFrame(frame)}
-                    >
-                      <Text
+              {/* Timer (Stopwatch) - No Modal Content Needed as it doesn't open */ }
+
+              {selectedTimeOption === 'Select Frame' && (
+                <View>
+                  <Text style={styles.modalSubtitle}>
+                    How many frames will you play?
+                  </Text>
+                  <View style={styles.frameOptionsContainer}>
+                    {['1', '3', '5', '7', '9', '11'].map(frame => (
+                      <TouchableOpacity
+                        key={frame}
                         style={[
-                          styles.frameButtonText,
-                          selectedFrame === frame &&
-                            styles.frameButtonTextActive,
+                          styles.frameButton,
+                          selectedFrame === frame && styles.frameButtonActive,
                         ]}
+                        onPress={() => setSelectedFrame(frame)}
                       >
-                        {frame}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        <Text
+                          style={[
+                            styles.frameButtonText,
+                            selectedFrame === frame &&
+                              styles.frameButtonTextActive,
+                          ]}
+                        >
+                          {frame}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
-              </View>
-            )}
+              )}
 
-            <TouchableOpacity
-              style={styles.saveButton}
+              <TouchableOpacity
+                style={[styles.saveButton, { marginTop: 10 }]}
               onPress={handleTimeConfirm}
             >
               <Text style={styles.saveButtonText}>Confirm</Text>
             </TouchableOpacity>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+        </View>
+      )}
 
-      {/* Pricing Preview Modal */}
-      <Modal
-        visible={showPricingPreview}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowPricingPreview(false)}
-      >
-        <View style={styles.pricingModalOverlay}>
+      {/* Pricing Preview Modal - Replaced with Absolute View */}
+      {showPricingPreview && (
+        <View
+          style={[
+            styles.pricingModalOverlay, 
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+            },
+          ]}
+        >
           <View style={styles.pricingPreviewModal}>
             {/* Header */}
             <View style={styles.pricingHeader}>
@@ -1095,10 +1193,10 @@ export default function TableBookingScreen({ route, navigation }) {
                   <Text style={styles.pricingLabel}>Duration:</Text>
                   <Text style={styles.pricingValue}>
                     {selectedTimeOption === 'Timer'
-                      ? `${timerDuration} min`
+                      ? 'Stopwatch (Counts Up)'
                       : selectedTimeOption === 'Select Frame'
                       ? `${selectedFrame} frame(s)`
-                      : selectedTime}
+                      : `${timerDuration} min`}
                   </Text>
                 </View>
               </View>
@@ -1170,20 +1268,29 @@ export default function TableBookingScreen({ route, navigation }) {
                 </Text>
               </TouchableOpacity>
             </View>
+            </View>
           </View>
-        </View>
-      </Modal>
+      )}
 
-      {/* Customer Details Modal for Future Reservations */}
-      <Modal
-        visible={showCustomerModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowCustomerModal(false)}
-      >
+      {/* Customer Details Modal for Future Reservations - Replaced with Absolute View */}
+      {showCustomerModal && (
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
+          style={{ flex: 1, justifyContent: 'center' }}
         >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -1255,7 +1362,32 @@ export default function TableBookingScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+        </View>
+      )}
+      {/* Custom Success Modal */}
+      {showSuccessModal && (
+        <View style={styles.successModalOverlay}>
+          <View style={styles.successModalContent}>
+            <View style={styles.successIconContainer}>
+              <Icon name="checkmark-circle" size={64} color="#4CAF50" />
+            </View>
+            <Text style={styles.successModalTitle}>Table Booked!</Text>
+            <Text style={styles.successModalMessage}>
+              Table has been booked successfully.
+            </Text>
+            <TouchableOpacity
+              style={styles.successConfirmButton}
+              onPress={() => {
+                setShowSuccessModal(false);
+                // User requested to go to Dashboard
+                navigation.navigate('MainTabs', { screen: 'Home' });
+              }}
+            >
+              <Text style={styles.successConfirmButtonText}>CONTINUE</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1923,14 +2055,17 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center', // Center vertically
+    padding: 20, // Add padding to prevent touching edges
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderRadius: 24, // Full rounded corners
     padding: 24,
-    maxHeight: '75%',
+    maxHeight: '85%', // Allow slightly more height
+    width: '100%',
+    maxWidth: 500, // Prevent becoming too wide on tablets
+    alignSelf: 'center',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -2014,6 +2149,7 @@ const styles = StyleSheet.create({
   // Timer Input
   timerInputContainer: {
     flexDirection: 'row',
+    justifyContent: 'center', // Center content horizontally
     alignItems: 'center',
     backgroundColor: '#F8F9FA',
     borderRadius: 14,
@@ -2023,16 +2159,18 @@ const styles = StyleSheet.create({
     borderColor: '#E8E8E8',
   },
   timerInput: {
-    flex: 1,
-    fontSize: 22,
+    minWidth: 60, // Use minWidth instead of flex: 1
+    fontSize: 24,
     color: '#1A1A1A',
     textAlign: 'center',
     fontWeight: '700',
+    padding: 0,
   },
   timerLabel: {
-    fontSize: 15,
+    fontSize: 16,
     color: '#666666',
-    marginLeft: 10,
+    marginLeft: 8,
+    fontWeight: '500',
   },
   quickTimerOptions: {
     flexDirection: 'row',
@@ -2287,5 +2425,74 @@ const styles = StyleSheet.create({
   saveButtonDisabled: {
     backgroundColor: '#ccc',
     opacity: 0.6,
+  },
+  // Success Modal Styles
+  successModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    zIndex: 9999,
+  },
+  successModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 320,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  successIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  successModalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1A1A1A',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  successModalMessage: {
+    fontSize: 15,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  successConfirmButton: {
+    width: '100%',
+    backgroundColor: '#953412',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#953412',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  successConfirmButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

@@ -45,8 +45,10 @@ const makeRequest = async (url, options = {}) => {
 // Orders API
 export const ordersAPI = {
   // Get all orders
-  getAll: async () => {
-    return await apiClient.get('/api/orders');
+  getAll: async (filters = {}) => {
+    const queryParams = new URLSearchParams(filters).toString();
+    const url = queryParams ? `/api/orders?${queryParams}` : '/api/orders';
+    return await apiClient.get(url);
   },
 
   // Get order by ID
@@ -54,9 +56,19 @@ export const ordersAPI = {
     return await apiClient.get(`/api/orders/${id}`);
   },
 
+  // Get orders by session ID (for consolidated billing)
+  getBySession: async sessionId => {
+    return await apiClient.get(`/api/orders/by-session/${sessionId}`);
+  },
+
   // Create new order
   create: async orderData => {
     return await apiClient.post('/api/orders', orderData);
+  },
+
+  // Add items to existing order
+  addItems: async (orderId, items) => {
+    return await apiClient.post(`/api/orders/${orderId}/items`, { items });
   },
 
   // Update order
@@ -71,15 +83,17 @@ export const ordersAPI = {
 
   // Update order status
   updateStatus: async (id, status) => {
-    return await apiClient.put(`/api/orders/${id}/status`, { status });
+    return await apiClient.patch(`/api/orders/${id}/status`, { status });
   },
 };
 
 // Tables API
 export const tablesAPI = {
-  // Get all tables
-  getAll: async () => {
-    return await apiClient.get('/api/tables');
+  // Get all tables (with pagination, filters, enriched booking info)
+  getAll: async (filters = {}) => {
+    const queryParams = new URLSearchParams(filters).toString();
+    const url = queryParams ? `/api/tables?${queryParams}` : '/api/tables';
+    return await apiClient.get(url);
   },
 
   // Get table by ID
@@ -109,13 +123,23 @@ export const tablesAPI = {
       method: 'DELETE',
     });
   },
+
+  // Update table status (available/reserved/maintenance)
+  updateStatus: async (id, status) => {
+    return await makeRequest(`/api/tables/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  },
 };
 
 // Menu API
 export const menuAPI = {
-  // Get all menu items
-  getAll: async () => {
-    return await makeRequest('/api/menu');
+  // Get all menu items (with optional filters: category, search, minPrice, maxPrice)
+  getAll: async (filters = {}) => {
+    const queryParams = new URLSearchParams(filters).toString();
+    const url = queryParams ? `/api/menu?${queryParams}` : '/api/menu';
+    return await makeRequest(url);
   },
 
   // Get menu item by ID
@@ -144,6 +168,19 @@ export const menuAPI = {
     return await makeRequest(`/api/menu/${id}`, {
       method: 'DELETE',
     });
+  },
+
+  // Update item stock (increase/decrease)
+  updateStock: async (id, quantity, operation = 'increase') => {
+    return await makeRequest(`/api/menu/${id}/stock`, {
+      method: 'PATCH',
+      body: JSON.stringify({ quantity, operation }),
+    });
+  },
+
+  // Get items below stock threshold (low stock alerts)
+  getLowStockAlerts: async () => {
+    return await makeRequest('/api/menu/alerts/low-stock');
   },
 };
 
@@ -202,10 +239,31 @@ export const billsAPI = {
     return await makeRequest(`/api/bills/${id}`);
   },
 
+  // Get bills by game and table
+  getByGameTable: async (gameId, tableId) => {
+    return await makeRequest(`/api/bills/by-game-table/${gameId}/${tableId}`);
+  },
+
   // Pay bill
   pay: async id => {
     return await makeRequest(`/api/bills/${id}/pay`, {
       method: 'POST',
+    });
+  },
+
+  // Create comprehensive bill
+  create: async billData => {
+    return await makeRequest('/api/bills/create', {
+      method: 'POST',
+      body: JSON.stringify(billData),
+    });
+  },
+
+  // Calculate pricing for table + menu items (pre-bill calculation)
+  calculatePricing: async pricingData => {
+    return await makeRequest('/api/bills/calculate-pricing', {
+      method: 'POST',
+      body: JSON.stringify(pricingData),
     });
   },
 };
@@ -236,6 +294,11 @@ export const gamesAPI = {
   // Get all games
   getAll: async () => {
     return await makeRequest('/api/games');
+  },
+
+  // Get game by ID
+  getById: async id => {
+    return await makeRequest(`/api/games/${id}`);
   },
 
   // Create new game
@@ -269,6 +332,16 @@ export const queueAPI = {
     return await makeRequest('/api/queue');
   },
 
+  // Get queue summary for dashboard
+  getSummary: async () => {
+    return await makeRequest('/api/queue/summary');
+  },
+
+  // Get single queue entry
+  getById: async id => {
+    return await makeRequest(`/api/queue/${id}`);
+  },
+
   // Add to queue
   add: async queueData => {
     return await makeRequest('/api/queue', {
@@ -291,6 +364,61 @@ export const queueAPI = {
       method: 'DELETE',
     });
   },
+
+  // Assign table to queue entry (start game)
+  assign: async (id, assignData) => {
+    return await makeRequest(`/api/queue/${id}/assign`, {
+      method: 'POST',
+      body: JSON.stringify(assignData),
+    });
+  },
+
+  // Auto-assign next in queue
+  assignNext: async () => {
+    return await makeRequest('/api/queue/next', {
+      method: 'POST',
+    });
+  },
+
+  // Mark game as complete (free table)
+  complete: async id => {
+    return await makeRequest(`/api/queue/${id}/complete`, {
+      method: 'POST',
+    });
+  },
+
+  // Mark as served (alias for complete)
+  served: async id => {
+    return await makeRequest(`/api/queue/${id}/served`, {
+      method: 'POST',
+    });
+  },
+
+  // Cancel queue entry
+  cancel: async id => {
+    return await makeRequest(`/api/queue/${id}/cancel`, {
+      method: 'POST',
+    });
+  },
+
+  // Mark customer as no-show
+  noShow: async id => {
+    return await makeRequest(`/api/queue/${id}/noshow`, {
+      method: 'POST',
+    });
+  },
+
+  // Clear all waiting queue entries
+  clearWaiting: async () => {
+    return await makeRequest('/api/queue/clear', {
+      method: 'POST',
+    });
+  },
+
+  // Get available tables for a game
+  getAvailableTables: async gameId => {
+    return await makeRequest(`/api/queue/tables/${gameId}`);
+  },
 };
 
 // Reservations API
@@ -300,9 +428,22 @@ export const reservationsAPI = {
     return await makeRequest('/api/reservations');
   },
 
+  // Get user's reservations
+  getByUser: async userId => {
+    return await makeRequest(`/api/reservations/user/${userId}`);
+  },
+
   // Create new reservation
   create: async reservationData => {
     return await makeRequest('/api/reservations', {
+      method: 'POST',
+      body: JSON.stringify(reservationData),
+    });
+  },
+
+  // Auto-assign available table to reservation
+  autoAssign: async reservationData => {
+    return await makeRequest('/api/reservations/autoassign', {
       method: 'POST',
       body: JSON.stringify(reservationData),
     });
@@ -319,7 +460,7 @@ export const reservationsAPI = {
   // Cancel reservation
   cancel: async id => {
     return await makeRequest(`/api/reservations/${id}/cancel`, {
-      method: 'PATCH',
+      method: 'POST',
     });
   },
 };
@@ -387,7 +528,7 @@ export const customerAPI = {
     return await makeRequest(`/api/customer/${id}`);
   },
 
-  // Create new customer
+  // Create new customer (auto-creates wallet)
   create: async customerData => {
     return await makeRequest('/api/customer', {
       method: 'POST',
@@ -407,6 +548,20 @@ export const customerAPI = {
   delete: async id => {
     return await makeRequest(`/api/customer/${id}`, {
       method: 'DELETE',
+    });
+  },
+
+  // Activate customer
+  activate: async id => {
+    return await makeRequest(`/api/customer/${id}/activate`, {
+      method: 'PATCH',
+    });
+  },
+
+  // Deactivate customer
+  deactivate: async id => {
+    return await makeRequest(`/api/customer/${id}/deactivate`, {
+      method: 'PATCH',
     });
   },
 };
@@ -492,7 +647,7 @@ export const walletAPI = {
     return await makeRequest('/api/wallets');
   },
 
-  // Create new wallet
+  // Create new wallet (with QR code generation)
   create: async walletData => {
     return await makeRequest('/api/wallets/create', {
       method: 'POST',
@@ -500,27 +655,72 @@ export const walletAPI = {
     });
   },
 
-  // Add balance to wallet
-  addBalance: async (walletId, amount) => {
-    return await makeRequest(`/api/wallets/${walletId}/add-balance`, {
+  // Add money by customer ID
+  addMoney: async (customerId, amount) => {
+    return await makeRequest('/api/wallets/add-money', {
+      method: 'POST',
+      body: JSON.stringify({ customer_id: customerId, amount }),
+    });
+  },
+
+  // Add money by wallet ID
+  addMoneyByWalletId: async (walletId, amount) => {
+    return await makeRequest(`/api/wallets/${walletId}/add`, {
       method: 'POST',
       body: JSON.stringify({ amount }),
     });
   },
 
-  // Deduct balance from wallet
-  deductBalance: async (walletId, amount) => {
-    return await makeRequest(`/api/wallets/${walletId}/deduct-balance`, {
+  // Deduct money by customer ID
+  deductMoney: async (customerId, amount) => {
+    return await makeRequest('/api/wallets/deduct-money', {
       method: 'POST',
-      body: JSON.stringify({ amount }),
+      body: JSON.stringify({ customer_id: customerId, amount }),
     });
   },
 
-  // Scan QR code
-  scanQR: async qrData => {
-    return await makeRequest('/api/wallets/scan-qr', {
+  // Scan QR code to get customer + wallet info
+  scan: async qrData => {
+    return await makeRequest('/api/wallets/scan', {
       method: 'POST',
       body: JSON.stringify({ qr_data: qrData }),
+    });
+  },
+};
+
+// Active Tables API
+export const activeTablesAPI = {
+  // Get all active sessions
+  getAll: async () => {
+    return await makeRequest('/api/activetables');
+  },
+
+  // Get session by ID
+  getById: async id => {
+    return await makeRequest(`/api/activetables/${id}`);
+  },
+
+  // Start a new table session
+  start: async sessionData => {
+    return await makeRequest('/api/activetables/start', {
+      method: 'POST',
+      body: JSON.stringify(sessionData),
+    });
+  },
+
+  // Stop session and generate bill
+  stop: async sessionData => {
+    return await makeRequest('/api/activetables/stop', {
+      method: 'POST',
+      body: JSON.stringify(sessionData),
+    });
+  },
+
+  // Auto-release expired session with bill
+  autoRelease: async sessionData => {
+    return await makeRequest('/api/activetables/auto-release', {
+      method: 'POST',
+      body: JSON.stringify(sessionData),
     });
   },
 };
@@ -614,5 +814,36 @@ export const inventoryAPI = {
   getStats: async () => {
     const response = await inventoryAPI.getAll({ limit: 1 });
     return response.summary || {};
+  },
+};
+
+// Food API
+export const foodAPI = {
+  // Get all food items
+  getAll: async () => {
+    return await makeRequest('/api/food');
+  },
+
+  // Create new food item
+  create: async foodData => {
+    return await makeRequest('/api/food', {
+      method: 'POST',
+      body: JSON.stringify(foodData),
+    });
+  },
+
+  // Delete food item
+  delete: async id => {
+    return await makeRequest(`/api/food/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+// Health Check API
+export const healthAPI = {
+  // Check server health status
+  check: async () => {
+    return await makeRequest('/api/health');
   },
 };

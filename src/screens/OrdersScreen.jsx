@@ -348,9 +348,9 @@ export default function OrdersScreen({ navigation }) {
                 style={styles.foodCard}
                 onPress={() => handleAddFood(item)}
               >
-                {item.imageUrl ? (
+                {item.imageUrl || item.imageurl ? (
                   <Image
-                    source={{ uri: getMenuImageUrl(item.imageUrl) }}
+                    source={{ uri: getMenuImageUrl(item.imageUrl || item.imageurl) }}
                     style={styles.foodImage}
                     resizeMode="cover"
                     onError={e =>
@@ -394,14 +394,22 @@ export default function OrdersScreen({ navigation }) {
         </>
       )}
 
-      {/* Confirm Modal */}
-      <Modal
-        visible={showConfirmModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowConfirmModal(false)}
-      >
-        <View style={styles.modalOverlay}>
+      {/* Confirm Modal - Replaced with Absolute View */}
+      {showConfirmModal && (
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Cart</Text>
 
@@ -501,7 +509,7 @@ export default function OrdersScreen({ navigation }) {
             </View>
           </View>
         </View>
-      </Modal>
+      )}
     </View>
   );
 }

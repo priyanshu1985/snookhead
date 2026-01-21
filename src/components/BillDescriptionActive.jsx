@@ -20,6 +20,52 @@ export default function BillDescriptionActive({
 }) {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cash');
+  const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false);
+
+  // Separate payment processing function
+  const processPayment = async () => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) {
+        Alert.alert('Error', 'Please login first');
+        return;
+      }
+
+      setIsProcessingPayment(true);
+      const response = await fetch(
+        `${API_URL}/api/bills/${bill.originalBill?.id || bill.id}/pay`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            payment_method: selectedPaymentMethod,
+          }),
+        },
+      );
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setShowPaymentConfirmModal(false);
+        Alert.alert(
+          'Payment Successful',
+          `Bill #${bill.billNumber} has been paid successfully.`,
+          [{ text: 'Done', onPress: () => onPaymentComplete() }],
+        );
+      } else {
+        throw new Error(result.error || 'Payment failed');
+      }
+    } catch (error) {
+      console.error('Payment error:', error);
+      Alert.alert('Payment Failed', error.message || 'Please try again.');
+      setShowPaymentConfirmModal(false);
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
 
   if (!bill) return null;
 
@@ -47,57 +93,9 @@ export default function BillDescriptionActive({
         return;
       }
 
-      Alert.alert(
-        'Confirm Payment',
-        `Process payment of ₹${getBillDetail(
-          'totalAmount',
-          '0',
-        )} via ${selectedPaymentMethod.toUpperCase()}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Confirm Payment',
-            style: 'default',
-            onPress: async () => {
-              try {
-                const response = await fetch(
-                  `${API_URL}/api/bills/${
-                    bill.originalBill?.id || bill.id
-                  }/pay`,
-                  {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                      payment_method: selectedPaymentMethod,
-                    }),
-                  },
-                );
-
-                const result = await response.json();
-
-                if (response.ok) {
-                  Alert.alert(
-                    'Payment Successful',
-                    `Bill #${bill.billNumber} has been paid successfully.`,
-                    [{ text: 'Done', onPress: () => onPaymentComplete() }],
-                  );
-                } else {
-                  throw new Error(result.error || 'Payment failed');
-                }
-              } catch (error) {
-                console.error('Payment error:', error);
-                Alert.alert(
-                  'Payment Failed',
-                  error.message || 'Please try again.',
-                );
-              }
-            },
-          },
-        ],
-      );
+      // Show custom modal instead of Alert
+      setShowPaymentConfirmModal(true);
+      setIsProcessingPayment(false);
     } catch (error) {
       Alert.alert('Error', 'Something went wrong. Please try again.');
     } finally {
@@ -479,6 +477,73 @@ export default function BillDescriptionActive({
           )}
         </TouchableOpacity>
       </View>
+      {/* Payment Confirmation Modal - Absolute View */}
+      {showPaymentConfirmModal && (
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Confirm Payment</Text>
+              <TouchableOpacity
+                onPress={() => setShowPaymentConfirmModal(false)}
+                style={styles.closeButton}
+              >
+                <Icon name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={styles.modalText}>
+                Process payment of{' '}
+                <Text style={{ fontWeight: 'bold', color: '#1A1A1A' }}>
+                  ₹{getBillDetail('totalAmount', '0')}
+                </Text>{' '}
+                via{' '}
+                <Text style={{ fontWeight: 'bold', color: '#FF8C42' }}>
+                  {selectedPaymentMethod.toUpperCase()}
+                </Text>
+                ?
+              </Text>
+            </View>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowPaymentConfirmModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  isProcessingPayment && styles.disabledButton,
+                ]}
+                onPress={processPayment}
+                disabled={isProcessingPayment}
+              >
+                {isProcessingPayment ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Confirm Payment</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -864,5 +929,74 @@ const styles = StyleSheet.create({
     backgroundColor: '#CCC',
     elevation: 0,
     shadowOpacity: 0,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    width: '85%',
+    maxWidth: 350,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+  },
+  closeButton: {
+    padding: 5,
+  },
+  modalBody: {
+    marginBottom: 20,
+  },
+  modalText: {
+    fontSize: 16,
+    color: '#666',
+    lineHeight: 24,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '600',
+  },
+  submitButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#FF8C42',
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
   },
 });

@@ -72,42 +72,33 @@ export default function MenuScreen({ navigation }) {
     navigation.navigate(route);
   };
 
-  const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      {
-        text: 'Cancel',
-        style: 'cancel',
-      },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            console.log('Starting logout process...');
+  const handleLogout = async () => {
+    try {
+      console.log('Starting logout process (direct)...');
 
-            // Perform logout
-            await logout();
-            console.log('Logout function completed, navigating to login...');
+      // Perform logout (clears context state)
+      if (logout) {
+          await logout().catch(err => console.log('AuthContext logout error:', err));
+      }
+      console.log('Logout function completed, resetting to LoginScreen...');
 
-            // Navigate to LoginScreen
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'LoginScreen' }],
-            });
+      // Reset stack to LoginScreen (defined in AppNavigator.jsx)
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'LoginScreen' }],
+      });
 
-            console.log('Navigation reset completed');
-          } catch (error) {
-            console.error('Error during logout process:', error);
+      console.log('Navigation reset completed');
+    } catch (error) {
+      console.error('Error during logout catch block:', error);
 
-            // Still navigate even if there was an error
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'LoginScreen' }],
-            });
-          }
-        },
-      },
-    ]);
+      // Fallback navigation explicitly to LoginScreen
+      try {
+        navigation.navigate('LoginScreen');
+      } catch (navErr) {
+        console.error('Even fallback navigation failed:', navErr);
+      }
+    }
   };
 
   return (

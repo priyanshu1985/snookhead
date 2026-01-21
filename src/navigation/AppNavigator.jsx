@@ -42,6 +42,7 @@ import StaffMember from '../screens/staff/StaffMember';
 // Import AuthContext and AuthChecker
 import { AuthProvider } from '../context/AuthContext';
 import AuthChecker from '../components/AuthChecker';
+import GlobalBillManager from '../components/GlobalBillManager';
 
 const Tab = createBottomTabNavigator(); // Creates bottom tabs
 const Stack = createNativeStackNavigator(); // Creates stack navigation
@@ -160,6 +161,7 @@ function BottomTabs() {
 export default function AppNavigator() {
   return (
     <AuthProvider>
+      <GlobalBillManager />
       <NavigationContainer>
         <Stack.Navigator
           initialRouteName="AuthChecker"

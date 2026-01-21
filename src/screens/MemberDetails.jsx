@@ -439,13 +439,22 @@ export default function MemberDetails({ route, navigation }) {
         </View>
       </ScrollView>
 
-      {/* Add Amount Modal */}
-      <Modal
-        visible={showAddAmountModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowAddAmountModal(false)}
-      >
+      {/* Add Amount Modal - Replaced with Absolute View */}
+      {showAddAmountModal && (
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -521,7 +530,8 @@ export default function MemberDetails({ route, navigation }) {
             </View>
           </View>
         </View>
-      </Modal>
+        </View>
+      )}
     </SafeAreaView>
   );
 }

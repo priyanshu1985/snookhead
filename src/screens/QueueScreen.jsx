@@ -7,10 +7,13 @@ import QueueTableSelection from '../components/QueueTableSelection';
 import UpcomingReservationList from '../components/UpcomingReservationList';
 import AddReservationForm from '../components/AddReservationForm';
 
-export default function QueueScreen({ navigation }) {
+export default function QueueScreen({ navigation, route }) {
   // State to track which view is active
   const [currentView, setCurrentView] = useState('list'); // list, tableSelection, upcomingReservation, addReservation
   const [selectedData, setSelectedData] = useState(null);
+
+  // Check for prefill data from navigation
+  const prefillData = route.params?.prefillData;
 
   // Navigation handlers
   const handleAddQueue = () => {
@@ -48,6 +51,7 @@ export default function QueueScreen({ navigation }) {
             onAddQueue={handleAddQueue}
             onShowReservations={handleShowUpcomingReservations}
             navigation={navigation}
+            prefillData={prefillData}
           />
         );
 

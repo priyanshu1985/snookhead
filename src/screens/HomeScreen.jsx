@@ -16,6 +16,7 @@ import Header from '../components/Header';
 import HeaderTabs from '../components/HeaderTabs';
 import TableCard from '../components/TableCard';
 import { API_URL } from '../config';
+import eventEmitter from '../utils/eventEmitter';
 
 const { width } = Dimensions.get('window');
 
@@ -48,8 +49,30 @@ export default function HomeScreen({ navigation }) {
   const [error, setError] = useState(null);
   const flatListRef = useRef(null);
 
-  // Fetch games and tables from backend
-  const fetchGamesAndTables = async () => {
+  // Add event listener for table updates with ref trigger
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    const subscription = eventEmitter.addListener('REFRESH_TABLES', () => {
+      console.log('Received REFRESH_TABLES event, triggering refresh...');
+      setRefreshTrigger(prev => prev + 1);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  // Effect to handle actual data fetching when trigger changes
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      console.log('Refreshing tables with full reload...');
+      fetchGamesAndTables(); // Trigger full loading state as requested
+    }
+  }, [refreshTrigger]);
+
+
+  const fetchGamesAndTables = async (isSilent = false) => {
     const token = await getAuthToken();
     if (!token) {
       setError('Please login first');
@@ -58,7 +81,9 @@ export default function HomeScreen({ navigation }) {
     }
 
     try {
-      setLoading(true);
+      if (!isSilent) {
+        setLoading(true);
+      }
       setError(null);
 
       console.log('Fetching games and tables...');
@@ -144,9 +169,9 @@ export default function HomeScreen({ navigation }) {
       // Transform data to match HomeScreen structure
       const transformedGameData = games
         .map(game => {
-          const gameId = game.game_id || game.id;
+          const gameId = game.game_id || game.id || game.gameid;
           const gameName = game.game_name || game.gamename || game.name;
-          const imageKey = game.image_key;
+          const imageKey = game.image_key || game.imagekey;
           const gameImageUrl = getGameImageUrl(imageKey);
 
           // Filter tables for this game
@@ -159,7 +184,9 @@ export default function HomeScreen({ navigation }) {
               // Find active session for this table
               const activeSession = activeSessions.find(
                 session =>
-                  String(session.table_id) === String(table.id) &&
+                  (String(session.table_id || session.tableid) ===
+                    String(table.id) ||
+                    String(session.tableId) === String(table.id)) &&
                   session.status === 'active',
               );
 
@@ -175,11 +202,27 @@ export default function HomeScreen({ navigation }) {
                   : table.status || 'available',
                 time: table.activeTime || null, // For occupied tables
                 sessionId:
-                  activeSession?.active_id || activeSession?.id || null,
-                startTime: activeSession?.start_time || null,
-                bookingEndTime: activeSession?.booking_end_time || null,
-                durationMinutes: activeSession?.duration_minutes || null,
+                  activeSession?.active_id ||
+                  activeSession?.id ||
+                  activeSession?.activeid ||
+                  null,
+                startTime:
+                  activeSession?.start_time || activeSession?.starttime || null,
+                bookingEndTime:
+                  activeSession?.booking_end_time ||
+                  activeSession?.bookingendtime ||
+                  null,
+                durationMinutes:
+                  activeSession?.duration_minutes ||
+                  activeSession?.durationminutes ||
+                  null,
                 game_id: gameId,
+                // Pass queue details
+                queueBooking: table.queueBooking,
+                bookingType: activeSession?.booking_type || activeSession?.bookingtype || table.bookingType || 'timer',
+                bookedBy: table.bookedBy,
+                // Pass extra session details if needed
+                frameCount: activeSession?.frame_count || activeSession?.framecount || 0,
               };
 
               // Log each transformed table to debug
@@ -227,9 +270,13 @@ export default function HomeScreen({ navigation }) {
 
       setError(errorMessage);
     } finally {
-      setLoading(false);
+      if (!isSilent) {
+        setLoading(false);
+      }
     }
   };
+
+
 
   // Fetch data when component mounts
   useEffect(() => {
@@ -285,9 +332,20 @@ export default function HomeScreen({ navigation }) {
           booking_end_time: table.bookingEndTime,
           duration_minutes: table.durationMinutes,
           status: 'active',
+          booking_type: table.bookingType,
+          frame_count: table.frameCount,
         },
         gameType,
         color,
+        // Map backend booking type to frontend timeOption
+        timeOption: 
+            table.bookingType === 'set' ? 'Timer' : 
+            table.bookingType === 'frame' ? 'Select Frame' : 
+            'Set Time',
+        timeDetails: {
+            selectedFrame: table.bookingType === 'frame' ? String(table.frameCount || 1) : '1',
+            timerDuration: table.durationMinutes ? String(table.durationMinutes) : '60'
+        }
       });
     } else if (action === 'book') {
       // Add game_id to table object for booking

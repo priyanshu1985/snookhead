@@ -14,6 +14,7 @@ import {
   Alert,
   StatusBar,
   Switch,
+  Button,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -65,6 +66,8 @@ export default function SetupMenu({ navigation }) {
   });
   const [deleteConfirmModal, setDeleteConfirmModal] = useState(false);
   const [gameToDelete, setGameToDelete] = useState(null);
+  const [gameDeleteSuccess, setGameDeleteSuccess] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Edit/Delete table modal state
   const [editTableModal, setEditTableModal] = useState(false);
@@ -79,6 +82,7 @@ export default function SetupMenu({ navigation }) {
   });
   const [deleteTableConfirmModal, setDeleteTableConfirmModal] = useState(false);
   const [tableToDelete, setTableToDelete] = useState(null);
+  const [tableDeleteSuccess, setTableDeleteSuccess] = useState(false);
 
   const [addTableModal, setAddTableModal] = useState(false);
   const [addTableConfirm, setAddTableConfirm] = useState(false);
@@ -222,7 +226,7 @@ export default function SetupMenu({ navigation }) {
       }
     };
     fetchData();
-  }, [activeTab, gameSuccess, tableSuccess, menuSuccess]);
+  }, [activeTab, gameSuccess, tableSuccess, menuSuccess, refreshTrigger]);
 
   useEffect(() => {
     if (games.length > 0 && !selectedGameId) {
@@ -301,7 +305,6 @@ export default function SetupMenu({ navigation }) {
         Alert.alert('Error', data.error || 'Failed to delete game');
         return false;
       }
-      Alert.alert('Success', 'Game deleted successfully');
       return true;
     } catch (err) {
       Alert.alert('Error', err.message || 'Network error');
@@ -313,11 +316,15 @@ export default function SetupMenu({ navigation }) {
 
   // Handle edit game
   const handleEditGame = game => {
+    // console.log('handleEditGame called with:', game); // DEBUG LOG
+    // Temporary debug alert
+    Alert.alert('Debug', 'Edit Game Pressed: ' + (game.game_name || game.gamename));
     setEditGameForm({
-      game_id: game.game_id || game.id,
+      game_id: game.game_id || game.gameid || game.id,
       name: game.game_name || game.gamename || '',
-      image_key: game.image_key || '',
+      image_key: game.image_key || game.imagekey || '',
     });
+    // console.log('Setting editGameModal to true'); // DEBUG LOG
     setEditGameModal(true);
   };
 
@@ -330,12 +337,18 @@ export default function SetupMenu({ navigation }) {
   // Confirm delete
   const confirmDeleteGame = async () => {
     if (gameToDelete) {
-      const gameId = gameToDelete.game_id || gameToDelete.id;
+      const gameId = gameToDelete.game_id || gameToDelete.gameid || gameToDelete.id;
+      console.log('Deleting game with ID:', gameId, 'Full game object:', gameToDelete);
+      if (!gameId) {
+        Alert.alert('Error', 'Invalid Game ID. Cannot delete.');
+        return;
+      }
       const success = await deleteGameAPI(gameId);
       if (success) {
         setDeleteConfirmModal(false);
         setGameToDelete(null);
-        setGameSuccess(prev => !prev); // Trigger refresh
+        setGameDeleteSuccess(true);
+        setRefreshTrigger(prev => prev + 1); // Trigger refresh without showing add modal
       }
     }
   };
@@ -444,7 +457,6 @@ export default function SetupMenu({ navigation }) {
         Alert.alert('Error', data.error || 'Failed to delete table');
         return false;
       }
-      Alert.alert('Success', 'Table deleted successfully');
       return true;
     } catch (err) {
       Alert.alert('Error', err.message || 'Network error');
@@ -457,14 +469,17 @@ export default function SetupMenu({ navigation }) {
   // Handle edit table
   const handleEditTable = table => {
     setEditTableForm({
-      id: table.id || table.table_id,
-      name: table.name || table.table_name || '',
+      id: table.id || table.table_id || table.tableid,
+      name: table.name || table.table_name || table.tablename || '',
       dimension: table.dimension || '',
       type: table.type || '',
-      pricePerMin: table.pricePerMin || table.price_per_min || '',
-      frameCharge: table.frameCharge || table.frame_charge || '',
+      pricePerMin:
+        table.pricePerMin || table.price_per_min || table.pricepermin || '',
+      frameCharge:
+        table.frameCharge || table.frame_charge || table.framecharge || '',
       status: table.status || 'available',
     });
+    console.log('Editing table:', table); // Debug log
     setEditTableModal(true);
   };
 
@@ -477,12 +492,14 @@ export default function SetupMenu({ navigation }) {
   // Confirm delete table
   const confirmDeleteTable = async () => {
     if (tableToDelete) {
-      const tableId = tableToDelete.id || tableToDelete.table_id;
+      const tableId = tableToDelete.id || tableToDelete.table_id || tableToDelete.tableid;
+      console.log('Deleting table with ID:', tableId, 'Full table object:', tableToDelete);
       const success = await deleteTableAPI(tableId);
       if (success) {
         setDeleteTableConfirmModal(false);
         setTableToDelete(null);
-        setTableSuccess(prev => !prev); // Trigger refresh
+        setTableDeleteSuccess(true);
+        setRefreshTrigger(prev => prev + 1); // Trigger refresh without showing add modal
       }
     }
   };
@@ -786,6 +803,7 @@ export default function SetupMenu({ navigation }) {
 
   // Helper to get full image URL
   const getGameImageUrl = imageKey => {
+    // console.log('Getting image URL for key:', imageKey); // debug
     if (!imageKey) return null;
     return `${API_URL}/static/game-images/${encodeURIComponent(imageKey)}`;
   };
@@ -799,8 +817,22 @@ export default function SetupMenu({ navigation }) {
   // --- Add Game Modal flow ---
   const AddGameFlow = (
     <>
-      <Modal visible={addGameModal} transparent animationType="slide">
-        <View style={styles.modalBg}>
+      {/* Replaced Modal with Absolute View */}
+      {addGameModal && (
+        <View
+          style={[
+            styles.modalBg,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
           <ScrollView
             style={styles.formCardScroll}
             contentContainerStyle={styles.formCardScrollContent}
@@ -878,9 +910,22 @@ export default function SetupMenu({ navigation }) {
             </View>
           </ScrollView>
         </View>
-      </Modal>
-      <Modal visible={addGameConfirm} transparent animationType="fade">
-        <View style={styles.modalBg}>
+      )}
+      {addGameConfirm && (
+        <View
+          style={[
+            styles.modalBg,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
           <View style={styles.popupCard}>
             <Text style={styles.popupTitle}>Game Added</Text>
             {gameForm.image_key ? (
@@ -907,9 +952,22 @@ export default function SetupMenu({ navigation }) {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
-      <Modal visible={gameSuccess} transparent animationType="fade">
-        <View style={styles.modalBg}>
+      )}
+      {gameSuccess && (
+        <View
+          style={[
+            styles.modalBg,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
           <View style={styles.popupCard}>
             <View style={styles.successIconContainer}>
               <Icon name="checkmark-circle" size={60} color="#4CAF50" />
@@ -923,15 +981,57 @@ export default function SetupMenu({ navigation }) {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      )}
+      {gameDeleteSuccess && (
+        <View
+          style={[
+            styles.modalBg,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
+          <View style={styles.popupCard}>
+            <View style={styles.successIconContainer}>
+              <Icon name="checkmark-circle" size={60} color="#4CAF50" />
+            </View>
+            <Text style={styles.successText}>Game deleted successfully!</Text>
+            <TouchableOpacity
+              style={styles.closeSuccessBtn}
+              onPress={() => setGameDeleteSuccess(false)}
+            >
+              <Text style={styles.closeSuccessBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </>
   );
 
   // --- Add Table Modal flow ---
   const AddTableFlow = (
     <>
-      <Modal visible={addTableModal} transparent animationType="slide">
-        <View style={styles.modalBg}>
+      {addTableModal && (
+        <View
+          style={[
+            styles.modalBg,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
           <View style={styles.formCard}>
             <TextInput
               style={styles.input}
@@ -966,7 +1066,7 @@ export default function SetupMenu({ navigation }) {
             <TextInput
               style={styles.input}
               placeholder="Frame charge"
-              value={tableForm.frameCharge}
+              value={String(tableForm.frameCharge || '')}
               onChangeText={v => setTableForm(f => ({ ...f, frameCharge: v }))}
             />
             <View style={styles.immutableFieldContainer}>
@@ -1018,9 +1118,22 @@ export default function SetupMenu({ navigation }) {
             </View>
           </View>
         </View>
-      </Modal>
-      <Modal visible={addTableConfirm} transparent animationType="fade">
-        <View style={styles.modalBg}>
+      )}
+      {addTableConfirm && (
+        <View
+          style={[
+            styles.modalBg,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
           <View style={styles.popupCard}>
             <Text style={styles.popupTitle}>Table details</Text>
             <Text style={styles.detailRow}>Type of game: {tableForm.type}</Text>
@@ -1035,29 +1148,86 @@ export default function SetupMenu({ navigation }) {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
-      <Modal visible={tableSuccess} transparent animationType="fade">
-        <View style={styles.modalBg}>
+      )}
+      {tableSuccess && (
+        <View
+          style={[
+            styles.modalBg,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
           <View style={styles.popupCard}>
-            <Text style={styles.successText}>Game successfully added!</Text>
-            <TouchableOpacity onPress={() => setTableSuccess(false)}>
-              <Text
-                style={{ marginTop: 18, color: '#FF8C42', fontWeight: 'bold' }}
-              >
-                Close
-              </Text>
+            <View style={styles.successIconContainer}>
+              <Icon name="checkmark-circle" size={60} color="#4CAF50" />
+            </View>
+            <Text style={styles.successText}>Table successfully added!</Text>
+            <TouchableOpacity
+              style={styles.closeSuccessBtn}
+              onPress={() => setTableSuccess(false)}
+            >
+              <Text style={styles.closeSuccessBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      )}
+      {tableDeleteSuccess && (
+        <View
+          style={[
+            styles.modalBg,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
+          <View style={styles.popupCard}>
+            <View style={styles.successIconContainer}>
+              <Icon name="checkmark-circle" size={60} color="#4CAF50" />
+            </View>
+            <Text style={styles.successText}>Table deleted successfully!</Text>
+            <TouchableOpacity
+              style={styles.closeSuccessBtn}
+              onPress={() => setTableDeleteSuccess(false)}
+            >
+              <Text style={styles.closeSuccessBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </>
   );
 
   // --- Add Menu Modal flow ---
   const AddMenuFlow = (
     <>
-      <Modal visible={addMenuModal} transparent animationType="slide">
-        <View style={styles.modalBg}>
+      {addMenuModal && (
+        <View
+          style={[
+            styles.modalBg,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
           <ScrollView
             style={styles.formCardScroll}
             contentContainerStyle={styles.formCardScrollContent}
@@ -1215,9 +1385,22 @@ export default function SetupMenu({ navigation }) {
             </View>
           </ScrollView>
         </View>
-      </Modal>
-      <Modal visible={addMenuConfirm} transparent animationType="fade">
-        <View style={styles.modalBg}>
+      )}
+      {addMenuConfirm && (
+        <View
+          style={[
+            styles.modalBg,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
           <View style={styles.popupCard}>
             <Text style={styles.popupTitle}>Menu Item Added</Text>
             {menuForm.image_key ? (
@@ -1254,9 +1437,22 @@ export default function SetupMenu({ navigation }) {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
-      <Modal visible={menuSuccess} transparent animationType="fade">
-        <View style={styles.modalBg}>
+      )}
+      {menuSuccess && (
+        <View
+          style={[
+            styles.modalBg,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
           <View style={styles.popupCard}>
             <View style={styles.successIconContainer}>
               <Icon name="checkmark-circle" size={60} color="#4CAF50" />
@@ -1272,7 +1468,7 @@ export default function SetupMenu({ navigation }) {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      )}
     </>
   );
 
@@ -1322,7 +1518,10 @@ export default function SetupMenu({ navigation }) {
             )}
             {Array.isArray(games) &&
               games.map((g, i) => (
-                <View style={styles.gameCard} key={g.game_id || g.id || i}>
+                <View
+                  style={styles.gameCard}
+                  key={g.game_id || g.gameid || g.id || i}
+                >
                   <View style={styles.gameCardLeft}>
                     <View style={styles.gameIndexBadge}>
                       <Text style={styles.gameIndexText}>{i + 1}</Text>
@@ -1333,25 +1532,36 @@ export default function SetupMenu({ navigation }) {
                       </Text>
                       <Text style={styles.gameCardMeta}>
                         Created:{' '}
-                        {g.game_createdon
-                          ? new Date(g.game_createdon).toLocaleDateString()
+                        {g.game_createdon || g.gamecreatedon
+                          ? new Date(
+                              g.game_createdon || g.gamecreatedon,
+                            ).toLocaleDateString()
                           : 'N/A'}
+                          {'\n'}ID: {g.game_id || g.gameid || g.id}
                       </Text>
                     </View>
                   </View>
                   <View style={styles.gameCardActions}>
-                    <TouchableOpacity
-                      style={styles.editButton}
-                      onPress={() => handleEditGame(g)}
-                    >
-                      <Icon name="pencil-outline" size={18} color="#FF8C42" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.deleteButton}
-                      onPress={() => handleDeleteGame(g)}
-                    >
-                      <Icon name="trash-outline" size={18} color="#FF4444" />
-                    </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.enhancedEditBtn}
+                        onPress={() => handleEditGame(g)}
+                      >
+                        <Icon
+                          name="create-outline"
+                          size={20}
+                          color="#FF8C42"
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                         style={styles.enhancedDeleteBtn}
+                         onPress={() => handleDeleteGame(g)}
+                       >
+                         <Icon
+                           name="trash-outline"
+                           size={20}
+                           color="#FF4444"
+                         />
+                       </TouchableOpacity>
                   </View>
                 </View>
               ))}
@@ -1386,14 +1596,13 @@ export default function SetupMenu({ navigation }) {
           <>
             {/* Enhanced Game Selector */}
             <View style={styles.gameSelectorContainer}>
-              <Text style={styles.selectorLabel}>Select Game Type</Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.gameHeaderScroll}
               >
-                {games.map(g => {
-                  const gameId = g.game_id || g.id;
+                {games.map((g, index) => {
+                  const gameId = g.game_id || g.id || g.gameid;
                   const isSelected = selectedGameId === gameId;
                   const tableCount = Array.isArray(tables)
                     ? tables.filter(
@@ -1403,20 +1612,12 @@ export default function SetupMenu({ navigation }) {
 
                   return (
                     <TouchableOpacity
-                      key={gameId}
+                      key={gameId || index}
                       style={[
                         styles.enhancedGameTab,
                         isSelected && styles.enhancedGameTabActive,
                       ]}
-                      onPress={() => {
-                        console.log(
-                          'User selected game:',
-                          g.game_name || g.gamename,
-                          'with ID:',
-                          gameId,
-                        );
-                        setSelectedGameId(gameId);
-                      }}
+                      onPress={() => setSelectedGameId(gameId)}
                     >
                       <Text
                         style={[
@@ -1424,7 +1625,7 @@ export default function SetupMenu({ navigation }) {
                           isSelected && styles.enhancedGameTabTextActive,
                         ]}
                       >
-                        {g.game_name || g.gamename}
+                         {g.name || g.game_name || g.gamename || 'Game'}
                       </Text>
                       <View
                         style={[
@@ -1449,31 +1650,7 @@ export default function SetupMenu({ navigation }) {
 
             {/* Tables Section */}
             <View style={styles.tablesSection}>
-              <View style={styles.tablesSectionHeader}>
-                <Text style={styles.tablesSectionTitle}>
-                  {selectedGameId
-                    ? `${
-                        games.find(g => (g.game_id || g.id) === selectedGameId)
-                          ?.game_name ||
-                        games.find(g => (g.game_id || g.id) === selectedGameId)
-                          ?.gamename ||
-                        'Selected'
-                      } Tables`
-                    : 'Select a game to view tables'}
-                </Text>
-                {selectedGameId && (
-                  <Text style={styles.tablesSectionSubtitle}>
-                    {Array.isArray(tables)
-                      ? tables.filter(
-                          t =>
-                            String(t.game_id || t.gameid) ===
-                            String(selectedGameId),
-                        ).length
-                      : 0}{' '}
-                    tables available
-                  </Text>
-                )}
-              </View>
+
 
               <View style={styles.tablesContainer}>
                 <FlatList
@@ -1486,66 +1663,79 @@ export default function SetupMenu({ navigation }) {
                         )
                       : []
                   }
-                  numColumns={2}
                   keyExtractor={item =>
                     item.id ? String(item.id) : Math.random().toString()
                   }
                   style={styles.tablesList}
                   renderItem={({ item, index }) => (
                     <View style={styles.enhancedTableCard}>
-                      <View style={styles.tableCardHeader}>
-                        <View style={styles.tableIconContainer}>
-                          <Icon name="grid-outline" size={24} color="#FF8C42" />
-                        </View>
-                        <View style={styles.tableCardActions}>
-                          <TouchableOpacity
-                            style={styles.enhancedEditBtn}
-                            onPress={() => handleEditTable(item)}
-                          >
-                            <Icon
-                              name="pencil-outline"
-                              size={16}
-                              color="#FF8C42"
-                            />
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={styles.enhancedDeleteBtn}
-                            onPress={() => handleDeleteTable(item)}
-                          >
-                            <Icon
-                              name="trash-outline"
-                              size={16}
-                              color="#FF4444"
-                            />
-                          </TouchableOpacity>
-                        </View>
+                      {/* Left Index Badge */}
+                      <View style={styles.tableIndexContainer}>
+                        <Text style={styles.tableIndexText}>{index + 1}</Text>
                       </View>
+
+                      {/* Middle Content */}
                       <View style={styles.tableCardContent}>
                         <Text style={styles.enhancedTableName}>
                           {item.name || item.table_name || `Table ${item.id}`}
                         </Text>
-                        <Text style={styles.enhancedTableSubtext}>
-                          {item.type || item.dimension || 'Standard'}
-                        </Text>
-                        <View style={styles.tableStatusContainer}>
+                        
+                        <View style={styles.tableStatusRow}>
+                          <Text style={styles.statusLabel}>Status: </Text>
                           <View
                             style={[
-                              styles.tableStatusDot,
+                              styles.statusBadge,
                               item.status === 'available'
-                                ? styles.statusAvailable
-                                : styles.statusOccupied,
+                                ? styles.statusBadgeAvailable
+                                : styles.statusBadgeOccupied,
                             ]}
-                          />
-                          <Text style={styles.tableStatusText}>
-                            {item.status === 'available'
-                              ? 'Available'
-                              : 'Occupied'}
-                          </Text>
+                          >
+                            <Text
+                              style={[
+                                styles.statusBadgeText,
+                                item.status === 'available'
+                                  ? styles.statusTextAvailable
+                                  : styles.statusTextOccupied,
+                              ]}
+                            >
+                              {item.status === 'available'
+                                ? 'Available'
+                                : 'Occupied'}
+                            </Text>
+                          </View>
+                          {(item.pricePerMin || item.price_per_min) && (
+                            <Text style={styles.tablePriceText}>
+                              • ₹{item.pricePerMin || item.price_per_min}/min
+                            </Text>
+                          )}
                         </View>
+                      </View>
+
+                      {/* Right Actions */}
+                      <View style={styles.tableCardActions}>
+                        <TouchableOpacity
+                          style={styles.enhancedEditBtn}
+                          onPress={() => handleEditTable(item)}
+                        >
+                          <Icon
+                            name="create-outline"
+                            size={20}
+                            color="#FF8C42"
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.enhancedDeleteBtn}
+                          onPress={() => handleDeleteTable(item)}
+                        >
+                          <Icon
+                            name="trash-outline"
+                            size={20}
+                            color="#FF4444"
+                          />
+                        </TouchableOpacity>
                       </View>
                     </View>
                   )}
-                  columnWrapperStyle={styles.enhancedGridRow}
                   scrollEnabled={true}
                   contentContainerStyle={styles.enhancedTablesGrid}
                   ListEmptyComponent={
@@ -1666,20 +1856,7 @@ export default function SetupMenu({ navigation }) {
 
         {/* Enhanced Menu Items Section */}
         <View style={styles.enhancedMenuSection}>
-          <View style={styles.menuSectionHeader}>
-            <Text style={styles.menuSectionTitle}>
-              {selectedMenuCategory.charAt(0).toUpperCase() +
-                selectedMenuCategory.slice(1)}{' '}
-              Items
-            </Text>
-            <Text style={styles.menuSectionSubtitle}>
-              {Array.isArray(menus)
-                ? menus.filter(item => item.category === selectedMenuCategory)
-                    .length
-                : 0}{' '}
-              items available
-            </Text>
-          </View>
+
 
           <View style={styles.enhancedMenuList}>
             <FlatList
@@ -1969,9 +2146,22 @@ export default function SetupMenu({ navigation }) {
         {AddTableFlow}
         {AddMenuFlow}
 
-        {/* Edit Game Modal */}
-        <Modal visible={editGameModal} transparent animationType="slide">
-          <View style={styles.modalBg}>
+        {/* Edit Game Modal - Replaced with Absolute View for high reliability */}
+        {editGameModal && (
+          <View
+            style={[
+              styles.modalBg,
+              {
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 9999,
+                elevation: 10,
+              },
+            ]}
+          >
             <ScrollView
               style={styles.formCardScroll}
               contentContainerStyle={styles.formCardScrollContent}
@@ -1979,7 +2169,7 @@ export default function SetupMenu({ navigation }) {
             >
               <View style={styles.formCard}>
                 <View style={styles.modalHeaderRow}>
-                  <Text style={styles.modalHeaderTitle}>Edit Game</Text>
+                  <Text style={styles.modalHeaderTitle}>Edit Game (DEBUG)</Text>
                   <TouchableOpacity
                     style={styles.modalCloseBtn}
                     onPress={() => {
@@ -2052,11 +2242,24 @@ export default function SetupMenu({ navigation }) {
               </View>
             </ScrollView>
           </View>
-        </Modal>
+        )}
 
-        {/* Delete Confirmation Modal */}
-        <Modal visible={deleteConfirmModal} transparent animationType="fade">
-          <View style={styles.modalBg}>
+        {/* Delete Confirmation Modal - Replaced with Absolute View */}
+        {deleteConfirmModal && (
+          <View
+            style={[
+              styles.modalBg,
+              {
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 9999,
+                elevation: 10,
+              },
+            ]}
+          >
             <View style={styles.deleteConfirmCard}>
               <View style={styles.deleteIconContainer}>
                 <Icon name="trash-outline" size={36} color="#FF4444" />
@@ -2093,11 +2296,24 @@ export default function SetupMenu({ navigation }) {
               </View>
             </View>
           </View>
-        </Modal>
+        )}
 
-        {/* Edit Table Modal */}
-        <Modal visible={editTableModal} transparent animationType="slide">
-          <View style={styles.modalBg}>
+        {/* Edit Table Modal - Replaced with Absolute View for high reliability */}
+        {editTableModal && (
+          <View
+            style={[
+              styles.modalBg,
+              {
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 9999,
+                elevation: 10,
+              },
+            ]}
+          >
             <ScrollView
               style={styles.formCardScroll}
               contentContainerStyle={styles.formCardScrollContent}
@@ -2105,7 +2321,7 @@ export default function SetupMenu({ navigation }) {
             >
               <View style={styles.formCard}>
                 <View style={styles.modalHeaderRow}>
-                  <Text style={styles.modalHeaderTitle}>Edit Table</Text>
+                  <Text style={styles.modalHeaderTitle}>Edit Table (DEBUG)</Text>
                   <TouchableOpacity
                     style={styles.modalCloseBtn}
                     onPress={() => {
@@ -2255,15 +2471,24 @@ export default function SetupMenu({ navigation }) {
               </View>
             </ScrollView>
           </View>
-        </Modal>
+        )}
 
-        {/* Delete Table Confirmation Modal */}
-        <Modal
-          visible={deleteTableConfirmModal}
-          transparent
-          animationType="fade"
-        >
-          <View style={styles.modalBg}>
+        {/* Delete Table Confirmation Modal - Replaced with Absolute View */}
+        {deleteTableConfirmModal && (
+          <View
+            style={[
+              styles.modalBg,
+              {
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 9999,
+                elevation: 10,
+              },
+            ]}
+          >
             <View style={styles.deleteConfirmCard}>
               <View style={styles.deleteIconContainer}>
                 <Icon name="trash-outline" size={36} color="#FF4444" />
@@ -2300,11 +2525,24 @@ export default function SetupMenu({ navigation }) {
               </View>
             </View>
           </View>
-        </Modal>
+        )}
 
-        {/* Edit Menu Modal */}
-        <Modal visible={editMenuModal} transparent animationType="slide">
-          <View style={styles.modalBg}>
+        {/* Edit Menu Modal - Replaced with Absolute View */}
+        {editMenuModal && (
+          <View
+            style={[
+              styles.modalBg,
+              {
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 9999,
+                elevation: 10,
+              },
+            ]}
+          >
             <ScrollView
               style={styles.formCardScroll}
               contentContainerStyle={styles.formCardScrollContent}
@@ -2449,15 +2687,24 @@ export default function SetupMenu({ navigation }) {
               </View>
             </ScrollView>
           </View>
-        </Modal>
+        )}
 
-        {/* Delete Menu Confirmation Modal */}
-        <Modal
-          visible={deleteMenuConfirmModal}
-          transparent
-          animationType="fade"
-        >
-          <View style={styles.modalBg}>
+        {/* Delete Menu Confirmation Modal - Replaced with Absolute View */}
+        {deleteMenuConfirmModal && (
+          <View
+            style={[
+              styles.modalBg,
+              {
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 9999,
+                elevation: 10,
+              },
+            ]}
+          >
             <View style={styles.deleteConfirmCard}>
               <View style={styles.deleteIconContainer}>
                 <Icon name="trash-outline" size={36} color="#FF4444" />
@@ -2492,7 +2739,7 @@ export default function SetupMenu({ navigation }) {
               </View>
             </View>
           </View>
-        </Modal>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -3763,16 +4010,9 @@ const styles = StyleSheet.create({
   },
 
   gameSelectorContainer: {
-    backgroundColor: '#FFFFFF',
     marginHorizontal: 16,
     marginTop: 12,
-    borderRadius: 16,
-    padding: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    marginBottom: 4, 
   },
   selectorLabel: {
     fontSize: 16,
@@ -3833,7 +4073,7 @@ const styles = StyleSheet.create({
   tablesSection: {
     flex: 1,
     marginHorizontal: 16,
-    marginTop: 12,
+    marginTop: 4,
     marginBottom: 80,
   },
   tablesSectionHeader: {
@@ -3846,6 +4086,23 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  addTableButton: {
+    backgroundColor: '#FF8C42',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    gap: 6,
+  },
+  addTableButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   tablesSectionTitle: {
     fontSize: 18,
@@ -3861,97 +4118,119 @@ const styles = StyleSheet.create({
 
   enhancedTableCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    margin: 6,
-    elevation: 3,
+    borderRadius: 12,
+    marginBottom: 12,
+    marginHorizontal: 16,
+    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
     borderWidth: 1,
     borderColor: '#F0F0F0',
-    flex: 1,
-    maxWidth: '48%',
-  },
-  tableCardHeader: {
+    borderLeftWidth: 5,
+    borderLeftColor: '#FF8C42',
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: 16,
-    paddingBottom: 8,
+    alignItems: 'center',
+    paddingVertical: 4,
   },
-  tableIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#FFF8F5',
+  tableIndexContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FF8C42',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 16,
+  },
+  tableIndexText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
   },
   tableCardContent: {
+    flex: 1,
+    paddingVertical: 12,
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    justifyContent: 'center',
   },
   enhancedTableName: {
     fontSize: 16,
     fontWeight: '700',
     color: '#1A1A1A',
     marginBottom: 4,
+    textTransform: 'uppercase', 
   },
   enhancedTableSubtext: {
     fontSize: 13,
     color: '#666666',
-    marginBottom: 12,
     fontWeight: '500',
   },
-  tableStatusContainer: {
+  tableStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 2,
   },
-  tableStatusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
+  statusLabel: {
+    fontSize: 13, 
+    color: '#888888',
   },
-  statusAvailable: {
-    backgroundColor: '#4CAF50',
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginLeft: 4,
   },
-  statusOccupied: {
-    backgroundColor: '#FF4444',
+  statusBadgeAvailable: {
+    backgroundColor: '#E8F5E9',
   },
-  tableStatusText: {
+  statusBadgeOccupied: {
+    backgroundColor: '#FFEBEE',
+  },
+  statusBadgeText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  statusTextAvailable: {
+    color: '#4CAF50',
+  },
+  statusTextOccupied: {
+    color: '#FF4444',
+  },
+  tablePriceText: {
+    fontSize: 13,
     color: '#666666',
+    marginLeft: 6,
+  },
+  tableCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 16,
   },
   enhancedEditBtn: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     borderRadius: 8,
-    backgroundColor: '#FFF8F5',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#FFE0CC',
+    borderColor: '#FF8C42',
     marginRight: 8,
   },
   enhancedDeleteBtn: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     borderRadius: 8,
-    backgroundColor: '#FFEBEE',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#FFCDD2',
-  },
-  enhancedGridRow: {
-    justifyContent: 'space-between',
-    paddingHorizontal: 6,
+    borderColor: '#FFCDD2', // Light red border
   },
   enhancedTablesGrid: {
-    paddingVertical: 8,
+    paddingVertical: 12,
+    paddingBottom: 100, // Space for FAB
   },
 
   enhancedEmptyState: {

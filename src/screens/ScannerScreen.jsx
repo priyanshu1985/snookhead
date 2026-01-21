@@ -549,13 +549,22 @@ export default function ScannerScreen({ navigation, route }) {
         )}
       </View>
 
-      {/* Manual Entry Modal */}
-      <Modal
-        visible={showManualEntry}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowManualEntry(false)}
-      >
+      {/* Manual Entry Modal - Replaced with Absolute View */}
+      {showManualEntry && (
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -609,7 +618,8 @@ export default function ScannerScreen({ navigation, route }) {
             </View>
           </View>
         </View>
-      </Modal>
+        </View>
+      )}
     </View>
   );
 }

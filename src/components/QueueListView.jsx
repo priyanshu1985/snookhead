@@ -30,6 +30,7 @@ export default function QueueListView({
   onAddQueue,
   onShowReservations,
   navigation,
+  prefillData,
 }) {
   const [activeTab, setActiveTab] = useState('QUEUE');
   const [queueData, setQueueData] = useState([]);
@@ -40,6 +41,32 @@ export default function QueueListView({
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
   const [addingToQueue, setAddingToQueue] = useState(false);
+  const [targetGameId, setTargetGameId] = useState(null);
+  const [targetTableId, setTargetTableId] = useState(null);
+  const [members, setMembers] = useState('1');
+  const [bookingType, setBookingType] = useState('Timer'); // Timer, Set Time, Frame
+  const [duration, setDuration] = useState('60'); // Minutes
+  const [frameCount, setFrameCount] = useState('1');
+
+  const [setTime, setSetTime] = useState('');
+  const [games, setGames] = useState([]);
+  const [tables, setTables] = useState([]);
+
+  // Handle prefill data for adding to queue
+  useEffect(() => {
+     if (prefillData) {
+       console.log("QueueListView received prefill:", prefillData);
+       if (prefillData.customerName) setNewCustomerName(prefillData.customerName);
+       if (prefillData.customerPhone) setNewCustomerPhone(prefillData.customerPhone);
+       if (prefillData.gameId) setTargetGameId(prefillData.gameId);
+       if (prefillData.tableId) setTargetTableId(prefillData.tableId);
+       
+       // Automatically open modal if requested
+       if (prefillData.autoOpen) {
+          setShowAddModal(true);
+       }
+     }
+  }, [prefillData]);
 
   // Fetch queue data from backend
   const fetchQueueData = async (showRefreshing = false) => {
@@ -92,9 +119,36 @@ export default function QueueListView({
     }
   };
 
+  // Fetch games and tables
+  const fetchMetadata = async () => {
+    const token = await getAuthToken();
+    try {
+        const [gamesRes, tablesRes] = await Promise.all([
+            fetch(`${API_URL}/api/games`, { headers: { Authorization: `Bearer ${token}` } }),
+            fetch(`${API_URL}/api/tables?status=available`, { headers: { Authorization: `Bearer ${token}` } }) // Show available for preferred? Or all? Usually any table is fine for preference.
+        ]);
+        
+        // Actually, for "Add to Queue", we probably want to select ANY table as preferred, even if occupied.
+        // So let's fetch ALL tables.
+        const allTablesRes = await fetch(`${API_URL}/api/tables`, { headers: { Authorization: `Bearer ${token}` } });
+
+        if (gamesRes.ok) {
+            const gamesData = await gamesRes.json();
+            setGames(Array.isArray(gamesData) ? gamesData : gamesData.data || []);
+        }
+        if (allTablesRes.ok) {
+            const tablesData = await allTablesRes.json();
+            setTables(Array.isArray(tablesData.data) ? tablesData.data : (Array.isArray(tablesData) ? tablesData : []));
+        }
+    } catch (err) {
+        console.error("Error fetching metadata:", err);
+    }
+  };
+
   // Fetch data when component mounts
   useEffect(() => {
     fetchQueueData();
+    fetchMetadata();
   }, []);
 
   // Refetch when screen comes into focus
@@ -122,9 +176,16 @@ export default function QueueListView({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          customer_name: newCustomerName.trim(),
-          customer_phone: newCustomerPhone.trim() || null,
+          customername: newCustomerName.trim(),
+          phone: newCustomerPhone.trim() || null,
           status: 'waiting',
+          gameid: targetGameId || 1, // Default to Snooker (1) if no game selected
+          preferredtableid: targetTableId,
+          members: parseInt(members) || 1,
+          booking_type: bookingType.toLowerCase(),
+          duration_minutes: bookingType === 'Timer' ? parseInt(duration) : null,
+          frame_count: bookingType === 'Frame' ? parseInt(frameCount) : null,
+          set_time: bookingType === 'Set Time' ? setTime : null,
         }),
       });
 
@@ -134,6 +195,10 @@ export default function QueueListView({
         setShowAddModal(false);
         setNewCustomerName('');
         setNewCustomerPhone('');
+        setMembers('1');
+        setDuration('60');
+        setFrameCount('1');
+        setSetTime('');
         fetchQueueData();
         Alert.alert('Success', 'Customer added to queue');
       } else {
@@ -354,13 +419,74 @@ export default function QueueListView({
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add to Queue</Text>
+              <Text style={styles.modalTitle}>
+                 {targetTableId ? `Add to Queue (Table ${targetTableId})` : 'Add to Queue'}
+              </Text>
               <TouchableOpacity
                 onPress={() => setShowAddModal(false)}
                 style={styles.modalCloseButton}
               >
                 <Icon name="close" size={24} color="#333" />
               </TouchableOpacity>
+            </View>
+
+
+
+            {/* Game Selection */}
+            <Text style={styles.inputLabel}>Select Game</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+               {games.map((game) => (
+                   <TouchableOpacity
+                      key={game.gameid}
+                      style={[
+                          styles.selectionChip,
+                          targetGameId === game.gameid && styles.selectionChipActive
+                      ]}
+                      onPress={() => {
+                          setTargetGameId(game.gameid);
+                          setTargetTableId(null); // Reset table when game changes
+                      }}
+                   >
+                      <Text style={[
+                          styles.selectionChipText,
+                          targetGameId === game.gameid && styles.selectionChipTextActive
+                      ]}>{game.name}</Text>
+                   </TouchableOpacity>
+               ))}
+            </View>
+
+            {/* Table Selection (Filtered by Game) */}
+            <Text style={styles.inputLabel}>Preferred Table (Optional)</Text>
+             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                 <TouchableOpacity
+                      style={[
+                          styles.selectionChip,
+                          targetTableId === null && styles.selectionChipActive
+                      ]}
+                      onPress={() => setTargetTableId(null)}
+                   >
+                      <Text style={[
+                          styles.selectionChipText,
+                          targetTableId === null && styles.selectionChipTextActive
+                      ]}>Any Table</Text>
+                   </TouchableOpacity>
+               {tables
+                   .filter(t => !targetGameId || t.gameid === targetGameId)
+                   .map((table) => (
+                   <TouchableOpacity
+                      key={table.id}
+                      style={[
+                          styles.selectionChip,
+                          targetTableId === table.id && styles.selectionChipActive
+                      ]}
+                      onPress={() => setTargetTableId(table.id)}
+                   >
+                      <Text style={[
+                          styles.selectionChipText,
+                          targetTableId === table.id && styles.selectionChipTextActive
+                      ]}>{table.name}</Text>
+                   </TouchableOpacity>
+               ))}
             </View>
 
             <Text style={styles.inputLabel}>Customer Name *</Text>
@@ -381,6 +507,83 @@ export default function QueueListView({
               onChangeText={setNewCustomerPhone}
               keyboardType="phone-pad"
             />
+
+            <Text style={styles.inputLabel}>Number of Players</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="1 player"
+              placeholderTextColor="#999"
+              value={members}
+              onChangeText={setMembers}
+              keyboardType="numeric"
+            />
+
+            <Text style={styles.inputLabel}>Booking Type *</Text>
+            <View style={{ flexDirection: 'row', gap: 16, marginBottom: 16 }}>
+              {['Timer', 'Set Time', 'Frame'].map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={{ flexDirection: 'row', alignItems: 'center' }}
+                  onPress={() => setBookingType(type)}
+                >
+                  <Icon
+                    name={bookingType === type ? 'radio-button-on' : 'radio-button-off'}
+                    size={20}
+                    color={bookingType === type ? '#FF8C42' : '#999'}
+                  />
+                  <Text style={{ marginLeft: 6, color: '#333' }}>{type}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {bookingType === 'Timer' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                 <TouchableOpacity 
+                    style={{ padding: 10,  backgroundColor: '#F5F5F5', borderRadius: 8 }} 
+                    onPress={() => setDuration(Math.max(15, parseInt(duration || 0) - 15).toString())}>
+                    <Text style={{ fontSize: 20 }}>-</Text>
+                 </TouchableOpacity>
+                 <View style={{ flex: 1 }}>
+                    <TextInput
+                        style={[styles.textInput, { marginBottom: 0, textAlign: 'center' }]}
+                        value={duration}
+                        onChangeText={setDuration}
+                        keyboardType="numeric"
+                    />
+                 </View>
+                 <TouchableOpacity 
+                    style={{ padding: 10, backgroundColor: '#F5F5F5', borderRadius: 8 }} 
+                    onPress={() => setDuration((parseInt(duration || 0) + 15).toString())}>
+                    <Text style={{ fontSize: 20 }}>+</Text>
+                 </TouchableOpacity>
+                 <Text style={{ fontSize: 16, fontWeight: '600', color: '#666' }}>minutes</Text>
+              </View>
+            )}
+
+             {bookingType === 'Frame' && (
+              <View style={{ marginBottom: 10 }}>
+                 <Text style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>Number of Frames</Text>
+                 <TextInput
+                    style={styles.textInput}
+                    value={frameCount}
+                    onChangeText={setFrameCount}
+                    keyboardType="numeric"
+                    placeholder="Enter frames"
+                 />
+              </View>
+            )}
+
+            {bookingType === 'Set Time' && (
+              <View style={{ marginBottom: 10 }}>
+                 <Text style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>End Time (HH:MM)</Text>
+                 <TextInput
+                    style={styles.textInput}
+                    value={setTime}
+                    onChangeText={setSetTime}
+                    placeholder="e.g. 22:00"
+                 />
+              </View>
+            )}
 
             <TouchableOpacity
               style={[styles.modalAddButton, addingToQueue && styles.modalAddButtonDisabled]}
@@ -753,5 +956,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  selectionChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: '#F5F5F5',
+      borderWidth: 1,
+      borderColor: '#E0E0E0',
+  },
+  selectionChipActive: {
+      backgroundColor: '#FFF3E0',
+      borderColor: '#FF8C42',
+  },
+  selectionChipText: {
+      fontSize: 13,
+      color: '#666',
+  },
+  selectionChipTextActive: {
+      color: '#FF8C42',
+      fontWeight: '600',
   },
 });
