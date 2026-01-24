@@ -222,6 +222,8 @@ export default function AfterBooking({ route, navigation }) {
               cart_items: billItems.map(item => ({
                 menu_item_id: item.id,
                 quantity: item.quantity || 1,
+                id: item.id, // Match backend expectation
+                qty: item.quantity || 1, // Match backend expectation
               })),
             }),
           });
@@ -713,6 +715,8 @@ export default function AfterBooking({ route, navigation }) {
               cart_items: billItems.map(item => ({
                 menu_item_id: item.id,
                 quantity: item.quantity || 1,
+                id: item.id, // Match backend expectation
+                qty: item.quantity || 1, // Match backend expectation
               })),
             }),
           });

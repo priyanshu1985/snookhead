@@ -24,8 +24,6 @@ import OwnerPasswordSetup from '../screens/OwnerPasswordSetup';
 
 import SetupMenu from '../screens/SetupMenu';
 import InventoryDashboard from '../screens/InventoryDashboard';
-import InventoryScreen from '../screens/InventoryScreen';
-import AddInventoryScreen from '../screens/AddInventoryScreen';
 import ServerStatusScreen from '../screens/ServerStatusScreen';
 import UpgradeSubscription from '../screens/UpgradeSubscription';
 import ReportBugs from '../screens/ReportBugs';
@@ -195,12 +193,6 @@ export default function AppNavigator() {
           <Stack.Screen
             name="InventoryDashboard"
             component={InventoryDashboard}
-          />
-          <Stack.Screen name="Inventory" component={InventoryScreen} />
-          <Stack.Screen
-            name="AddInventory"
-            component={AddInventoryScreen}
-            options={{ headerShown: false }}
           />
           <Stack.Screen name="ServerStatus" component={ServerStatusScreen} />
           <Stack.Screen name="Member" component={Member} />

@@ -12,6 +12,7 @@ import {
   StatusBar,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { CameraScreen } from 'react-native-camera-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Header from '../components/Header';
 import { API_URL } from '../config';
@@ -124,36 +125,6 @@ export default function ScannerScreen({ navigation, route }) {
     }
 
     setIsScanning(true);
-
-    // Simulate camera opening and scanning process
-    setTimeout(() => {
-      Alert.alert(
-        'Camera Ready',
-        'Camera interface would open here. For now, use manual entry to test the functionality.',
-        [
-          {
-            text: 'Manual Entry',
-            onPress: () => {
-              setIsScanning(false);
-              setShowManualEntry(true);
-            },
-          },
-          {
-            text: 'Test QR Code',
-            onPress: () => {
-              setIsScanning(false);
-              const testQRData = generateTestQRData();
-              handleQRCodeProcessed(testQRData);
-            },
-          },
-          {
-            text: 'Close',
-            onPress: () => setIsScanning(false),
-            style: 'cancel',
-          },
-        ],
-      );
-    }, 1000);
   };
 
   const handleManualEntry = () => {
@@ -427,6 +398,15 @@ export default function ScannerScreen({ navigation, route }) {
     return (
       <View style={styles.scanningContainer}>
         <StatusBar backgroundColor="#000" barStyle="light-content" />
+        
+        <CameraScreen
+          scanBarcode={true}
+          onReadCode={(event) => handleQRCodeProcessed(event.nativeEvent.codeStringValue)}
+          showFrame={true}
+          laserColor='#FF8C42'
+          frameColor='white'
+          style={StyleSheet.absoluteFillObject}
+        />
 
         <View style={styles.scanningHeader}>
           <TouchableOpacity
@@ -439,16 +419,10 @@ export default function ScannerScreen({ navigation, route }) {
           <View style={styles.placeholder} />
         </View>
 
-        <View style={styles.scanningContent}>
-          <View style={styles.scanningArea}>
-            <Icon name="qr-code-outline" size={120} color="#FF8C42" />
-            <Text style={styles.scanningText}>Point camera at QR code</Text>
-            <View style={styles.scanningIndicator}>
-              <Icon name="scan" size={40} color="#FF8C42" />
-            </View>
-          </View>
-
-          <View style={styles.scanningControls}>
+        <View style={styles.scanningControls}>
+            <Text style={{color: 'white', marginBottom: 10, textAlign: 'center'}}>
+              Camera not showing?
+            </Text>
             <TouchableOpacity
               style={styles.manualEntryButton}
               onPress={() => {
@@ -459,7 +433,6 @@ export default function ScannerScreen({ navigation, route }) {
               <Icon name="create-outline" size={24} color="#fff" />
               <Text style={styles.buttonText}>Manual Entry</Text>
             </TouchableOpacity>
-          </View>
         </View>
       </View>
     );
