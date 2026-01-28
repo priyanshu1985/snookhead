@@ -437,20 +437,20 @@ export default function QueueListView({
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
                {games.map((game) => (
                    <TouchableOpacity
-                      key={game.gameid}
+                      key={game.game_id || game.gameid}
                       style={[
                           styles.selectionChip,
-                          targetGameId === game.gameid && styles.selectionChipActive
+                          targetGameId === (game.game_id || game.gameid) && styles.selectionChipActive
                       ]}
                       onPress={() => {
-                          setTargetGameId(game.gameid);
+                          setTargetGameId(game.game_id || game.gameid);
                           setTargetTableId(null); // Reset table when game changes
                       }}
                    >
                       <Text style={[
                           styles.selectionChipText,
-                          targetGameId === game.gameid && styles.selectionChipTextActive
-                      ]}>{game.name}</Text>
+                          targetGameId === (game.game_id || game.gameid) && styles.selectionChipTextActive
+                      ]}>{game.game_name || game.gamename || game.name}</Text>
                    </TouchableOpacity>
                ))}
             </View>
@@ -471,7 +471,7 @@ export default function QueueListView({
                       ]}>Any Table</Text>
                    </TouchableOpacity>
                {tables
-                   .filter(t => !targetGameId || t.gameid === targetGameId)
+                   .filter(t => !targetGameId || (t.game_id || t.gameid) === targetGameId)
                    .map((table) => (
                    <TouchableOpacity
                       key={table.id}

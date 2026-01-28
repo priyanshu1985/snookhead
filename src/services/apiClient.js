@@ -126,6 +126,8 @@ class ApiClient {
       // This handles TOKEN_EXPIRED, TOKEN_INVALID, and TOKEN_MISSING
       if (response.status === 401) {
         const errorData = await response.clone().json();
+        // Attach parsed error data to response to avoid double-reading stream
+        response.errorData = errorData;
 
         // Try to refresh for any 401 error that's token-related
         // Only skip refresh if we don't have a refresh token at all

@@ -20,7 +20,7 @@ const makeRequest = async (url, options = {}) => {
     if (!response.ok) {
       let errorMessage = `HTTP error! status: ${response.status}`;
       try {
-        const errorData = await response.json();
+        const errorData = response.errorData || (await response.json());
         errorMessage = errorData.error || errorData.message || errorMessage;
       } catch (parseError) {
         console.warn('Could not parse error response:', parseError);
@@ -573,14 +573,14 @@ export const getMembers = customerAPI.getAll;
 export const ownerAPI = {
   // Check setup status for current user
   checkSetupStatus: async () => {
-    return await makeRequest('/api/owner/check-setup-status', {
+    return await makeRequest('/api/owner/panel/check-setup-status', {
       method: 'POST',
     });
   },
 
   // Setup password for first time
   setupPassword: async (password, confirmPassword) => {
-    return await makeRequest('/api/owner/setup-password', {
+    return await makeRequest('/api/owner/panel/setup-password', {
       method: 'POST',
       body: JSON.stringify({ password, confirmPassword }),
     });
@@ -588,7 +588,7 @@ export const ownerAPI = {
 
   // Verify password for access
   verifyPassword: async password => {
-    return await makeRequest('/api/owner/verify-password', {
+    return await makeRequest('/api/owner/panel/verify-password', {
       method: 'POST',
       body: JSON.stringify({ password }),
     });
@@ -596,7 +596,7 @@ export const ownerAPI = {
 
   // Change password
   changePassword: async (currentPassword, newPassword, confirmNewPassword) => {
-    return await makeRequest('/api/owner/change-password', {
+    return await makeRequest('/api/owner/panel/change-password', {
       method: 'POST',
       body: JSON.stringify({
         currentPassword,
@@ -608,7 +608,7 @@ export const ownerAPI = {
 
   // Reset password (admin only)
   resetPassword: async targetUserId => {
-    return await makeRequest('/api/owner/reset-password', {
+    return await makeRequest('/api/owner/panel/reset-password', {
       method: 'POST',
       body: JSON.stringify({ targetUserId }),
     });

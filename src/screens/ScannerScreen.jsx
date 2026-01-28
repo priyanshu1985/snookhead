@@ -10,10 +10,12 @@ import {
   TextInput,
   Modal,
   StatusBar,
+  Linking,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { CameraScreen } from 'react-native-camera-kit';
+import { Camera } from 'react-native-camera-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import Header from '../components/Header';
 import { API_URL } from '../config';
 
@@ -27,103 +29,77 @@ export default function ScannerScreen({ navigation, route }) {
   const paymentContext = route?.params?.paymentContext;
   const isPaymentMode = !!paymentContext;
 
-  useEffect(() => {
-    requestCameraPermission();
-  }, []);
+  // Check permission on mount and focus
+  useFocusEffect(
+    React.useCallback(() => {
+      checkPermission();
+    }, [])
+  );
 
-  const requestCameraPermission = async () => {
-    try {
-      if (Platform.OS === 'android') {
-        // Check if we should show permission rationale
-        const shouldShowRationale = await PermissionsAndroid.check(
+  const checkPermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const status = await PermissionsAndroid.check(
           PermissionsAndroid.PERMISSIONS.CAMERA,
         );
+        setHasPermission(status);
+        if (status) {
+           // If permission is already granted, we can potentially ready the camera,
+           // but we stick to the user pressing "Start Scanning" for control
+        }
+      } catch (err) {
+        console.warn(err);
+        setHasPermission(false);
+      }
+    } else {
+      setHasPermission(true);
+    }
+  };
 
-        if (!shouldShowRationale) {
-          // Show explanation before requesting permission
+  const requestCameraPermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          {
+            title: 'Camera Permission Required',
+            message: 'We need camera access to scan QR codes for interactions.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          },
+        );
+
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          setHasPermission(true);
+          setIsScanning(true); 
+        } else if (granted === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
           Alert.alert(
-            'Camera Access Needed',
-            'This app needs camera permission to scan QR codes for payments and customer wallets. This makes transactions faster and more secure.',
+            'Permission Required',
+            'Camera permission was denied permanently. Please enable it in Settings.',
             [
-              {
-                text: 'Cancel',
-                style: 'cancel',
-                onPress: () => setHasPermission(false),
-              },
-              {
-                text: 'Allow Camera',
-                onPress: () => requestPermissionAndroid(),
-              },
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => Linking.openSettings() },
             ],
           );
+          setHasPermission(false);
         } else {
-          await requestPermissionAndroid();
+          setHasPermission(false);
         }
-      } else {
-        setHasPermission(true);
+      } catch (err) {
+        console.warn(err);
       }
-    } catch (err) {
-      console.warn(err);
-      setHasPermission(false);
     }
-  };
-
-  const requestPermissionAndroid = async () => {
-    try {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.CAMERA,
-        {
-          title: 'Camera Permission Required',
-          message: 'Allow SNOKEHEAD to access your camera to scan QR codes',
-          buttonNeutral: 'Ask Me Later',
-          buttonNegative: 'Deny',
-          buttonPositive: 'Allow',
-        },
-      );
-
-      if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-        setHasPermission(true);
-      } else {
-        setHasPermission(false);
-        // Show manual entry as alternative
-        Alert.alert(
-          'Camera Access Denied',
-          'No worries! You can still use Manual Entry to input QR code data.',
-          [
-            { text: 'OK' },
-            { text: 'Manual Entry', onPress: () => setShowManualEntry(true) },
-          ],
-        );
-      }
-    } catch (err) {
-      console.warn(err);
-      setHasPermission(false);
-    }
-  };
-
-  const generateTestQRData = () => {
-    // Generate test QR data for development
-    const testQRData = JSON.stringify({
-      type: 'WALLET',
-      wallet_id: 'test-wallet-123',
-      customer_id: 1,
-    });
-    return testQRData;
   };
 
   const handleStartScanning = () => {
-    if (hasPermission === false) {
-      Alert.alert(
-        'Camera Permission Required',
-        'Please allow camera access to scan QR codes',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Try Again', onPress: requestCameraPermission },
-        ],
-      );
+    if (!hasPermission) {
+      if (hasPermission === false) {
+          // If explicitly known to be false, request again
+          requestCameraPermission();
+      }
       return;
     }
-
     setIsScanning(true);
   };
 
@@ -399,7 +375,7 @@ export default function ScannerScreen({ navigation, route }) {
       <View style={styles.scanningContainer}>
         <StatusBar backgroundColor="#000" barStyle="light-content" />
         
-        <CameraScreen
+        <Camera
           scanBarcode={true}
           onReadCode={(event) => handleQRCodeProcessed(event.nativeEvent.codeStringValue)}
           showFrame={true}
