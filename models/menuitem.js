@@ -20,16 +20,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
       },
       category: {
-        type: DataTypes.ENUM(
-          "Food",
-          "Fast Food",
-          "Beverages",
-          "Snacks",
-          "Desserts",
-          "prepared",
-          "packed",
-          "cigarette"
-        ),
+        type: DataTypes.STRING(100),
         allowNull: false,
         defaultValue: "Food",
       },

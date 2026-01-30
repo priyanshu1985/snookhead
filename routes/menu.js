@@ -107,19 +107,8 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         .json({ error: "name, category, and price are required" });
     }
 
-    const allowedCategories = [
-      "Food",
-      "Fast Food",
-      "Beverages",
-      "Snacks",
-      "Desserts",
-      "prepared",
-      "packed",
-      "cigarette",
-    ];
-    if (!allowedCategories.includes(category)) {
-      return res.status(400).json({ error: "Invalid category" });
-    }
+    // Removed hardcoded category validation to allow custom categories
+
 
     // Add station_id for multi-tenancy
     // Using snakeless 'stationid' based on previous findings

@@ -552,6 +552,51 @@ router.post(
   }
 );
 
+// Update a session (e.g. add frames, add time)
+router.put(
+  "/:id",
+  auth,
+  stationContext,
+  authorize("staff", "owner", "admin"),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+
+      // Map active_id to activeid for database lookup if needed
+      // The frontend sends active_id, backend route uses :id
+      
+      const sessionWhere = addStationFilter({ activeid: id }, req.stationId);
+      const session = await ActiveTable.findOne({ where: sessionWhere });
+
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      // Whitelist allowed updates
+      const allowedUpdates = {};
+      if (updates.frame_count !== undefined) allowedUpdates.framecount = updates.frame_count;
+      if (updates.booking_end_time !== undefined) allowedUpdates.bookingendtime = updates.booking_end_time;
+      if (updates.duration_minutes !== undefined) allowedUpdates.durationminutes = updates.duration_minutes;
+      
+      if (Object.keys(allowedUpdates).length === 0) {
+          return res.status(400).json({ error: "No valid fields to update" });
+      }
+
+      // Perform update
+      await ActiveTable.update(allowedUpdates, { where: { activeid: id } });
+      
+      // Fetch updated session
+      const updatedSession = await ActiveTable.findOne({ where: sessionWhere });
+
+      res.json({ message: "Session updated", session: updatedSession });
+    } catch (err) {
+      console.error("Update session error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
 // Get session by ID
 router.get("/:id", auth, stationContext, async (req, res) => {
   try {

@@ -1,4 +1,5 @@
 import express from "express";
+import { getSupabase } from "../config/supabase.js";
 import { auth } from "../middleware/auth.js";
 import {
   stationContext,
@@ -6,15 +7,6 @@ import {
 } from "../middleware/stationContext.js";
 
 const router = express.Router();
-
-// Get models
-let models;
-const getModels = async () => {
-  if (!models) {
-    models = await import("../models/index.js");
-  }
-  return models;
-};
 
 // Helper: Get date range based on period
 function getDateRange(period) {
@@ -45,71 +37,81 @@ function getDateRange(period) {
   return { startDate, endDate: now };
 }
 
+// Helper to apply station filter to Supabase query
+const applyStationFilter = (query, stationId) => {
+  if (stationId) {
+    return query.eq("stationid", stationId);
+  }
+  return query;
+};
+
 // GET /api/owner/dashboard/stats - Get dashboard statistics (filtered by station)
 router.get("/stats", auth, stationContext, async (req, res) => {
   try {
     const { period = "week" } = req.query;
     const { startDate, endDate } = getDateRange(period);
-    const { Wallet, Customer, Bill, ActiveTable, Order } = await getModels();
+    const supabase = getSupabase();
 
     // Get previous period for comparison
     const prevPeriodLength = endDate - startDate;
     const prevStartDate = new Date(startDate - prevPeriodLength);
     const prevEndDate = startDate;
 
-    // Active wallets (wallets with balance > 0) - filtered by station
-    const activeWalletsWhere = addStationFilter(
-      { balance: { [Op.gt]: 0 } },
-      req.stationId
-    );
-    const activeWallets = await Wallet.count({ where: activeWalletsWhere });
+    // Active wallets (wallets with balance > 0)
+    let activeWalletsQuery = supabase
+      .from("wallets")
+      .select("*", { count: "exact", head: true })
+      .gt("balance", 0);
+    activeWalletsQuery = applyStationFilter(activeWalletsQuery, req.stationId);
+    const { count: activeWallets } = await activeWalletsQuery;
 
-    const prevActiveWalletsWhere = addStationFilter(
-      {
-        balance: { [Op.gt]: 0 },
-        createdAt: { [Op.lt]: startDate },
-      },
-      req.stationId
-    );
-    const prevActiveWallets = await Wallet.count({
-      where: prevActiveWalletsWhere,
-    });
+    let prevActiveWalletsQuery = supabase
+      .from("wallets")
+      .select("*", { count: "exact", head: true })
+      .gt("balance", 0)
+      .lt("created_at", startDate.toISOString());
+    prevActiveWalletsQuery = applyStationFilter(prevActiveWalletsQuery, req.stationId);
+    const { count: prevActiveWallets } = await prevActiveWalletsQuery;
 
-    // New members in current period - filtered by station
-    const newMembersWhere = addStationFilter(
-      {
-        createdAt: { [Op.between]: [startDate, endDate] },
-      },
-      req.stationId
-    );
-    const newMembers = await Customer.count({ where: newMembersWhere });
+    // New members
+    let newMembersQuery = supabase
+      .from("customers")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", startDate.toISOString())
+      .lte("created_at", endDate.toISOString());
+    newMembersQuery = applyStationFilter(newMembersQuery, req.stationId);
+    const { count: newMembers } = await newMembersQuery;
 
-    const prevNewMembersWhere = addStationFilter(
-      {
-        createdAt: { [Op.between]: [prevStartDate, prevEndDate] },
-      },
-      req.stationId
-    );
-    const prevNewMembers = await Customer.count({ where: prevNewMembersWhere });
+    let prevNewMembersQuery = supabase
+      .from("customers")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", prevStartDate.toISOString())
+      .lte("created_at", prevEndDate.toISOString());
+    prevNewMembersQuery = applyStationFilter(prevNewMembersQuery, req.stationId);
+    const { count: prevNewMembers } = await prevNewMembersQuery;
 
-    // Inactive wallets - filtered by station
-    const inactiveWalletsWhere = addStationFilter(
-      { balance: { [Op.eq]: 0 } },
-      req.stationId
-    );
-    const inactiveWallets = await Wallet.count({ where: inactiveWalletsWhere });
+    // Inactive wallets
+    let inactiveWalletsQuery = supabase
+      .from("wallets")
+      .select("*", { count: "exact", head: true })
+      .eq("balance", 0);
+    inactiveWalletsQuery = applyStationFilter(inactiveWalletsQuery, req.stationId);
+    const { count: inactiveWallets } = await inactiveWalletsQuery;
 
-    // Credit members - filtered by station
-    const creditMembersWhere = addStationFilter(
-      { balance: { [Op.lt]: 0 } },
-      req.stationId
-    );
-    const creditMembers = await Wallet.count({ where: creditMembersWhere });
+    // Credit members
+    let creditMembersQuery = supabase
+      .from("wallets")
+      .select("*", { count: "exact", head: true })
+      .lt("balance", 0);
+    creditMembersQuery = applyStationFilter(creditMembersQuery, req.stationId);
+    const { count: creditMembers } = await creditMembersQuery;
 
     // Calculate trends
     const calculateTrend = (current, previous) => {
-      if (previous === 0) return current > 0 ? "+100%" : "0%";
-      const change = ((current - previous) / previous) * 100;
+      const curr = current || 0;
+      const prev = previous || 0;
+      if (prev === 0) return curr > 0 ? "+100%" : "0%";
+      const change = ((curr - prev) / prev) * 100;
       return `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`;
     };
 
@@ -117,28 +119,28 @@ router.get("/stats", auth, stationContext, async (req, res) => {
       {
         id: 1,
         title: "Active Wallets",
-        value: activeWallets.toString(),
+        value: (activeWallets || 0).toString(),
         trend: calculateTrend(activeWallets, prevActiveWallets),
         icon: "wallet-outline",
         bgColor: "#FFF3E0",
         trendColor: "#FF8C42",
-        positive: activeWallets >= prevActiveWallets,
+        positive: (activeWallets || 0) >= (prevActiveWallets || 0),
       },
       {
         id: 2,
         title: "New Members",
-        value: newMembers.toString(),
+        value: (newMembers || 0).toString(),
         trend: calculateTrend(newMembers, prevNewMembers),
         icon: "people-outline",
         bgColor: "#E8F5E9",
-        trendColor: newMembers >= prevNewMembers ? "#4CAF50" : "#FF5252",
-        positive: newMembers >= prevNewMembers,
+        trendColor: (newMembers || 0) >= (prevNewMembers || 0) ? "#4CAF50" : "#FF5252",
+        positive: (newMembers || 0) >= (prevNewMembers || 0),
       },
       {
         id: 3,
         title: "Inactive Wallets",
-        value: inactiveWallets.toString(),
-        trend: `Total: ${inactiveWallets}`,
+        value: (inactiveWallets || 0).toString(),
+        trend: `Total: ${inactiveWallets || 0}`,
         icon: "person-remove-outline",
         bgColor: "#F3E5F5",
         trendColor: "#999",
@@ -147,13 +149,13 @@ router.get("/stats", auth, stationContext, async (req, res) => {
       {
         id: 4,
         title: "Credit Members",
-        value: creditMembers.toString(),
+        value: (creditMembers || 0).toString(),
         trend: creditMembers > 0 ? "Alert" : "None",
         icon: "alert-circle-outline",
         bgColor: "#FFEBEE",
         trendColor: creditMembers > 0 ? "#FF5252" : "#4CAF50",
         positive: false,
-        isAlert: creditMembers > 0,
+        isAlert:CreditMembers > 0,
       },
     ];
 
@@ -169,48 +171,48 @@ router.get("/game-utilization", auth, stationContext, async (req, res) => {
   try {
     const { period = "week" } = req.query;
     const { startDate, endDate } = getDateRange(period);
-    const { Game, ActiveTable, Bill, sequelize } = await getModels();
+    const supabase = getSupabase();
 
     // Get all games for this station
-    const gamesWhere = addStationFilter({}, req.stationId);
-    const games = await Game.findAll({
-      where: gamesWhere,
-      attributes: ["game_id", "game_name", "image_key"],
-    });
+    let gamesQuery = supabase.from("games").select("game_id:gameid, game_name:gamename, image_key");
+    gamesQuery = applyStationFilter(gamesQuery, req.stationId);
+    const { data: games, error: gamesError } = await gamesQuery;
+    
+    if (gamesError) throw gamesError;
 
     // Calculate usage and revenue for each game
     const gameData = await Promise.all(
-      games.map(async (game) => {
-        // Count active sessions for this game in the period - filtered by station
-        const sessionWhere = addStationFilter(
-          {
-            game_id: game.game_id,
-            start_time: { [Op.between]: [startDate, endDate] },
-          },
-          req.stationId
-        );
-        const sessionCount = await ActiveTable.count({ where: sessionWhere });
+      (games || []).map(async (game) => {
+        // Count active sessions for this game in the period
+        let sessionQuery = supabase
+          .from("activetables")
+          .select("activeid", { count: "exact", head: true })
+          .eq("gameid", game.game_id)
+          .gte("starttime", startDate.toISOString())
+          .lte("starttime", endDate.toISOString());
+        
+        sessionQuery = applyStationFilter(sessionQuery, req.stationId);
+        const { count: sessionCount } = await sessionQuery;
 
-        // Get total sessions across all games in the period - filtered by station
-        const totalSessionsWhere = addStationFilter(
-          {
-            start_time: { [Op.between]: [startDate, endDate] },
-          },
-          req.stationId
-        );
-        const totalSessions = await ActiveTable.count({
-          where: totalSessionsWhere,
-        });
+        // Get total sessions across all games in the period
+        let totalSessionsQuery = supabase
+          .from("activetables")
+          .select("activeid", { count: "exact", head: true })
+          .gte("starttime", startDate.toISOString())
+          .lte("starttime", endDate.toISOString());
+        
+        totalSessionsQuery = applyStationFilter(totalSessionsQuery, req.stationId);
+        const { count: totalSessions } = await totalSessionsQuery;
 
         // Calculate usage percentage
         const usage =
-          totalSessions > 0
-            ? Math.round((sessionCount / totalSessions) * 100)
+          (totalSessions || 0) > 0
+            ? Math.round(((sessionCount || 0) / (totalSessions || 1)) * 100)
             : 0;
 
         // Estimate revenue based on sessions
         const avgRevenuePerSession = 500;
-        const revenue = sessionCount * avgRevenuePerSession;
+        const revenue = (sessionCount || 0) * avgRevenuePerSession;
 
         // Determine status based on usage
         let status, statusColor;
@@ -233,7 +235,7 @@ router.get("/game-utilization", auth, stationContext, async (req, res) => {
           status,
           statusColor,
           icon: "game-controller-outline",
-          sessionCount,
+          sessionCount: sessionCount || 0,
         };
       })
     );
@@ -272,79 +274,70 @@ router.get("/revenue", auth, stationContext, async (req, res) => {
   try {
     const { period = "week" } = req.query;
     const { startDate, endDate } = getDateRange(period);
-    const { Bill, Order } = await getModels();
+    const supabase = getSupabase();
 
-    // Total revenue in period - filtered by station
-    const revenueWhere = addStationFilter(
-      {
-        createdAt: { [Op.between]: [startDate, endDate] },
-        status: "paid",
-      },
-      req.stationId
-    );
-    const revenueResult = await Bill.findOne({
-      attributes: [
-        [fn("SUM", col("total_amount")), "totalRevenue"],
-        [fn("COUNT", col("id")), "totalBills"],
-      ],
-      where: revenueWhere,
-      raw: true,
-    });
+    // Total revenue in period
+    let revenueQuery = supabase
+      .from("bills")
+      .select("totalamount")
+      .gte("createdat", startDate.toISOString())
+      .lte("createdat", endDate.toISOString())
+      .eq("status", "paid");
+    
+    revenueQuery = applyStationFilter(revenueQuery, req.stationId);
+    const { data: revenueData, error: revenueError } = await revenueQuery;
+    
+    if (revenueError) throw revenueError;
 
-    // Previous period revenue - filtered by station
+    const totalRevenue = (revenueData || []).reduce((sum, bill) => sum + (Number(bill.totalamount) || 0), 0);
+    const totalBills = (revenueData || []).length;
+
+    // Previous period revenue
     const prevPeriodLength = endDate - startDate;
     const prevStartDate = new Date(startDate - prevPeriodLength);
     const prevEndDate = startDate;
 
-    const prevRevenueWhere = addStationFilter(
-      {
-        createdAt: { [Op.between]: [prevStartDate, prevEndDate] },
-        status: "paid",
-      },
-      req.stationId
-    );
-    const prevRevenueResult = await Bill.findOne({
-      attributes: [[fn("SUM", col("total_amount")), "totalRevenue"]],
-      where: prevRevenueWhere,
-      raw: true,
-    });
-
-    const currentRevenue = parseFloat(revenueResult?.totalRevenue || 0);
-    const prevRevenue = parseFloat(prevRevenueResult?.totalRevenue || 0);
+    let prevRevenueQuery = supabase
+      .from("bills")
+      .select("totalamount")
+      .gte("createdat", prevStartDate.toISOString())
+      .lte("createdat", prevEndDate.toISOString())
+      .eq("status", "paid");
+    
+    prevRevenueQuery = applyStationFilter(prevRevenueQuery, req.stationId);
+    const { data: prevRevenueData } = await prevRevenueQuery;
+    
+    const prevRevenue = (prevRevenueData || []).reduce((sum, bill) => sum + (Number(bill.totalamount) || 0), 0);
 
     // Calculate revenue trend
     let revenueTrend = "0%";
     if (prevRevenue > 0) {
-      const change = ((currentRevenue - prevRevenue) / prevRevenue) * 100;
+      const change = ((totalRevenue - prevRevenue) / prevRevenue) * 100;
       revenueTrend = `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`;
-    } else if (currentRevenue > 0) {
+    } else if (totalRevenue > 0) {
       revenueTrend = "+100%";
     }
 
-    // Daily/weekly breakdown - filtered by station
-    const breakdownWhere = addStationFilter(
-      {
-        createdAt: { [Op.between]: [startDate, endDate] },
-        status: "paid",
-      },
-      req.stationId
-    );
-    const revenueBreakdown = await Bill.findAll({
-      attributes: [
-        [fn("DATE", col("createdAt")), "date"],
-        [fn("SUM", col("total_amount")), "revenue"],
-        [fn("COUNT", col("id")), "count"],
-      ],
-      where: breakdownWhere,
-      group: [fn("DATE", col("createdAt"))],
-      order: [[fn("DATE", col("createdAt")), "ASC"]],
-      raw: true,
+    // Daily/weekly breakdown
+    // Note: Grouping by date isn't directly supported in simple select without RPC.
+    // We will do it in JS.
+    const revenueBreakdownMap = {};
+    (revenueData || []).forEach(bill => {
+        // Adjust date logic if needed, simplify to YYYY-MM-DD
+        const dateKey = new Date(bill.createdat || new Date()).toISOString().split('T')[0]; 
+        if (!revenueBreakdownMap[dateKey]) {
+            revenueBreakdownMap[dateKey] = { date: dateKey, revenue: 0, count: 0 };
+        }
+        revenueBreakdownMap[dateKey].revenue += Number(bill.totalamount) || 0;
+        revenueBreakdownMap[dateKey].count += 1;
     });
+    
+    const revenueBreakdown = Object.values(revenueBreakdownMap).sort((a, b) => a.date.localeCompare(b.date));
 
     res.json({
-      totalRevenue: currentRevenue,
-      totalRevenueFormatted: `₹${currentRevenue.toFixed(2)}`,
-      totalBills: parseInt(revenueResult?.totalBills || 0),
+      totalRevenue: totalRevenue,
+      totalRevenueFormatted: `₹${totalRevenue.toFixed(2)}`,
+      totalBills: totalBills,
       revenueTrend,
       revenueBreakdown,
       period,
@@ -360,8 +353,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
   try {
     const { period = "week" } = req.query;
     const { startDate, endDate } = getDateRange(period);
-    const { Wallet, Customer, Bill, ActiveTable, Game, TableAsset, Order } =
-      await getModels();
+    const supabase = getSupabase();
 
     // Current date for display
     const currentDate = new Date().toLocaleDateString("en-US", {
@@ -375,72 +367,160 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     const prevStartDate = new Date(startDate - prevPeriodLength);
     const prevEndDate = startDate;
 
-    // ===== STATS - all filtered by station =====
+    // ===== STATS - filters applied manually via supabase chain helpers =====
+    
+    // Active Wallets
+    let activeWalletsQuery = supabase
+      .from("wallets")
+      .select("*", { count: "exact", head: true })
+      .gt("balance", 0);
+    activeWalletsQuery = applyStationFilter(activeWalletsQuery, req.stationId);
+    
+    // New Members
+    let newMembersQuery = supabase
+      .from("customers")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", startDate.toISOString())
+      .lte("created_at", endDate.toISOString());
+    newMembersQuery = applyStationFilter(newMembersQuery, req.stationId);
+    
+    // Prev New Members
+    let prevNewMembersQuery = supabase
+      .from("customers")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", prevStartDate.toISOString())
+      .lte("created_at", prevEndDate.toISOString());
+    prevNewMembersQuery = applyStationFilter(prevNewMembersQuery, req.stationId);
+    
+    // Inactive Wallets
+    let inactiveWalletsQuery = supabase
+      .from("wallets")
+      .select("*", { count: "exact", head: true })
+      .eq("balance", 0);
+    inactiveWalletsQuery = applyStationFilter(inactiveWalletsQuery, req.stationId);
+
+    // Credit Wallets
+    let creditMembersQuery = supabase
+      .from("wallets")
+      .select("*", { count: "exact", head: true })
+      .lt("balance", 0);
+    creditMembersQuery = applyStationFilter(creditMembersQuery, req.stationId);
+
+    // Total Revenue (bills paid in dates) - Get tablecharges and menucharges
+    let revenueQuery = supabase
+      .from("bills")
+      .select("totalamount, tablecharges, menucharges, sessionduration, createdat")
+      .gte("createdat", startDate.toISOString())
+      .lte("createdat", endDate.toISOString())
+      .eq("status", "paid");
+    revenueQuery = applyStationFilter(revenueQuery, req.stationId);
+
+    // Prev Total Revenue
+    let prevRevenueQuery = supabase
+      .from("bills")
+      .select("totalamount")
+      .gte("createdat", prevStartDate.toISOString())
+      .lte("createdat", prevEndDate.toISOString())
+      .eq("status", "paid");
+    prevRevenueQuery = applyStationFilter(prevRevenueQuery, req.stationId);
+
+    // Total Sessions (Active + Completed in period?)
+    // Actually, dashboard usually tracks *activity*. Using bills for completed session stats (duration) and activeTables for current load.
+    let totalSessionsQuery = supabase
+      .from("activetables")
+      .select("*", { count: "exact", head: true })
+      .gte("starttime", startDate.toISOString())
+      .lte("starttime", endDate.toISOString());
+    totalSessionsQuery = applyStationFilter(totalSessionsQuery, req.stationId);
+
+    // Active Tables
+    let activeTablesQuery = supabase
+      .from("activetables")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "active");
+    activeTablesQuery = applyStationFilter(activeTablesQuery, req.stationId);
+
+    // Total Tables
+    let totalTablesQuery = supabase
+      .from("tables")
+      .select("*", { count: "exact", head: true });
+    totalTablesQuery = applyStationFilter(totalTablesQuery, req.stationId);
+
+    // Low Stock Items (Inventory where quantity < 5)
+    let lowStockQuery = supabase
+      .from("inventory")
+      .select("*", { count: "exact", head: true })
+      .lt("quantity", 5);
+      // Inventory might use station_id? Usually yes.
+    lowStockQuery = applyStationFilter(lowStockQuery, req.stationId);
+
+
     const [
-      activeWallets,
-      newMembers,
-      prevNewMembers,
-      inactiveWallets,
-      creditMembers,
-      totalRevenue,
-      prevTotalRevenue,
-      totalSessions,
-      activeTables,
+      { count: activeWallets },
+      { count: newMembers },
+      { count: prevNewMembers },
+      { count: inactiveWallets },
+      { count: creditMembers },
+      { data: revenueData },
+      { data: prevRevenueData },
+      { count: totalSessions },
+      { count: activeTables },
+      { count: totalTables },
+      { count: lowStockCount }
     ] = await Promise.all([
-      Wallet.count({
-        where: addStationFilter({ balance: { [Op.gt]: 0 } }, req.stationId),
-      }),
-      Customer.count({
-        where: addStationFilter(
-          { createdAt: { [Op.between]: [startDate, endDate] } },
-          req.stationId
-        ),
-      }),
-      Customer.count({
-        where: addStationFilter(
-          { createdAt: { [Op.between]: [prevStartDate, prevEndDate] } },
-          req.stationId
-        ),
-      }),
-      Wallet.count({
-        where: addStationFilter({ balance: { [Op.eq]: 0 } }, req.stationId),
-      }),
-      Wallet.count({
-        where: addStationFilter({ balance: { [Op.lt]: 0 } }, req.stationId),
-      }),
-      Bill.sum("total_amount", {
-        where: addStationFilter(
-          {
-            createdAt: { [Op.between]: [startDate, endDate] },
-            status: "paid",
-          },
-          req.stationId
-        ),
-      }),
-      Bill.sum("total_amount", {
-        where: addStationFilter(
-          {
-            createdAt: { [Op.between]: [prevStartDate, prevEndDate] },
-            status: "paid",
-          },
-          req.stationId
-        ),
-      }),
-      ActiveTable.count({
-        where: addStationFilter(
-          { start_time: { [Op.between]: [startDate, endDate] } },
-          req.stationId
-        ),
-      }),
-      ActiveTable.count({
-        where: addStationFilter({ status: "active" }, req.stationId),
-      }),
+      activeWalletsQuery,
+      newMembersQuery,
+      prevNewMembersQuery,
+      inactiveWalletsQuery,
+      creditMembersQuery,
+      revenueQuery,
+      prevRevenueQuery,
+      totalSessionsQuery,
+      activeTablesQuery,
+      totalTablesQuery,
+      lowStockQuery
     ]);
+
+    // Calculate Occupancy Rate
+    const occupancyRate = (totalTables || 0) > 0 
+        ? Math.round(((activeTables || 0) / (totalTables || 1)) * 100) 
+        : 0;
+
+    // Financials Breakdown from REVENUE_DATA (Paid Bills)
+    const bills = revenueData || [];
+    const totalRevenue = bills.reduce((sum, b) => sum + (Number(b.totalamount) || 0), 0);
+    const gameRevenue = bills.reduce((sum, b) => sum + (Number(b.tablecharges) || 0), 0);
+    const foodRevenue = bills.reduce((sum, b) => sum + (Number(b.menucharges) || 0), 0);
+    
+    // Session Duration Stats (from Bills as they store final duration)
+    const validDurationBills = bills.filter(b => b.sessionduration > 0);
+    const avgSessionDuration = validDurationBills.length > 0
+        ? Math.round(validDurationBills.reduce((sum, b) => sum + b.sessionduration, 0) / validDurationBills.length)
+        : 0;
+
+    // Peak Hours (Simple Heatmap)
+    const hoursMap = new Array(24).fill(0);
+    bills.forEach(b => {
+        const date = new Date(b.createdat); // Using bill creation time as proxy for session end/payment time (peak)
+        const hour = date.getHours();
+        hoursMap[hour]++;
+    });
+    // Find peak hour
+    const peakHourVal = Math.max(...hoursMap);
+    const peakHourIndex = hoursMap.indexOf(peakHourVal);
+    const peakHourLabel = `${peakHourIndex}:00 - ${peakHourIndex+1}:00`;
+
+
+    const prevRevenueVal = (prevRevenueData || []).reduce((sum, b) => sum + (Number(b.totalamount) || 0), 0);
+    const expenses = 0; // Placeholder
+    const netProfit = totalRevenue - expenses;
 
     // Calculate trends
     const calculateTrend = (current, previous) => {
-      if (previous === 0) return current > 0 ? "+100%" : "0%";
-      const change = ((current - previous) / previous) * 100;
+      const curr = current || 0;
+      const prev = previous || 0;
+      if (prev === 0) return curr > 0 ? "+100%" : "0%";
+      const change = ((curr - prev) / prev) * 100;
       return `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`;
     };
 
@@ -448,8 +528,8 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       {
         id: 1,
         title: "Active Wallets",
-        value: activeWallets.toString(),
-        trend: `${activeWallets} total`,
+        value: (activeWallets || 0).toString(),
+        trend: `${activeWallets || 0} total`,
         icon: "wallet-outline",
         bgColor: "#FFF3E0",
         trendColor: "#FF8C42",
@@ -458,62 +538,61 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       {
         id: 2,
         title: "New Members",
-        value: newMembers.toString(),
+        value: (newMembers || 0).toString(),
         trend: calculateTrend(newMembers, prevNewMembers),
         icon: "people-outline",
         bgColor: "#E8F5E9",
-        trendColor: newMembers >= prevNewMembers ? "#4CAF50" : "#FF5252",
-        positive: newMembers >= prevNewMembers,
+        trendColor: (newMembers || 0) >= (prevNewMembers || 0) ? "#4CAF50" : "#FF5252",
+        positive: (newMembers || 0) >= (prevNewMembers || 0),
       },
       {
         id: 3,
-        title: "Inactive Wallets",
-        value: inactiveWallets.toString(),
-        trend: `yesterday: ${inactiveWallets}`,
-        icon: "person-remove-outline",
-        bgColor: "#F3E5F5",
-        trendColor: "#999",
-        positive: false,
+        title: "Low Stock Items",
+        value: (lowStockCount || 0).toString(),
+        trend: (lowStockCount || 0) > 0 ? "Action Needed" : "Healthy",
+        icon: "alert-circle-outline", // Using existing icon set
+        bgColor: (lowStockCount || 0) > 0 ? "#FFEBEE" : "#E8F5E9", // Red if low stock
+        trendColor: (lowStockCount || 0) > 0 ? "#FF5252" : "#4CAF50",
+        positive: (lowStockCount || 0) === 0,
       },
       {
         id: 4,
         title: "Credit Member",
-        value: creditMembers.toString(),
+        value: (creditMembers || 0).toString(),
         trend: creditMembers > 0 ? "Alert" : "None",
         icon: "alert-circle-outline",
         bgColor: "#FFEBEE",
         trendColor: creditMembers > 0 ? "#FF5252" : "#4CAF50",
         positive: false,
-        isAlert: creditMembers > 0,
+        isAlert: (creditMembers || 0) > 0,
       },
     ];
 
     // ===== GAME DATA - filtered by station =====
-    const games = await Game.findAll({
-      where: addStationFilter({}, req.stationId),
-      attributes: ["game_id", "game_name"],
-    });
+    let gamesQuery = supabase.from("games").select("game_id:gameid, game_name:gamename");
+    gamesQuery = applyStationFilter(gamesQuery, req.stationId);
+    const { data: games } = await gamesQuery;
 
     const gameData = await Promise.all(
-      games.map(async (game) => {
-        const sessionCount = await ActiveTable.count({
-          where: addStationFilter(
-            {
-              game_id: game.game_id,
-              start_time: { [Op.between]: [startDate, endDate] },
-            },
-            req.stationId
-          ),
-        });
+      (games || []).map(async (game) => {
+        let sessionCountQuery = supabase
+          .from("activetables")
+          .select("activeid", { count: "exact", head: true })
+          .eq("gameid", game.game_id)
+          .gte("starttime", startDate.toISOString())
+          .lte("starttime", endDate.toISOString());
+        
+        sessionCountQuery = applyStationFilter(sessionCountQuery, req.stationId);
+        const { count: sessionCount } = await sessionCountQuery;
 
         const usage =
-          totalSessions > 0
-            ? Math.round((sessionCount / totalSessions) * 100)
+          (totalSessions || 0) > 0
+            ? Math.round(((sessionCount || 0) / (totalSessions || 1)) * 100)
             : 0;
 
-        // Estimate revenue based on sessions (simplified)
-        const avgRevenuePerSession = 500; // Default estimate
-        const revenue = sessionCount * avgRevenuePerSession;
+        // Estimate revenue
+        const avgRevenuePerSession = 500; 
+        const revenue = (sessionCount || 0) * avgRevenuePerSession;
 
         let status, statusColor;
         if (usage >= 70) {
@@ -563,11 +642,23 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       gameData: gameData.slice(0, 5),
       chartData,
       summary: {
-        totalRevenue: totalRevenue || 0,
-        totalRevenueFormatted: `₹${(totalRevenue || 0).toFixed(2)}`,
-        revenueTrend: calculateTrend(totalRevenue || 0, prevTotalRevenue || 0),
+        totalRevenue: totalRevenue,
+        totalRevenueFormatted: `₹${totalRevenue.toFixed(2)}`,
+        gameRevenue: gameRevenue,
+        gameRevenueFormatted: `₹${gameRevenue.toFixed(2)}`,
+        foodRevenue: foodRevenue,
+        foodRevenueFormatted: `₹${foodRevenue.toFixed(2)}`,
+        revenueTrend: calculateTrend(totalRevenue, prevRevenueVal),
+        netProfit: netProfit,
+        netProfitFormatted: `₹${netProfit.toFixed(2)}`,
+        expenses: expenses,
+        expensesFormatted: `₹${expenses.toFixed(2)}`,
+        occupancyRate,
+        avgSessionDuration,
+        peakHourLabel,
         totalSessions,
         activeTables,
+        totalTables
       },
     });
   } catch (error) {
