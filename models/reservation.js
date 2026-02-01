@@ -21,6 +21,9 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM("pending", "active", "done", "cancelled"),
         defaultValue: "pending",
       },
+      booking_type: { type: DataTypes.STRING(20), defaultValue: "timer" },
+      frame_count: { type: DataTypes.INTEGER },
+      set_time: { type: DataTypes.STRING(20) },
       notes: { type: DataTypes.STRING(255) },
     },
     { tableName: "reservations", timestamps: true }

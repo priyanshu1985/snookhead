@@ -1,5 +1,5 @@
 import express from "express";
-import { ActiveTable, TableAsset, Order, Bill, OrderItem, MenuItem, Queue } from "../models/index.js";
+import { ActiveTable, TableAsset, Order, Bill, OrderItem, MenuItem, Queue, Reservation } from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
   stationContext,
@@ -37,6 +37,25 @@ async function checkQueueAndAssign(tableId, gameId, stationId) {
     const nextInQueue = preferredEntry || waitingForGame[0];
     console.log(`[QueueDebug] Next in queue: ${nextInQueue ? nextInQueue.customername : 'None'}`);
 
+    // Check if there is an imminent reservation for this table
+    const tableReservations = await Reservation.findAll({
+        where: addStationFilter({ tableId: tableId, status: 'pending' }, stationId)
+    });
+    
+    const now = new Date();
+    // Check for any reservation starting in the next 60 minutes
+    // If so, do not auto-assign from queue to avoid conflict
+    const conflict = tableReservations.find(r => {
+        const rTime = new Date(r.reservationtime || r.reservation_time || r.fromTime);
+        const diff = (rTime - now) / 60000;
+        return diff > -15 && diff < 60; // Valid overlap window
+    });
+    
+    if (conflict) {
+        console.log(`[QueueDebug] Skipping queue assignment for Table ${tableId} due to reservation at ${new Date(conflict.fromTime || conflict.reservationtime).toLocaleTimeString()}`);
+        return { assigned: false, message: "Table has upcoming reservation" };
+    }
+
     if (nextInQueue) {
       // Start the session automatically
       const currentTimestamp = new Date();
@@ -71,9 +90,10 @@ async function checkQueueAndAssign(tableId, gameId, stationId) {
           durationminutes: durationMinutes,
           customer_name: nextInQueue.customername,
           gameid: gameId,
-          bookingtype: bookingType,
-          framecount: nextInQueue.frame_count || null,
+          bookingtype: bookingType, // REVERTED
+          framecount: nextInQueue.frame_count || null, // REVERTED
           status: "active",
+          // bookingsource removed
         },
         stationId
       );
@@ -90,7 +110,7 @@ async function checkQueueAndAssign(tableId, gameId, stationId) {
           total: 0,
           status: "pending",
           session_id: newSession.activeid || newSession.active_id,
-          order_source: "queue_auto_assign",
+          order_source: "queue", // Standardized for Dashboard
         },
         stationId
       );
@@ -205,10 +225,59 @@ router.post(
                  where: addStationFilter({ tableid: table_id, status: "active" }, req.stationId) 
              });
         }
-        
-        // return res.status(400).json({ error: "Table is not available" });
-        // Proceeding to book...
       }
+
+      // --- CHECK FOR RESERVATION CONFLICT ---
+      // Before starting, ensure this doesn't conflict with a pending reservation for THIS table
+      const now = new Date();
+      // Estimate end time of this NEW session
+      // If duration is not provided, assume at least 30 mins to avoid immediate conflict? 
+      // Or just check if "now" is reserved.
+      const estimatedDuration = duration_minutes || 60;
+      const proposedEnd = new Date(now.getTime() + estimatedDuration * 60000);
+
+      const tableReservations = await Reservation.findAll({
+          where: addStationFilter({ tableId: table_id, status: 'pending' }, req.stationId)
+      });
+
+      const conflictingReservation = tableReservations.find(r => {
+           // Check if reservation overlaps [Now, ProposedEnd]
+           // AND validation: Check if reservation is NOT for the customer we are currently seating (if we could match them)
+           // But here we might be identifying the reservation by other means.
+           // However, if the user explicitly clicked "Start" on the dashboard, 
+           // they typically expect to override unless it's a *different* person.
+           // BUT logic requires "strict no overlapping".
+           
+           // If the dashboard start is *triggering* a reservation, then we should probably bypass this check?
+           // The frontend calls /start when "starting a session" from a reservation.
+           // If reservationId is passed in body, we know it's fulfilling that reservation.
+           if (req.body.reservationId && String(r.id) === String(req.body.reservationId)) {
+               return false; // Valid fulfillment
+           }
+
+           const rTime = new Date(r.reservationtime || r.reservation_time || r.fromTime);
+           
+           // Conflict if reservation starts BEFORE our session ends AND reservation is in future (or very recent past)
+           // Logic: Overlap if (StartA < EndB) and (EndA > StartB)
+           // StartA = Now, EndA = ProposedEnd
+           // StartB = rTime, EndB = rTime + Duration
+           
+           // Simple check: Is reservation time occurring during this session?
+           // Also, ignore reservations in the past (> 30 mins ago) as they are likely stale/missed.
+           const isRelevant = rTime > new Date(now.getTime() - 30 * 60000); 
+
+           return isRelevant && rTime < proposedEnd;
+      });
+
+      if (conflictingReservation) {
+           const rTime = new Date(conflictingReservation.reservationtime || conflictingReservation.reservationtime || conflictingReservation.fromTime);
+           return res.status(409).json({
+               error: "Conflict", 
+               message: `Cannot start session. Table is reserved at ${rTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} for ${conflictingReservation.customerName}.`,
+               reservationId: conflictingReservation.id
+           });
+      }
+      // --------------------------------------
 
       // Calculate booking_end_time if duration is provided
       const startTime = new Date();
@@ -217,6 +286,23 @@ router.post(
         bookingEndTime = new Date(
           startTime.getTime() + duration_minutes * 60000
         );
+      }
+
+
+      // Determine booking source
+      let bookingSource = req.body.booking_source;
+      if (!bookingSource) {
+          if (req.body.reservationId) {
+              bookingSource = 'reservation';
+          } else {
+              // Check if table was assigned via queue (physically seated but session starting now)
+              const queueEntry = await Queue.findOne({ where: addStationFilter({ preferredtableid: table_id, status: 'seated' }, req.stationId) });
+              if (queueEntry) {
+                   bookingSource = 'queue';
+              } else {
+                   bookingSource = 'dashboard';
+              }
+          }
       }
 
       // create active session with station_id
@@ -230,8 +316,9 @@ router.post(
           durationminutes: duration_minutes || null,
           status: "active",
           customer_name: customer_name || null, // Save customer name
-          bookingtype: booking_type || 'timer', // Save booking type (default: timer for backward compatibility)
-          framecount: frame_count || null // Save frame count for frame-based bookings
+          bookingtype: booking_type || 'timer', // REVERTED
+          framecount: frame_count || null, // REVERTED
+          // bookingsource removed due to schema constraint
         },
         req.stationId
       );
@@ -245,7 +332,7 @@ router.post(
           total: 0,
           status: "pending",
           session_id: session.activeid || session.active_id, // Link to session using DB column name or object property
-          order_source: "table_booking",
+          order_source: bookingSource, // Persist source here
         },
         req.stationId
       );
@@ -347,6 +434,40 @@ router.post(
         // No one in queue - free the table
         await TableAsset.update({ status: "available" }, { where: { id: table.id } });
       }
+
+      // --- NEW: Sync Reservation Status ---
+      // Find any active/assigned/pending reservation for this table that overlaps 'now'
+      // effectively closing the reservation that "caused" this session.
+      const now = new Date();
+      const linkedReservation = await Reservation.findOne({
+          where: addStationFilter({ 
+              tableId: table.id,
+              // We want reservations that are possibly blocking this table.
+              // Status check matching typical flows.
+          }, req.stationId)
+      });
+      
+      // Since findOne with complex OR/Time logic is hard via simple wrapper, 
+      // let's fetch all active/pending for this table and filter in JS (safer given helper limitations)
+      const allTableRes = await Reservation.findAll({
+          where: addStationFilter({ tableId: table.id }, req.stationId)
+      });
+      
+      const activeRes = allTableRes.find(r => 
+          (r.status === 'active' || r.status === 'pending' || r.status === 'assigned') &&
+          new Date(r.fromTime || r.reservationtime) <= now &&
+          // end time is in future or it's currently active
+          (r.toTime ? new Date(r.toTime) > now : true)
+      );
+
+      if (activeRes) {
+          await Reservation.update({
+              status: 'cancelled', // Use 'cancelled' as 'completed' is not a valid enum value
+              toTime: now, // Clamp end time to actual session end
+          }, { where: { id: activeRes.id } });
+          console.log(`[SessionStop] Auto-cancelled reservation ${activeRes.id} to release table`);
+      }
+      // ------------------------------------
 
       // If skip_bill is true, just return session info without creating a bill
       if (skip_bill) {
@@ -450,6 +571,29 @@ router.post(
         }
       }
 
+      // --- NEW: Sync Reservation Status (Auto Release) ---
+      if (table) {
+          const now = new Date();
+          const allTableRes = await Reservation.findAll({
+              where: addStationFilter({ tableId: table.id }, req.stationId)
+          });
+          
+          const activeRes = allTableRes.find(r => 
+              (r.status === 'active' || r.status === 'pending' || r.status === 'assigned') &&
+              new Date(r.fromTime || r.reservationtime) <= now &&
+              (r.toTime ? new Date(r.toTime) > now : true)
+          );
+    
+          if (activeRes) {
+              await Reservation.update({
+                  status: 'cancelled', // Use 'cancelled' as 'completed' is not a valid enum value
+                  toTime: now,
+              }, { where: { id: activeRes.id } });
+              console.log(`[AutoRelease] Auto-cancelled reservation ${activeRes.id} to release table`);
+          }
+      }
+      // ---------------------------------------------------
+
       // Compute table charges
       // Use booked duration if available (timer mode), otherwise use elapsed time
       const startTime = new Date(session.starttime);
@@ -525,10 +669,19 @@ router.post(
             minutes,
             pricePerMin,
             auto_released: true,
+            advance_payment: req.body.advance_payment || 0,
           }),
         },
         req.stationId
       );
+
+      // Check if fully paid via advance payment
+      const advancePayment = Number(req.body.advance_payment || 0);
+      if (advancePayment >= total_amount && total_amount > 0) {
+          billData.status = 'paid';
+          billData.paidat = new Date();
+      }
+
       const bill = await Bill.create(billData);
 
       res.json({
@@ -575,9 +728,9 @@ router.put(
 
       // Whitelist allowed updates
       const allowedUpdates = {};
-      if (updates.frame_count !== undefined) allowedUpdates.framecount = updates.frame_count;
-      if (updates.booking_end_time !== undefined) allowedUpdates.bookingendtime = updates.booking_end_time;
-      if (updates.duration_minutes !== undefined) allowedUpdates.durationminutes = updates.duration_minutes;
+      if (updates.frame_count !== undefined) allowedUpdates.framecount = updates.frame_count; // REVERTED
+      if (updates.booking_end_time !== undefined) allowedUpdates.bookingendtime = updates.booking_end_time; // REVERTED
+      if (updates.duration_minutes !== undefined) allowedUpdates.durationminutes = updates.duration_minutes; // REVERTED
       
       if (Object.keys(allowedUpdates).length === 0) {
           return res.status(400).json({ error: "No valid fields to update" });

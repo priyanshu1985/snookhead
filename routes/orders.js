@@ -28,13 +28,13 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!personName || !cart || cart.length === 0) {
+    if (!cart || cart.length === 0) {
       return res.status(400).json({
-        error: "personName and cart items are required",
+        error: "Cart items are required",
       });
     }
 
-    if (!["offline", "online", "hybrid"].includes(paymentMethod)) {
+    if (!["offline", "online", "hybrid", "wallet"].includes(paymentMethod)) {
       return res.status(400).json({
         error: "Invalid payment method",
       });
@@ -44,7 +44,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
     const orderData = addStationToData(
       {
         userId: req.user.id, // from auth token
-        personName,
+        personName: personName || "Walk-in Customer",
         total: Number(orderTotal) || 0,
         paymentMethod,
         cashAmount:

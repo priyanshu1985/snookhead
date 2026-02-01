@@ -231,6 +231,16 @@ const models = {
       return data;
     },
 
+    async findOne(filter) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .select("*")
+        .match(filter.where || filter)
+        .single();
+      if (error && error.code !== "PGRST116") throw error;
+      return data;
+    },
+
     async create(reservationData) {
       const { data, error } = await getDb()
         .from(this.tableName)

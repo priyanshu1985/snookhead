@@ -137,6 +137,7 @@ router.get(
           },
           wallet_amount: bill.wallet_amount || 0,
           order_amount: bill.totalamount || 0,
+          advance_payment: details.advance_payment || 0, // Expose advance payment
           createdAt: bill.createdAt,
           updatedAt: bill.updatedAt,
         };
@@ -211,6 +212,7 @@ router.get(
         },
         wallet_amount: bill.wallet_amount || 0,
         order_amount: bill.totalamount || 0,
+        advance_payment: details.advance_payment || 0, // Expose advance payment
         createdAt: bill.createdAt,
         updatedAt: bill.updatedAt,
       };
@@ -238,8 +240,14 @@ router.post(
         return res.status(400).json({ error: "Bill is already paid" });
       }
 
+      const { paymentMethod } = req.body;
+
       await Bill.update(
-        { status: "paid", paidat: new Date() }, // paidat lowercase
+        { 
+            status: "paid", 
+            paidat: new Date(),
+            paymentmethod: paymentMethod || "cash"
+        },
         { where: { id: bill.id } }
       );
 
@@ -286,7 +294,7 @@ router.post(
       let actualPricePerMin = 0;
       let actualFrameCharges = 0;
 
-      if (table_id && session_duration > 0) {
+      if (table_id && (session_duration > 0 || frame_charges > 0)) {
         const tableWhere = addStationFilter({ id: table_id }, req.stationId);
         const table = await TableAsset.findOne({ where: tableWhere });
         if (!table) {
@@ -306,6 +314,9 @@ router.post(
 
         table_charges =
           session_duration * actualPricePerMin + actualFrameCharges;
+        
+        // Ensure table charges reflect frame mode correctly if session_duration is 0 but we have frame charges
+        // (The formula above works if duration is 0, but good to be explicit about logging)
         
         console.log("DEBUG: Table Charges Calc:", {
             session_duration,
@@ -362,13 +373,49 @@ router.post(
         .toUpperCase()}`;
 
       // 5. Create items summary
+      // Check if it's frame mode (implied by frame_charges > 0 and duration near 0, or explicit booking_type logic if we had it)
+      // Since we don't have explicit booking_type in body here, we infer.
+      const isFrameMode = frame_charges > 0 && session_duration === 0;
+      const tableChargeLabel = isFrameMode 
+          ? `Table charges (${req.body.frame_count || '?'} frames)`
+          : `Table charges (${session_duration} min)`;
+
       const items_summary =
         [
-          table_id ? `Table charges (${session_duration} min)` : null,
+          table_id ? tableChargeLabel : null,
           ...bill_items.map((item) => `${item.name} x${item.quantity}`),
         ]
           .filter(Boolean)
           .join(", ") || "Service charges";
+
+
+      // Fetch session data for accurate revenue tracking (source/type)
+      let bookingSource = 'dashboard';
+      let bookingType = 'timer';
+      if (session_id) {
+          try {
+             // Retrieve session from DB if possible using model helper (or raw Supabase if needed)
+             // Using defined model:
+             const session = await ActiveTable.findByPk(session_id);
+             if (session) {
+                 bookingSource = session.bookingsource; 
+                 bookingType = session.bookingtype || 'timer';
+
+                 // Fallback: Check Linked Order if source missing in ActiveTable
+                 if (!bookingSource) {
+                     const linkedOrder = await Order.findOne({ where: { active_id: session_id } }); // Note: Order uses active_id fk usually, but check schema
+                     // Schema says: `active_id` int in Orders table.
+                     if (linkedOrder && linkedOrder.order_source) {
+                         bookingSource = linkedOrder.order_source;
+                     }
+                 }
+                 // Final default
+                 bookingSource = bookingSource || 'dashboard';
+             }
+          } catch (e) {
+             console.log("Error fetching session for bill details:", e);
+          }
+      }
 
       // 6. Create the bill with station_id
       const billData = addStationToData(
@@ -389,6 +436,9 @@ router.post(
             booking_time,
             table_price_per_min: actualPricePerMin,
             frame_charges: actualFrameCharges,
+            advance_payment: req.body.advance_payment || 0,
+            booking_source: bookingSource, // Tracked!
+            booking_type: bookingType, // Tracked!
             calculation_breakdown: {
               table_charges,
               menu_charges,
@@ -399,6 +449,14 @@ router.post(
         },
         req.stationId
       );
+
+      // Check if fully paid via advance payment
+      const advancePayment = Number(req.body.advance_payment || 0);
+      if (advancePayment >= total_amount && total_amount > 0) {
+          billData.status = 'paid';
+          billData.paidat = new Date();
+      }
+
       const bill = await Bill.create(billData);
 
       res.status(201).json({

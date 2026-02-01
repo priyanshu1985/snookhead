@@ -179,7 +179,34 @@ router.put(
         return res.status(404).json({ error: "Table not found" });
       }
 
-      await TableAsset.update(req.body, { where: { id: req.params.id } });
+      // Map and sanitize the update data, similar to POST
+      const {
+        name,
+        dimension,
+        onboardDate,
+        type,
+        pricePerMin,
+        status,
+        frameCharge,
+        game_id,
+        gameid // handle both cases if sent
+      } = req.body;
+
+      // Construct update object with correct DB column names
+      const updateData = {};
+      if (name !== undefined) updateData.name = name;
+      if (dimension !== undefined) updateData.dimension = dimension;
+      if (onboardDate !== undefined) updateData.onboardDate = onboardDate;
+      if (type !== undefined) updateData.type = type;
+      if (pricePerMin !== undefined) updateData.pricePerMin = pricePerMin;
+      if (status !== undefined) updateData.status = status;
+      if (frameCharge !== undefined) updateData.frameCharge = frameCharge;
+      
+      // Handle game_id mapping logic
+      if (game_id !== undefined) updateData.gameid = game_id;
+      else if (gameid !== undefined) updateData.gameid = gameid;
+
+      await TableAsset.update(updateData, { where: { id: req.params.id } });
       // Fetch updated table
       const updatedTable = await TableAsset.findByPk(req.params.id);
 

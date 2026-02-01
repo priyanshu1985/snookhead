@@ -1,5 +1,5 @@
 import express from "express";
-import { Queue, TableAsset, Game } from "../models/index.js";
+import { Queue, TableAsset, Game, Reservation } from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
   stationContext,
@@ -341,6 +341,33 @@ router.post(
         return res.status(400).json({ error: `Table is not available. Current status: ${table.status}` });
       }
 
+      // Check for CONFLICTS with Reservations
+      const now = new Date();
+      // Assume a 60 min session if not specified, or use queue entry preference if timer mode.
+      const durationMins = (entry.booking_type === 'timer' && entry.duration_minutes) ? entry.duration_minutes : 60; 
+      const sessionEnd = new Date(now.getTime() + durationMins * 60000);
+
+      const tableReservations = await Reservation.findAll({ 
+          where: addStationFilter({ tableId: parseInt(tableid), status: 'pending' }, req.stationId) 
+      });
+
+      // Filter for conflicts: ResTime < SessionEnd
+      const conflict = tableReservations.find(r => {
+          const rTime = new Date(r.reservationtime || r.reservation_time || r.fromTime);
+          // Only check future reservations today/tomorrow
+          // If ResTime is passing NOW, it should have been auto-started/expired, but if it's pending it blocks.
+          // Logic: ResTime < SessionEnd && ResTime > Now-Buffer
+          return rTime < sessionEnd && rTime > new Date(now.getTime() - 15*60000);
+      });
+
+      if (conflict) {
+          const rTime = new Date(conflict.reservationtime || conflict.reservation_time || conflict.fromTime);
+          return res.status(400).json({ 
+              error: `Table is reserved at ${rTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
+              details: "Conflict with upcoming reservation."
+          });
+      }
+
       // Check table is for the correct game
       if (table.gameid !== entry.gameid) {
         return res.status(400).json({ error: "Table is not for this game type" });
@@ -413,18 +440,37 @@ router.post(
 
       const nextEntry = waitingFiltered[0];
 
-      // Find available table for this game
+      // Find available table for this game that DOES NOT have a conflict
       const allTables = await TableAsset.findAll({
         where: req.stationId ? { stationid: req.stationId } : {},
       });
+      
+      const gameTables = allTables.filter((t) => t.status === "available" && t.gameid === nextEntry.gameid);
 
-      const availableTable = allTables.find(
-        (t) => t.status === "available" && t.gameid === nextEntry.gameid
-      );
+      // Filter out tables with conflicts
+      const now = new Date();
+      const durationMins = (nextEntry.booking_type === 'timer' && nextEntry.duration_minutes) ? nextEntry.duration_minutes : 60; 
+      const sessionEnd = new Date(now.getTime() + durationMins * 60000);
+
+      // Get all pending reservations for this station
+      const allReservations = await Reservation.findAll({ 
+          where: addStationFilter({ status: 'pending' }, req.stationId) 
+      });
+
+      const availableTable = gameTables.find(table => {
+           // Check if this specific table has a conflict
+           const conflict = allReservations.find(r => {
+                if (String(r.tableId || r.table_id) !== String(table.id)) return false;
+                
+                const rTime = new Date(r.reservationtime || r.reservation_time || r.fromTime);
+                return rTime < sessionEnd && rTime > new Date(now.getTime() - 15*60000);
+           });
+           return !conflict; // Keep if no conflict
+      });
 
       if (!availableTable) {
         return res.status(400).json({
-          error: "No available table for this game",
+          error: "No available table (tables are occupied or reserved)",
           nextInQueue: nextEntry,
         });
       }
