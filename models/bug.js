@@ -11,6 +11,14 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      image_url: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
+      audio_url: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
       category: {
         type: DataTypes.STRING(50),
         allowNull: false,

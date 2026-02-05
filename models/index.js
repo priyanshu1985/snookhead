@@ -800,10 +800,90 @@ const models = {
     },
   },
 
+  Expense: {
+    tableName: "expenses",
+    async findAll(filter = {}) {
+      let query = getDb().from(this.tableName).select("*");
+      if (filter.where) {
+        Object.keys(filter.where).forEach((key) => {
+          query = query.eq(key, filter.where[key]);
+        });
+      }
+      // Apply sorting if provided (e.g., [[ 'date', 'DESC' ]])
+      if (filter.order) {
+        filter.order.forEach(([col, dir]) => {
+           query = query.order(col, { ascending: dir === "ASC" });
+        });
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+
+    async findOne(filter) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .select("*")
+        .match(filter.where || filter)
+        .single();
+      if (error && error.code !== "PGRST116") throw error;
+      return data;
+    },
+
+    async create(expenseData) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .insert(expenseData)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+
+    async update(expenseData, filter) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .update(expenseData)
+        .match(filter.where || filter)
+        .select();
+      if (error) throw error;
+      return data;
+    },
+
+    async destroy(filter) {
+      const { error } = await getDb()
+        .from(this.tableName)
+        .delete()
+        .match(filter.where || filter);
+      if (error) throw error;
+      return true;
+    },
+
+  },
+
   Bug: {
     tableName: "bugs",
-    async findAll() {
-      const { data, error } = await getDb().from(this.tableName).select("*");
+    async findAll(filter = {}) {
+      // Custom select to include relations
+      // reporter (User), assignee (User), station (Station)
+      // Note: We use !foreign_key syntax for Supabase if needed, or just standard join if defined
+      const select = "*, reporter:users!reportedby(id, name, email), assignee:users!assignedto(id, name, email), station:stations!stationid(id, stationname, ownername)";
+      
+      let query = getDb().from(this.tableName).select(select);
+      
+      if (filter.where) {
+        Object.keys(filter.where).forEach((key) => {
+          query = query.eq(key, filter.where[key]);
+        });
+      }
+
+      if (filter.order) {
+        filter.order.forEach(([col, dir]) => {
+           query = query.order(col, { ascending: dir === 'ASC' });
+        });
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
@@ -816,6 +896,36 @@ const models = {
         .single();
       if (error) throw error;
       return data;
+    },
+    
+    async findOne(filter) {
+      const select = "*, reporter:users!reportedby(id, name, email), assignee:users!assignedto(id, name, email), station:stations!stationid(id, stationname, ownername)";
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .select(select)
+        .match(filter.where || filter)
+        .single();
+      if (error && error.code !== "PGRST116") throw error;
+      return data;
+    },
+
+    async update(bugData, filter) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .update(bugData)
+        .match(filter.where || filter)
+        .select();
+      if (error) throw error;
+      return data;
+    },
+
+    async destroy(filter) {
+      const { error } = await getDb()
+        .from(this.tableName)
+        .delete()
+        .match(filter.where || filter);
+      if (error) throw error;
+      return true;
     },
   },
 
@@ -1091,6 +1201,39 @@ const models = {
       return true;
     },
   },
+
+  Shift: {
+    tableName: "shifts",
+    async create(data) {
+       const { data: res, error } = await getDb().from(this.tableName).insert(data).select().single();
+       if (error) throw error;
+       return res;
+    },
+    async update(id, data) {
+       const { data: res, error } = await getDb().from(this.tableName).update(data).eq('id', id).select().single();
+       if (error) throw error;
+       return res;
+    },
+    async findOne(filter) {
+        const { data, error } = await getDb().from(this.tableName).select("*").match(filter.where || filter).single();
+         if (error && error.code !== "PGRST116") throw error;
+        return data;
+    },
+     async findAll(filter = {}) {
+      let query = getDb().from(this.tableName).select("*");
+      if (filter.where) {
+        Object.keys(filter.where).forEach((key) => {
+          query = query.eq(key, filter.where[key]);
+        });
+      }
+      if (filter.order) {
+          query = query.order(filter.order[0][0], { ascending: filter.order[0][1] === 'ASC' });
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+  },
 };
 
 export default models;
@@ -1116,4 +1259,6 @@ export const {
   StationIssue,
   OwnerSettings,
   Inventory,
+  Expense,
+  Shift,
 } = models;

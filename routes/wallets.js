@@ -222,9 +222,10 @@ router.post(
 
       const available = Number(wallet.balance) + Number(wallet.creditlimit);
 
-      if (available < amount) {
-        return res.status(400).json({ error: "Insufficient balance" });
-      }
+      // ALLOW NEGATIVE BALANCE as per feature request
+      // if (available < amount) {
+      //   return res.status(400).json({ error: "Insufficient balance" });
+      // }
 
       const newBalance = Number(wallet.balance) - Number(amount);
       await Wallet.update({

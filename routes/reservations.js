@@ -1,5 +1,5 @@
 import express from "express";
-import { Reservation, TableAsset, User, Game, ActiveTable } from "../models/index.js";
+import { Reservation, TableAsset, User, Game, ActiveTable, Order, OrderItem, MenuItem } from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
   stationContext,
@@ -29,9 +29,9 @@ router.get("/", auth, stationContext, async (req, res) => {
 
     // Sort by reservation time
     filteredList.sort((a, b) => {
-      // Use both new and old fields for backward compatibility/migration
-      const timeA = new Date(a.fromTime || a.reservationtime);
-      const timeB = new Date(b.fromTime || b.reservationtime);
+      // Use both new and old fields for backward compatibility/migration, handling lowercase
+      const timeA = new Date(a.fromTime || a.fromtime || a.reservationtime || a.reservation_time);
+      const timeB = new Date(b.fromTime || b.fromtime || b.reservationtime || b.reservation_time);
       return timeA - timeB;
     });
 
@@ -40,9 +40,10 @@ router.get("/", auth, stationContext, async (req, res) => {
       filteredList.map(async (reservation) => {
         const result = { 
           ...reservation,
-          // Normalize fields for frontend consistency if needed
-          reservationtime: reservation.fromTime || reservation.reservationtime,
-          durationminutes: reservation.durationminutes || (reservation.toTime && reservation.fromTime ? (new Date(reservation.toTime) - new Date(reservation.fromTime)) / 60000 : 60)
+          // Normalize fields for frontend consistency
+          // Frontend expects 'reservationtime' or 'fromTime'
+          reservationtime: reservation.fromTime || reservation.fromtime || reservation.reservationtime || reservation.reservation_time,
+          durationminutes: reservation.durationminutes || reservation.duration_minutes || (reservation.toTime && reservation.fromTime ? (new Date(reservation.toTime) - new Date(reservation.fromTime)) / 60000 : 60)
         };
 
         try {
@@ -208,16 +209,19 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
     });
 
     if (conflictingReservation) {
-      const existStart = new Date(conflictingReservation.fromTime || conflictingReservation.reservationtime);
+      const existStart = new Date(conflictingReservation.fromTime || conflictingReservation.reservationtime || conflictingReservation.fromtime);
       const existEnd = conflictingReservation.toTime ? new Date(conflictingReservation.toTime) : 
                        new Date(existStart.getTime() + (conflictingReservation.durationminutes || 60) * 60000);
       
+      const holderName = conflictingReservation.customerName || conflictingReservation.customer_name || "Another Customer";
+
       return res.status(409).json({
         error: "Conflict",
-        message: `Table is already reserved from ${existStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} to ${existEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}. Please select another table or time.`,
+        message: `Table is already reserved by ${holderName} from ${existStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} to ${existEnd.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}.`,
         conflictDetails: {
             start: existStart,
             end: existEnd,
+            holder: holderName,
             suggestion: "Please select another table."
         }
       });
@@ -237,10 +241,66 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
           frame_count,
           set_time,
           notes: notes || "",
+          food_orders: req.body.food_orders || [], // Save food orders
         },
         req.stationId
       );
       const reservation = await Reservation.create(reservationData);
+
+      // IF RESERVATION IS FOR TODAY, CREATE KITCHEN ORDER
+      const foodItems = req.body.food_orders || [];
+      if (foodItems.length > 0) {
+          const resDate = new Date(fromTime); // Reservation Start Time
+          const today = new Date();
+          const isToday = resDate.toDateString() === today.toDateString();
+
+          // Only create active kitchen order if it's for today (to avoid cluttering pending list with future orders)
+          if (isToday) {
+               try {
+                  let orderTotal = 0;
+                  const validItems = [];
+                  for (const item of foodItems) {
+                      const itemId = item.id || item.menu_item_id;
+                      const qty = Number(item.qty || item.quantity) || 1;
+                      const menuItem = await MenuItem.findByPk(itemId);
+                      if (menuItem) {
+                          const price = Number(menuItem.price) || 0;
+                          orderTotal += price * qty;
+                          validItems.push({ menuItem, qty, price });
+                      }
+                  }
+
+                  if (validItems.length > 0) {
+                      const orderData = addStationToData({
+                          userId: req.user.id,
+                          personName: customer_name,
+                          total: orderTotal,
+                          paymentMethod: 'offline', // Pay Later
+                          status: 'pending', // Pending Kitchen Order
+                          order_source: 'reservation',
+                          reservation_id: reservation.id,
+                          created_by: req.user.id,
+                          // table_id? We have it, but maybe better to link when seated.
+                          // Linking generic table_id helps filtering?
+                          table_id: table_id ? parseInt(table_id) : null
+                      }, req.stationId);
+
+                      const order = await Order.create(orderData);
+                      for (const vi of validItems) {
+                           await OrderItem.create({
+                              orderId: order.id,
+                              menuItemId: vi.menuItem.id,
+                              qty: vi.qty,
+                              priceEach: vi.price
+                           });
+                           // Stock deduction logic can go here
+                      }
+                  }
+               } catch (e) {
+                   console.error("Failed to create reservation order:", e);
+               }
+          }
+      }
 
       res.status(201).json({
         success: true,
@@ -302,10 +362,47 @@ router.put("/:id", auth, stationContext, async (req, res) => {
 
     // Filter allowed updates to prevent overwriting critical fields unintentionally
     // For now, we allow status updates. Add more fields if needed.
+    // Filter allowed updates
     const allowedUpdates = {};
     if (updates.status) allowedUpdates.status = updates.status;
     if (updates.notes) allowedUpdates.notes = updates.notes;
-    // Add other fields as necessary
+    
+    // Allow editing customer details
+    if (updates.customer_name) allowedUpdates.customerName = updates.customer_name;
+    if (updates.customer_phone) allowedUpdates.customerPhone = updates.customer_phone;
+
+    // Allow editing booking details
+    if (updates.table_id) allowedUpdates.tableId = updates.table_id;
+    if (updates.booking_type) allowedUpdates.booking_type = updates.booking_type;
+    if (updates.frame_count) allowedUpdates.frame_count = updates.frame_count;
+    if (updates.set_time) allowedUpdates.set_time = updates.set_time;
+    
+    // Time updates - IF date or time is provided, recalculate fromTime/toTime
+    if (updates.reservation_date || updates.start_time) {
+        // We need existing values if only one is provided? 
+        // For simplicity, enforce providing both or assume we have them in body if modal sends them
+        // But better: Fetch current if generic update? 
+        // The modal usually sends full payload.
+        
+        const dateStr = updates.reservation_date || (r.fromTime ? new Date(r.fromTime).toISOString().split('T')[0] : null);
+        const timeStr = updates.start_time || (r.fromTime ? new Date(r.fromTime).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}) : null);
+        
+        if (dateStr && timeStr) {
+            const fromTime = new Date(`${dateStr}T${timeStr}`);
+            allowedUpdates.fromTime = fromTime;
+            
+            // Recalculate end time
+            const duration = updates.duration_minutes || r.durationminutes || 60;
+            allowedUpdates.toTime = new Date(fromTime.getTime() + duration * 60000);
+            // allowedUpdates.durationminutes = duration; // Column does not exist
+        }
+    } else if (updates.duration_minutes) {
+        // Only duration changed
+        // allowedUpdates.durationminutes = updates.duration_minutes; // Column does not exist
+        if (r.fromTime) {
+           allowedUpdates.toTime = new Date(new Date(r.fromTime).getTime() + updates.duration_minutes * 60000);
+        }
+    }
 
     // Use static update method - ensure we pass where clause clearly
     // Note: Model.update returns the updated rows or count depending on implementation.

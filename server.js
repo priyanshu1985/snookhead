@@ -30,6 +30,7 @@ import adminStationsRoutes from "./routes/adminStations.js";
 import ownerDashboardRoutes from "./routes/ownerDashboard.js";
 import ownerPanelRoutes from "./routes/ownerPanel.js";
 import stockImagesRoutes from "./routes/stockImages.js";
+import expensesRoutes from "./routes/expenses.js";
 
 const app = express();
 
@@ -74,6 +75,11 @@ app.use("/api/admin/stations", adminStationsRoutes);
 app.use("/api/owner/dashboard", ownerDashboardRoutes);
 app.use("/api/owner/panel", ownerPanelRoutes);
 app.use("/api/stock-images", stockImagesRoutes);
+app.use("/api/expenses", expensesRoutes);
+import attendanceRoutes from "./routes/attendance.js";
+app.use("/api/attendance", attendanceRoutes);
+import uploadRoutes from "./routes/upload.js";
+app.use("/api/upload", uploadRoutes);
 
 // Basic health check endpoint
 app.get("/health", (req, res) => {

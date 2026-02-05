@@ -107,7 +107,7 @@ router.post(
   auth,
   stationContext,
   requireStation,
-  authorize("owner", "staff", "admin"),
+  authorize("owner", "staff", "admin", "manager"),
   async (req, res) => {
     try {
       const {
@@ -168,7 +168,7 @@ router.put(
   "/:id",
   auth,
   stationContext,
-  authorize("owner", "staff", "admin"),
+  authorize("owner", "staff", "admin", "manager"),
   async (req, res) => {
     try {
       // Apply station filter
@@ -301,7 +301,7 @@ router.patch(
   "/:id/status",
   auth,
   stationContext,
-  authorize("owner", "staff", "admin"),
+  authorize("owner", "staff", "admin", "manager"),
   async (req, res) => {
     try {
       const { status } = req.body;

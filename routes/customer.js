@@ -18,7 +18,7 @@ router.get(
   "/",
   auth,
   stationContext,
-  authorize("admin", "owner"),
+  authorize("admin", "owner", "manager", "staff"),
   async (req, res) => {
     try {
       const where = addStationFilter({}, req.stationId);
@@ -211,7 +211,7 @@ router.delete(
   "/:id",
   auth,
   stationContext,
-  authorize("admin", "owner"),
+  authorize("admin", "owner", "manager", "staff"),
   async (req, res) => {
     try {
       const { id } = req.params;

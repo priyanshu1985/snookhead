@@ -196,10 +196,10 @@ router.post(
   auth,
   stationContext,
   requireStation,
-  authorize("staff", "owner", "admin"),
+  authorize("staff", "owner", "admin", "manager"),
   async (req, res) => {
     try {
-      const { table_id, game_id, user_id, duration_minutes, customer_name, booking_type, frame_count } = req.body;
+      const { table_id, game_id, user_id, duration_minutes, customer_name, booking_type, frame_count, food_orders } = req.body;
 
       // verify table exists and belongs to this station
       const tableWhere = addStationFilter({ id: table_id }, req.stationId);
@@ -291,12 +291,14 @@ router.post(
 
       // Determine booking source
       let bookingSource = req.body.booking_source;
+      let queueEntry = null;
+
       if (!bookingSource) {
           if (req.body.reservationId) {
               bookingSource = 'reservation';
           } else {
               // Check if table was assigned via queue (physically seated but session starting now)
-              const queueEntry = await Queue.findOne({ where: addStationFilter({ preferredtableid: table_id, status: 'seated' }, req.stationId) });
+              queueEntry = await Queue.findOne({ where: addStationFilter({ preferredtableid: table_id, status: 'seated' }, req.stationId) });
               if (queueEntry) {
                    bookingSource = 'queue';
               } else {
@@ -319,6 +321,8 @@ router.post(
           bookingtype: booking_type || 'timer', // REVERTED
           framecount: frame_count || null, // REVERTED
           // bookingsource removed due to schema constraint
+          created_by: req.user.id, // Track who started the session
+          food_orders: food_orders || (queueEntry ? queueEntry.food_orders : []) || JSON.stringify([]), // Persist initial or queue food orders
         },
         req.stationId
       );
@@ -333,6 +337,7 @@ router.post(
           status: "pending",
           session_id: session.activeid || session.active_id, // Link to session using DB column name or object property
           order_source: bookingSource, // Persist source here
+          created_by: req.user.id,
         },
         req.stationId
       );
@@ -395,7 +400,7 @@ router.post(
   "/stop",
   auth,
   stationContext,
-  authorize("staff", "owner", "admin"),
+  authorize("staff", "owner", "admin", "manager"),
   async (req, res) => {
     try {
       const { active_id, skip_bill = false } = req.body;
@@ -536,7 +541,7 @@ router.post(
   "/auto-release",
   auth,
   stationContext,
-  authorize("staff", "owner", "admin"),
+  authorize("staff", "owner", "admin", "manager"),
   async (req, res) => {
     try {
       const { active_id, cart_items = [] } = req.body;
@@ -710,7 +715,7 @@ router.put(
   "/:id",
   auth,
   stationContext,
-  authorize("staff", "owner", "admin"),
+  authorize("staff", "owner", "admin", "manager"),
   async (req, res) => {
     try {
       const { id } = req.params;
@@ -731,6 +736,7 @@ router.put(
       if (updates.frame_count !== undefined) allowedUpdates.framecount = updates.frame_count; // REVERTED
       if (updates.booking_end_time !== undefined) allowedUpdates.bookingendtime = updates.booking_end_time; // REVERTED
       if (updates.duration_minutes !== undefined) allowedUpdates.durationminutes = updates.duration_minutes; // REVERTED
+      if (updates.food_orders !== undefined) allowedUpdates.food_orders = updates.food_orders; // New persistent cart
       
       if (Object.keys(allowedUpdates).length === 0) {
           return res.status(400).json({ error: "No valid fields to update" });
@@ -753,7 +759,7 @@ router.put(
 // Get session by ID
 router.get("/:id", auth, stationContext, async (req, res) => {
   try {
-    const where = addStationFilter({ active_id: req.params.id }, req.stationId);
+    const where = addStationFilter({ activeid: req.params.id }, req.stationId);
     const session = await ActiveTable.findOne({
       where,
       include: [{ model: TableAsset }],

@@ -32,8 +32,8 @@ const stationContext = async (req, res, next) => {
       return next();
     }
 
-    // For owner/staff roles, get station_id from user record
-    if (req.user.role === "owner" || req.user.role === "staff") {
+    // For owner/staff/manager roles, get station_id from user record
+    if (["owner", "staff", "manager"].includes(req.user.role)) {
       // First check if station_id is already in JWT payload (JWT uses station_id usually, but let's check)
       if (req.user.station_id) {
         req.stationId = req.user.station_id;
@@ -68,10 +68,10 @@ const stationContext = async (req, res, next) => {
         return next();
       }
 
-      // Staff must have a station_id
-      if (req.user.role === "staff" && !user.stationid) {
+      // Staff/Manager must have a station_id
+      if ((req.user.role === "staff" || req.user.role === "manager") && !user.stationid) {
         return res.status(403).json({
-          error: "Staff member not assigned to any station",
+          error: "Staff/Manager not assigned to any station",
           code: "NO_STATION_ASSIGNED",
         });
       }

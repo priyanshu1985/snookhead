@@ -23,7 +23,7 @@ router.get(
   "/",
   auth,
   stationContext,
-  authorize("staff", "owner", "admin"),
+  authorize("staff", "owner", "admin", "manager"),
   async (req, res) => {
     try {
       const where = addStationFilter({}, req.stationId);
@@ -156,7 +156,7 @@ router.get(
   "/:id",
   auth,
   stationContext,
-  authorize("staff", "owner", "admin"),
+  authorize("staff", "owner", "admin", "manager"),
   async (req, res) => {
     try {
       const where = addStationFilter({ id: req.params.id }, req.stationId);
@@ -229,7 +229,7 @@ router.post(
   "/:id/pay",
   auth,
   stationContext,
-  authorize("staff", "owner", "admin"),
+  authorize("staff", "owner", "admin", "manager"),
   async (req, res) => {
     try {
       const where = addStationFilter({ id: req.params.id }, req.stationId);
@@ -274,7 +274,7 @@ router.post(
   auth,
   stationContext,
   requireStation,
-  authorize("staff", "owner", "admin"),
+  authorize("staff", "owner", "admin", "manager"),
   async (req, res) => {
     try {
       const {
@@ -288,6 +288,9 @@ router.post(
         table_price_per_min,
         frame_charges = 0,
       } = req.body;
+
+      console.log("DEBUG: Bill Create Body:", JSON.stringify(req.body, null, 2));
+      console.log("DEBUG: Selected Menu Items:", selected_menu_items);
 
       // 1. Calculate table charges
       let table_charges = 0;
@@ -449,6 +452,9 @@ router.post(
         },
         req.stationId
       );
+
+      // Add created_by manually before creation (not part of helper)
+      billData.created_by = req.user.id;
 
       // Check if fully paid via advance payment
       const advancePayment = Number(req.body.advance_payment || 0);

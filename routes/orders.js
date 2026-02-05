@@ -60,6 +60,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         session_id: session_id ? parseInt(session_id) : null,
         table_id: table_id ? parseInt(table_id) : null,
         // orderDate: new Date(), // Removing as column doesn't exist. DB uses createdAt.
+        created_by: req.user.id,
       },
       req.stationId
     );
@@ -343,7 +344,7 @@ router.delete(
   "/:id",
   auth,
   stationContext,
-  authorize("admin", "owner"),
+  authorize("admin", "owner", "manager"),
   async (req, res) => {
     try {
       // Find order with station filter

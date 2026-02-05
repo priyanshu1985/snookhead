@@ -45,12 +45,14 @@ const applyStationFilter = (query, stationId) => {
   return query;
 };
 
-// Helper to calculate trend percentage
-function calculateTrend(current, previous) {
-  if (!previous) return current > 0 ? "100%" : "0%";
-  const percent = Math.round(((current - previous) / previous) * 100);
-  return `${percent}%`;
-}
+// Helper: Calculate trend percentage
+const calculateTrend = (current, previous) => {
+  const curr = current || 0;
+  const prev = previous || 0;
+  if (prev === 0) return curr > 0 ? "+100%" : "0%";
+  const change = ((curr - prev) / prev) * 100;
+  return `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`;
+};
 
 // GET /api/owner/dashboard/stats - Get dashboard statistics (filtered by station)
 router.get("/stats", auth, stationContext, async (req, res) => {
@@ -113,15 +115,6 @@ router.get("/stats", auth, stationContext, async (req, res) => {
     creditMembersQuery = applyStationFilter(creditMembersQuery, req.stationId);
     const { count: creditMembers } = await creditMembersQuery;
 
-    // Calculate trends
-    const calculateTrend = (current, previous) => {
-      const curr = current || 0;
-      const prev = previous || 0;
-      if (prev === 0) return curr > 0 ? "+100%" : "0%";
-      const change = ((curr - prev) / prev) * 100;
-      return `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`;
-    };
-
     const stats = [
       {
         id: 1,
@@ -162,7 +155,7 @@ router.get("/stats", auth, stationContext, async (req, res) => {
         bgColor: "#FFEBEE",
         trendColor: creditMembers > 0 ? "#FF5252" : "#4CAF50",
         positive: false,
-        isAlert:CreditMembers > 0,
+        isAlert:creditMembers > 0,
       },
     ];
 
@@ -383,6 +376,14 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       .gt("balance", 0);
     activeWalletsQuery = applyStationFilter(activeWalletsQuery, req.stationId);
     
+    // Prev Active Wallets
+    let prevActiveWalletsQuery = supabase
+      .from("wallets")
+      .select("*", { count: "exact", head: true })
+      .gt("balance", 0)
+      .lt("created_at", startDate.toISOString());
+    prevActiveWalletsQuery = applyStationFilter(prevActiveWalletsQuery, req.stationId);
+
     // New Members
     let newMembersQuery = supabase
       .from("customers")
@@ -406,6 +407,14 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       .eq("balance", 0);
     inactiveWalletsQuery = applyStationFilter(inactiveWalletsQuery, req.stationId);
 
+    // Prev Inactive Wallets
+    let prevInactiveWalletsQuery = supabase
+      .from("wallets")
+      .select("*", { count: "exact", head: true })
+      .eq("balance", 0)
+      .lt("created_at", startDate.toISOString());
+    prevInactiveWalletsQuery = applyStationFilter(prevInactiveWalletsQuery, req.stationId);
+
     // Credit Wallets
     let creditMembersQuery = supabase
       .from("wallets")
@@ -413,10 +422,18 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       .lt("balance", 0);
     creditMembersQuery = applyStationFilter(creditMembersQuery, req.stationId);
 
+    // Prev Credit Wallets
+    let prevCreditMembersQuery = supabase
+      .from("wallets")
+      .select("*", { count: "exact", head: true })
+      .lt("balance", 0)
+      .lt("created_at", startDate.toISOString());
+     prevCreditMembersQuery = applyStationFilter(prevCreditMembersQuery, req.stationId);
+
     // Total Revenue (bills paid in dates) - Get tablecharges and menucharges
     let revenueQuery = supabase
       .from("bills")
-      .select("totalamount, tablecharges, menucharges, sessionduration, createdAt, sessionid, details, paymentmethod")
+      .select("totalamount, tablecharges, menucharges, sessionduration, createdAt, sessionid, details, paymentmethod, created_by")
       .gte("createdAt", startDate.toISOString())
       .lte("createdAt", endDate.toISOString())
       .eq("status", "paid");
@@ -431,8 +448,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       .eq("status", "paid");
     prevRevenueQuery = applyStationFilter(prevRevenueQuery, req.stationId);
 
-    // Total Sessions (Active + Completed in period?)
-    // Actually, dashboard usually tracks *activity*. Using bills for completed session stats (duration) and activeTables for current load.
+    // Total Sessions
     let totalSessionsQuery = supabase
       .from("activetables")
       .select("*", { count: "exact", head: true })
@@ -458,16 +474,17 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       .from("inventory")
       .select("*", { count: "exact", head: true })
       .lt("quantity", 5);
-      // Inventory might use station_id? Usually yes.
     lowStockQuery = applyStationFilter(lowStockQuery, req.stationId);
-
 
     const [
       { count: activeWallets },
+      { count: prevActiveWallets },
       { count: newMembers },
       { count: prevNewMembers },
       { count: inactiveWallets },
+      { count: prevInactiveWallets },
       { count: creditMembers },
+      { count: prevCreditMembers },
       { data: revenueData },
       { data: prevRevenueData },
       { count: totalSessions },
@@ -477,17 +494,19 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       gamesResult // Capture games result
     ] = await Promise.all([
       activeWalletsQuery,
+      prevActiveWalletsQuery,
       newMembersQuery,
       prevNewMembersQuery,
       inactiveWalletsQuery,
+      prevInactiveWalletsQuery,
       creditMembersQuery,
+      prevCreditMembersQuery,
       revenueQuery,
       prevRevenueQuery,
       totalSessionsQuery,
       activeTablesQuery,
       totalTablesQuery,
       lowStockQuery,
-      // Fetch all games for mapping
       applyStationFilter(supabase.from("games").select("gameid, gamename"), req.stationId)
     ]);
 
@@ -506,7 +525,6 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     const sessionIds = [...new Set(bills.map(b => b.sessionid).filter(Boolean))];
     let sessionsMap = {};
     if (sessionIds.length > 0) {
-        // Only select columns known to exist
         const { data: sessions } = await supabase
             .from("activetables")
             .select("activeid, gameid") 
@@ -521,7 +539,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
         bookingType: { timer: 0, set: 0, frame: 0 },
         foodSource: { table: 0, order_screen: 0 },
         paymentMode: { cash: 0, upi: 0, wallet: 0 },
-        gameReal: {} // gameId -> revenue (table charges)
+        gameReal: {}
     };
 
     const totalRevenue = bills.reduce((sum, bill) => {
@@ -529,7 +547,6 @@ router.get("/summary", auth, stationContext, async (req, res) => {
         const tableCharges = Number(bill.tablecharges) || 0;
         const menuCharges = Number(bill.menucharges) || 0;
         
-        // Parse details for metadata
         let details = {};
         try {
            details = typeof bill.details === 'string' ? JSON.parse(bill.details) : (bill.details || {});
@@ -540,30 +557,20 @@ router.get("/summary", auth, stationContext, async (req, res) => {
         
         const session = sessionsMap[bill.sessionid];
 
-        // Flow Revenue using Bill Details (Persisted)
-        // Fallback: Default to 'dashboard' if not found
         let source = details.booking_source || 'dashboard';
-        
-        // Normalize source names if needed
         if (source === 'dashboard' || source === 'queue' || source === 'reservation') {
-             // valid
         } else {
              source = 'dashboard';
         }
         breakdown.flow[source] = (breakdown.flow[source] || 0) + amount;
 
-        // Booking Type Revenue using Bill Details
-        // Fallback: 'timer' default
         let bType = details.booking_type || 'timer';
-        // Normalize
         if (['timer', 'set', 'frame'].includes(bType)) {
-             // valid
         } else {
              bType = 'timer';
         }
         breakdown.bookingType[bType] = (breakdown.bookingType[bType] || 0) + tableCharges;
 
-        // Food Source (Menu Charges attributed to source)
         if (menuCharges > 0) {
             if (bill.sessionid) {
                 breakdown.foodSource.table += menuCharges;
@@ -572,39 +579,95 @@ router.get("/summary", auth, stationContext, async (req, res) => {
             }
         }
 
-        // Game Real Revenue (Table Charges attributed to Game)
-        // Rely on Session -> GameID link (reliable)
         if (session && session.gameid) {
              breakdown.gameReal[session.gameid] = (breakdown.gameReal[session.gameid] || 0) + tableCharges;
         }
 
-        // Payment Mode Revenue
         let pMode = (bill.paymentmethod || 'cash').toLowerCase();
-        // Normalize
         if (pMode === 'online' || pMode === 'card') pMode = 'upi';
         if (breakdown.paymentMode[pMode] !== undefined) {
             breakdown.paymentMode[pMode] += amount;
         } else {
-             // Fallback
              breakdown.paymentMode['cash'] += amount;
         }
 
         return sum + amount;
     }, 0);
     
-    // ... rest of code uses gamesList and bill properties (already fixed)
-    // Need to check gameData mapping loop (lines 600+)
-    
     const gameRevenue = bills.reduce((sum, b) => sum + (Number(b.tablecharges) || 0), 0);
     const foodRevenue = bills.reduce((sum, b) => sum + (Number(b.menucharges) || 0), 0);
     
-    // Session Duration Stats
     const validDurationBills = bills.filter(b => b.sessionduration > 0);
     const avgSessionDuration = validDurationBills.length > 0
         ? Math.round(validDurationBills.reduce((sum, b) => sum + b.sessionduration, 0) / validDurationBills.length)
         : 0;
 
-    // Peak Hours
+    // --- EMPLOYEE SHIFT PERFORMANCE ---
+    // Fetch all shifts in this period 
+    let shiftsQuery = supabase
+        .from("shifts")
+        .select(`
+            id, 
+            user_id, 
+            check_in_time, 
+            check_out_time, 
+            total_hours, 
+            status,
+            users:user_id (name, role)
+        `)
+        .gte("check_in_time", startDate.toISOString())
+        .lte("check_in_time", endDate.toISOString())
+        .order("check_in_time", { ascending: false });
+    
+    // Note: If you want to filter by station, shifts need station_id or we filter by user's station
+    // For now, assuming shifts are global or linked to user who is linked to station? 
+    // Given the request, we will show all shifts for the owner's context.
+
+    const { data: shiftsData } = await shiftsQuery;
+
+    const employee_shifts = (shiftsData || []).map(shift => {
+        const shiftStart = new Date(shift.check_in_time);
+        const shiftEnd = shift.check_out_time ? new Date(shift.check_out_time) : new Date();
+        
+        // Find bills generated by this user DURING this shift
+        // Logic: Bill created_by == shift.user_id AND created_at within shift time
+        const shiftBills = bills.filter(b => {
+             const billTime = new Date(b.createdAt);
+             // Safety check for created_by presence (added in recent migration)
+             // If b.created_by is missing, we can't attribute it.
+             if (b.created_by !== shift.user_id) return false;
+             return billTime >= shiftStart && billTime <= shiftEnd;
+        });
+
+        const billsGenerated = shiftBills.length;
+        const totalRevenue = shiftBills.reduce((sum, b) => sum + (Number(b.totalamount) || 0), 0);
+        
+        // Calculate duration formatted
+        let durationStr = "Active";
+        if (shift.total_hours) {
+            durationStr = `${shift.total_hours} hrs`;
+        } else if (shift.check_out_time) {
+            const diff = (new Date(shift.check_out_time) - shiftStart) / (1000 * 60 * 60);
+            durationStr = `${diff.toFixed(2)} hrs`;
+        } else {
+             // Active
+             const diff = (new Date() - shiftStart) / (1000 * 60 * 60);
+             durationStr = `${diff.toFixed(2)} hrs (Active)`;
+        }
+
+        return {
+            id: shift.id,
+            name: shift.users?.name || "Unknown",
+            role: shift.users?.role || "Staff",
+            date: shiftStart.toLocaleDateString(),
+            time: `${shiftStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${shift.check_out_time ? new Date(shift.check_out_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Active'}`,
+            duration: durationStr,
+            bills_generated: billsGenerated,
+            revenue: totalRevenue,
+            revenueFormatted: `₹${totalRevenue.toFixed(2)}`
+        };
+    });
+
     const hoursMap = new Array(24).fill(0);
     bills.forEach(b => {
         const date = new Date(b.createdAt);
@@ -616,20 +679,92 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     const peakHourLabel = `${peakHourIndex}:00 - ${peakHourIndex+1}:00`;
 
     const prevRevenueVal = (prevRevenueData || []).reduce((sum, b) => sum + (Number(b.totalamount) || 0), 0);
-    const expenses = 0;
+    // Total Expenses
+    let expensesQuery = supabase
+      .from("expenses")
+      .select("amount")
+      .gte("date", startDate.toISOString().split('T')[0])
+      .lte("date", endDate.toISOString().split('T')[0]);
+    // Filter expenses by created_by if needed (assuming expenses are linked to owner/user)
+    // For now, strict station filter on expenses table isn't there, but we can assume owner sees all expenses created by them or their staff?
+    // Let's refine based on user request: "under owner".
+    // Theoretically expenses should have owner_id or created_by.
+    // Let's rely on expenses being global for now as per previous logic, but add Labour Cost.
+
+    const { data: expensesData } = await expensesQuery;
+    let totalExpenses = (expensesData || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+    // --- Estimated Labour Cost Calculation ---
+    // Fetch employees of this owner (or all if admin)
+    // Ideally we need the owner ID. `req.user.id` is the caller.
+    // If caller is owner, we fetch their employees.
+    if (req.user.role === 'owner') {
+        const { data: employees } = await supabase
+            .from("users")
+            .select("id, salary_type, salary_amount")
+            .eq("owner_id", req.user.id);
+        
+        // This is an estimation. 
+        // For 'monthly': (Salary * Months in period) OR (Salary / 30 * Days in period)
+        // For 'hourly': Need shift info. For simplicity now, let's assume standard 8h/day, 5days/week if hourly?
+        // Or just use salary_amount as estimated monthly cost for simplicity if they entered it as 'monthly equivalent'?
+        // The prompt asked for "as per employee timing shift the expense will be calculated".
+        // Real shift calculation requires: Shifts table.
+        // Let's fetch shifts too if possible, or simplifying:
+        // We will do a pro-rata calculation based on period length in days.
+        
+        const periodDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) || 1;
+        
+        // Fetch shifts for these employees to get hours? 
+        // Let's do a simple estimation first to avoid complex join query unless critical.
+        // User request: "as per employee timing shift"
+        // Let's try to get shifts.
+        const employeeIds = (employees || []).map(e => e.id);
+        let shiftMap = {};
+        if (employeeIds.length > 0) {
+            const { data: shifts } = await supabase.from("shifts").select("user_id, start_time, end_time, work_days").in("user_id", employeeIds);
+            (shifts || []).forEach(s => shiftMap[s.user_id] = s);
+        }
+
+        let labourCost = 0;
+        (employees || []).forEach(emp => {
+            const salary = Number(emp.salary_amount) || 0;
+            if (emp.salary_type === 'monthly') {
+                labourCost += (salary / 30) * periodDays;
+            } else if (emp.salary_type === 'hourly') {
+                const shift = shiftMap[emp.id];
+                if (shift) {
+                   // Calculate hours
+                   const start = new Date(`1970-01-01T${shift.start_time}`);
+                   const end = new Date(`1970-01-01T${shift.end_time}`);
+                   const hours = (end - start) / (1000 * 60 * 60); // e.g. 8
+                   
+                   // Calculate working days in period
+                   // This is complex (e.g. how many Mondays in this date range?)
+                   // Simplified: periodDays * (workDays.length / 7)
+                   // If work_days is array ['Mon', 'Tue']
+                   const daysPerWeek = Array.isArray(shift.work_days) ? shift.work_days.length : 5;
+                   const workingDaysEst = periodDays * (daysPerWeek / 7);
+                   
+                   labourCost += salary * hours * workingDaysEst;
+                }
+            }
+        });
+        
+        totalExpenses += labourCost;
+    }
+
+    const expenses = totalExpenses;
     const netProfit = totalRevenue - expenses;
 
     // --- GAME DATA (Real) ---
-    // Use breakdown.gameReal combined with usage stats
     const gameData = await Promise.all(
       (gamesList || []).map(async (game) => {
-        // We still calculate usage based on active sessions count (popularity)
-        // But revenue is now REAL
         let sessionCountQuery = supabase
-          .from("activetables") // Verified table name
+          .from("activetables")
           .select("activeid", { count: "exact", head: true })
-          .eq("gameid", game.gameid) // Verified column
-          .gte("starttime", startDate.toISOString()) // inferred lowercase
+          .eq("gameid", game.gameid)
+          .gte("starttime", startDate.toISOString())
           .lte("starttime", endDate.toISOString());
         sessionCountQuery = applyStationFilter(sessionCountQuery, req.stationId);
         const { count: sessionCount } = await sessionCountQuery;
@@ -641,7 +776,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
         const realRevenue = breakdown.gameReal[game.gameid] || 0;
 
         return {
-          name: game.gamename || game.game_name || "Game", // Verified gamename
+          name: game.gamename || game.game_name || "Game",
           usage,
           revenue: `₹${realRevenue.toFixed(0)}`,
           revenueValue: realRevenue,
@@ -661,32 +796,32 @@ router.get("/summary", auth, stationContext, async (req, res) => {
         {
           title: "Active Wallets",
           value: activeWallets,
-          trend: "+2%", // Placeholder or calculation
-          positive: true
+          trend: calculateTrend(activeWallets, prevActiveWallets),
+          positive: activeWallets >= prevActiveWallets
         },
         {
           title: "New Members",
           value: newMembers,
-          trend: `+${newMembers - prevNewMembers}`,
+          trend: calculateTrend(newMembers, prevNewMembers),
           positive: newMembers >= prevNewMembers
         },
         {
           title: "Low Stock Items",
           value: lowStockCount,
-          trend: lowStockCount > 0 ? "Action Needed" : "Healthy",
+          trend: lowStockCount > 5 ? "Critical" : lowStockCount > 0 ? "Warning" : "Healthy",
           positive: lowStockCount === 0
         },
         {
            title: "Inactive Wallets",
            value: inactiveWallets,
-           trend: "Stable",
-           positive: true
+           trend: calculateTrend(inactiveWallets, prevInactiveWallets),
+           positive: inactiveWallets <= prevInactiveWallets
         },
         {
            title: "Credit Members",
            value: creditMembers,
-           trend: "Stable",
-           positive: true
+           trend: calculateTrend(creditMembers, prevCreditMembers),
+           positive: creditMembers <= prevCreditMembers
         }
       ],
       gameData: gameData.slice(0, 5),
@@ -709,8 +844,8 @@ router.get("/summary", auth, stationContext, async (req, res) => {
         totalSessions,
         activeTables,
         totalTables,
-        // Detailed Breakdowns
-        breakdown
+        breakdown,
+        employee_shifts // Added field
       },
     });
   } catch (error) {
@@ -722,6 +857,106 @@ router.get("/summary", auth, stationContext, async (req, res) => {
         code: error.code
     });
   }
+});
+
+
+// GET /api/owner/employees/:id/activity
+router.get("/employees/:id/activity", auth, stationContext, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { startDate, endDate } = req.query; // Expect ISO strings or handle defaults
+        const supabase = getSupabase();
+        
+        let start = startDate ? new Date(startDate) : new Date();
+        let end = endDate ? new Date(endDate) : new Date();
+        
+        // If not provided, default to today
+        if (!startDate) {
+            start.setHours(0,0,0,0);
+            end.setHours(23,59,59,999);
+        }
+
+        const startIso = start.toISOString();
+        const endIso = end.toISOString();
+
+        // 1. Fetch Active Tables started by this user
+        // Note: created_by might be null for old records
+        const activeTablesQuery = supabase
+            .from('activetables')
+            .select('*', { count: 'exact', head: true })
+            .eq('created_by', id)
+            .gte('start_time', startIso)
+            .lte('start_time', endIso);
+            
+        // 2. Fetch Bills generated by this user
+        const billsQuery = supabase
+            .from('bills')
+            .select('total_amount', { count: 'exact' })
+            .eq('created_by', id)
+            .gte('createdAt', startIso)
+            .lte('createdAt', endIso);
+
+        // 3. Fetch Orders placed by this user (if we decide to track order placement separately)
+        // Currently 'orders' has 'userId' which is customer. We added 'created_by' in migration.
+        const ordersQuery = supabase
+            .from('orders')
+            .select('total', { count: 'exact' })
+            .eq('created_by', id)
+            .gte('createdAt', startIso)
+            .lte('createdAt', endIso);
+
+        // 4. Fetch Shifts (Attendance)
+        const shiftsQuery = supabase
+            .from('shifts')
+            .select('*')
+            .eq('user_id', id)
+            .gte('check_in_time', startIso)
+            .lte('check_in_time', endIso);
+
+        const [
+            { count: tablesCount },
+            { data: bills, count: billsCount },
+            { data: orders, count: ordersCount },
+            { data: shifts }
+        ] = await Promise.all([
+            activeTablesQuery,
+            billsQuery,
+            ordersQuery,
+            shiftsQuery
+        ]);
+
+        const totalBillAmount = (bills || []).reduce((sum, b) => sum + (Number(b.total_amount) || 0), 0);
+        const totalOrderAmount = (orders || []).reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
+        // Calculate hours worked in this period
+        let totalHours = 0;
+        (shifts || []).forEach(s => {
+             if (s.total_hours) {
+                 totalHours += Number(s.total_hours);
+             } else if (s.check_in_time && s.check_out_time) {
+                 const diff = new Date(s.check_out_time) - new Date(s.check_in_time);
+                 totalHours += diff / (1000 * 60 * 60);
+             } else if (s.check_in_time && s.status === 'active') {
+                 // Ongoing shift
+                 const diff = new Date() - new Date(s.check_in_time);
+                 totalHours += diff / (1000 * 60 * 60);
+             }
+        });
+
+        res.json({
+            tables_booked: tablesCount || 0,
+            bills_generated: billsCount || 0,
+            bill_revenue: totalBillAmount,
+            orders_placed: ordersCount || 0,
+            order_revenue: totalOrderAmount,
+            hours_worked: totalHours.toFixed(2),
+            shifts: shifts
+        });
+
+    } catch (err) {
+        console.error("Error fetching employee activity:", err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 export default router;

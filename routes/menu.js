@@ -147,7 +147,7 @@ router.put(
   "/:id",
   auth,
   stationContext,
-  authorize("staff", "admin", "owner"),
+  authorize("staff", "admin", "owner", "manager"),
   async (req, res) => {
     try {
       // Find item with station filter to ensure owner can only update their items
@@ -226,7 +226,7 @@ router.patch(
   "/:id/stock",
   auth,
   stationContext,
-  authorize("staff", "admin", "owner"),
+  authorize("staff", "admin", "owner", "manager"),
   async (req, res) => {
     try {
       const { quantity } = req.body;
@@ -264,7 +264,7 @@ router.get(
   "/alerts/low-stock",
   auth,
   stationContext,
-  authorize("staff", "admin", "owner"),
+  authorize("staff", "admin", "owner", "manager"),
   async (req, res) => {
     try {
       // Build where clause with station filter

@@ -142,6 +142,7 @@ router.put(
       } = req.body;
 
       // Update resolved_at if status changes to resolved
+      // Using lowercase resolvedat to match DB column assumption
       let resolvedat = bug.resolvedat;
       if (status === "resolved" && bug.status !== "resolved") {
         resolvedat = new Date();
@@ -149,24 +150,30 @@ router.put(
         resolvedat = null;
       }
 
-      await bug.update({
-        title: title || bug.title,
-        description: description !== undefined ? description : bug.description,
-        category: category || bug.category,
-        status: status || bug.status,
-        priority: priority || bug.priority,
-        assignedto: assigned_to !== undefined ? assigned_to : bug.assignedto,
-        imageurl: image_url !== undefined ? image_url : bug.imageurl,
-        audiourl: audio_url !== undefined ? audio_url : bug.audiourl,
-        resolvedat,
-      });
+      // Use static update method instead of instance method
+      // Use lowercase column names (imageurl, audiourl, assignedto, resolvedat)
+      await Bug.update(
+        {
+          title: title || bug.title,
+          description: description !== undefined ? description : bug.description,
+          category: category || bug.category,
+          status: status || bug.status,
+          priority: priority || bug.priority,
+          assignedto: assigned_to !== undefined ? assigned_to : bug.assignedto,
+          imageurl: image_url !== undefined ? image_url : bug.imageurl,
+          audiourl: audio_url !== undefined ? audio_url : bug.audiourl,
+          resolvedat: resolvedat,
+        },
+        { where } // Pass the where clause to identify the record
+      );
 
       res.json({
         success: true,
         message: "Bug updated successfully",
-        bug,
+        bug: { ...bug, status, resolvedat }, // Return updated data
       });
     } catch (err) {
+      console.error(err);
       res.status(500).json({ error: err.message });
     }
   }
@@ -193,21 +200,26 @@ router.patch(
         return res.status(400).json({ error: "Invalid status" });
       }
 
-      let resolvedat = bug.resolved_at;
+      let resolvedat = bug.resolvedat;
       if (status === "resolved" && bug.status !== "resolved") {
         resolvedat = new Date();
       } else if (status !== "resolved") {
         resolvedat = null;
       }
 
-      await bug.update({ status, resolvedat });
+      // Use static update method and lowercase resolvedat
+      await Bug.update(
+        { status, resolvedat },
+        { where }
+      );
 
       res.json({
         success: true,
         message: "Bug status updated",
-        bug,
+        bug: { ...bug, status, resolvedat },
       });
     } catch (err) {
+       console.error(err);
       res.status(500).json({ error: err.message });
     }
   }
@@ -221,14 +233,17 @@ router.delete(
   authorize("owner", "admin"),
   async (req, res) => {
     try {
+      // For delete, we construct a filter object that matches what destroy expects
       const where = addStationFilter({ id: req.params.id }, req.stationId);
+      
+      // Check existence first
       const bug = await Bug.findOne({ where });
-
       if (!bug) {
         return res.status(404).json({ error: "Bug not found" });
       }
 
-      await bug.destroy();
+      // Pass the filter object (containing where) to destroy
+      await Bug.destroy({ where });
 
       res.json({
         success: true,
