@@ -24,6 +24,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: "Food",
       },
+      item_type: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: "prepared", // 'prepared' or 'packed'
+      },
       description: {
         type: DataTypes.STRING(255),
       },

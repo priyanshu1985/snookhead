@@ -25,6 +25,10 @@ module.exports = (sequelize, DataTypes) => {
       frame_count: { type: DataTypes.INTEGER },
       set_time: { type: DataTypes.STRING(20) },
       notes: { type: DataTypes.STRING(255) },
+      food_orders: {
+        type: DataTypes.JSON, // Use JSON for storing order details
+        allowNull: true,
+      },
     },
     { tableName: "reservations", timestamps: true }
   );

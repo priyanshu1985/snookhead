@@ -116,6 +116,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       {
         name,
         category,
+        item_type: req.body.item_type || "prepared",
         description: req.body.description,
         price,
         purchasePrice: req.body.purchasePrice || 0,
@@ -162,6 +163,7 @@ router.put(
       const updateData = {
         name: req.body.name,
         category: req.body.category,
+        item_type: req.body.item_type,
         price: req.body.price,
         purchasePrice: req.body.purchasePrice,
         description: req.body.description,
