@@ -189,8 +189,8 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
     } = req.body;
 
     // Validation
-    if (!customername || !phone) {
-      return res.status(400).json({ error: "Customer name and phone are required" });
+    if (!customername) {
+      return res.status(400).json({ error: "Customer name is required" });
     }
     if (!gameid) {
       return res.status(400).json({ error: "Game selection is required" });
@@ -303,7 +303,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
 
     // Enrich response with game info
     const response = {
-      ...entry.toJSON(), // Ensure usage of .toJSON() if needed, or spread object
+      ...entry,
       Game: game,
       position: waitingCount + 1,
     };
