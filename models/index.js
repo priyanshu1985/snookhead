@@ -133,6 +133,49 @@ const models = {
     },
   },
 
+  Token: {
+    tableName: "tokens",
+    
+    async findOne(filter) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .select("*")
+        .match(filter.where || filter)
+        .single();
+      if (error && error.code !== "PGRST116") throw error;
+      return data;
+    },
+
+    async create(tokenData) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .insert(tokenData)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+
+    async destroy(filter) {
+      const { error } = await getDb()
+        .from(this.tableName)
+        .delete()
+        .match(filter.where || filter);
+      if (error) throw error;
+      return true;
+    },
+    
+    // Helper to delete expired tokens
+    async destroyExpired() {
+       const { error } = await getDb()
+        .from(this.tableName)
+        .delete()
+        .lt('expires_at', new Date().toISOString());
+       if (error) throw error;
+       return true;
+    }
+  },
+
   TableAsset: {
     tableName: "tables",
     async findOne(filter) {
@@ -1261,4 +1304,5 @@ export const {
   Inventory,
   Expense,
   Shift,
+  Token,
 } = models;

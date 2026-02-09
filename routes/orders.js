@@ -25,6 +25,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       order_source = "table_booking",
       session_id = null, // Link to active table session for consolidated billing
       table_id = null, // Link to table for reference
+      queue_id = null, // Link to queue entry
     } = req.body;
 
     // Validate required fields
@@ -59,6 +60,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         order_source,
         session_id: session_id ? parseInt(session_id) : null,
         table_id: table_id ? parseInt(table_id) : null,
+        queue_id: queue_id ? parseInt(queue_id) : null,
         // orderDate: new Date(), // Removing as column doesn't exist. DB uses createdAt.
         created_by: req.user.id,
       },

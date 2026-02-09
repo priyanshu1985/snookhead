@@ -102,19 +102,34 @@ async function checkQueueAndAssign(tableId, gameId, stationId) {
       const newSession = await ActiveTable.create(sessionData);
       console.log(`[QueueDebug] Created session ${newSession.activeid} for ${nextInQueue.customername}`);
 
-      // Create linked order for the new session
-      const orderData = addStationToData(
-        {
-          userId: null,
-          personName: nextInQueue.customername || "Queue Customer",
-          total: 0,
-          status: "pending",
-          session_id: newSession.activeid || newSession.active_id,
-          order_source: "queue", // Standardized for Dashboard
-        },
-        stationId
-      );
-      await Order.create(orderData);
+      // Check for existing pending order linked to this queue entry
+      const existingOrder = await Order.findOne({
+        where: { queue_id: nextInQueue.id, status: 'pending' }
+      });
+
+      if (existingOrder) {
+          // Link existing order to new session
+          await Order.update({
+              session_id: newSession.activeid || newSession.active_id,
+              order_source: 'queue',
+              // detailed items are already in OrderItems
+          }, { where: { id: existingOrder.id } });
+          console.log(`[QueueDebug] Linked existing order ${existingOrder.id} to session ${newSession.activeid}`);
+      } else {
+          // Create linked order for the new session if none exists
+          const orderData = addStationToData(
+            {
+              userId: null,
+              personName: nextInQueue.customername || "Queue Customer",
+              total: 0,
+              status: "pending",
+              session_id: newSession.activeid || newSession.active_id,
+              order_source: "queue", // Standardized for Dashboard
+            },
+            stationId
+          );
+          await Order.create(orderData);
+      }
 
       // Mark queue entry as served (session started)
       await Queue.update(
@@ -328,20 +343,39 @@ router.post(
       );
       const session = await ActiveTable.create(sessionData);
 
-      // create order linked to this session with station_id
-      const orderData = addStationToData(
-        {
-          userId: user_id ?? req.user.id ?? null,
-          personName: customer_name || "Table Customer",
-          total: 0,
-          status: "pending",
-          session_id: session.activeid || session.active_id, // Link to session using DB column name or object property
-          order_source: bookingSource, // Persist source here
-          created_by: req.user.id,
-        },
-        req.stationId
-      );
-      const order = await Order.create(orderData);
+      // Check for existing pending order if coming from queue
+      let existingOrder = null;
+      if (queueEntry) {
+          existingOrder = await Order.findOne({
+              where: { queue_id: queueEntry.id, status: 'pending' }
+          });
+      }
+
+      let order;
+      if (existingOrder) {
+           // Link existing order
+           await Order.update({
+               session_id: session.activeid || session.active_id,
+               order_source: bookingSource,
+               personName: customer_name || "Table Customer", // Update name if provided
+           }, { where: { id: existingOrder.id } });
+           order = await Order.findByPk(existingOrder.id);
+      } else {
+          // create order linked to this session with station_id
+          const orderData = addStationToData(
+            {
+              userId: user_id ?? req.user.id ?? null,
+              personName: customer_name || "Table Customer",
+              total: 0,
+              status: "pending",
+              session_id: session.activeid || session.active_id, // Link to session using DB column name or object property
+              order_source: bookingSource, // Persist source here
+              created_by: req.user.id,
+            },
+            req.stationId
+          );
+          order = await Order.create(orderData);
+      }
 
       // Process cart items if any
       const cart = req.body.cart || [];

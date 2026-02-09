@@ -15,6 +15,10 @@ module.exports = (sequelize, DataTypes) => {
           key: "id",
         },
       },
+      queue_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
       userId: {
         type: DataTypes.INTEGER,
         allowNull: false,

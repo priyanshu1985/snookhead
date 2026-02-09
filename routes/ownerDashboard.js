@@ -9,32 +9,50 @@ import {
 const router = express.Router();
 
 // Helper: Get date range based on period
-function getDateRange(period) {
+function getDateRange(period, customStart, customEnd) {
   const now = new Date();
   let startDate;
+  let endDate = now;
+
+  // If custom period is provided, use it
+  if (period === 'custom' && customStart && customEnd) {
+      startDate = new Date(customStart);
+      endDate = new Date(customEnd);
+      // Ensure end date includes the full day
+      endDate.setHours(23, 59, 59, 999);
+      // Ensure start date starts at beginning of day
+      startDate.setHours(0, 0, 0, 0);
+      return { startDate, endDate };
+  }
 
   switch (period.toLowerCase()) {
     case "day":
       startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
       break;
     case "week":
       startDate = new Date(now);
       startDate.setDate(now.getDate() - 7);
+      startDate.setHours(0, 0, 0, 0);
       break;
     case "month":
       startDate = new Date(now);
       startDate.setMonth(now.getMonth() - 1);
+      startDate.setHours(0, 0, 0, 0);
       break;
     case "year":
       startDate = new Date(now);
       startDate.setFullYear(now.getFullYear() - 1);
+      startDate.setHours(0, 0, 0, 0);
       break;
     default:
       startDate = new Date(now);
       startDate.setDate(now.getDate() - 7);
+      startDate.setHours(0, 0, 0, 0);
   }
 
-  return { startDate, endDate: now };
+  return { startDate, endDate };
 }
 
 // Helper to apply station filter to Supabase query
@@ -57,14 +75,10 @@ const calculateTrend = (current, previous) => {
 // GET /api/owner/dashboard/stats - Get dashboard statistics (filtered by station)
 router.get("/stats", auth, stationContext, async (req, res) => {
   try {
-    const { period = "week" } = req.query;
-    const { startDate, endDate } = getDateRange(period);
-    const supabase = getSupabase();
-
-    // Get previous period for comparison
-    const prevPeriodLength = endDate - startDate;
-    const prevStartDate = new Date(startDate - prevPeriodLength);
+    const { period = "week", startDate: customStart, endDate: customEnd } = req.query;
+    const { startDate, endDate } = getDateRange(period, customStart, customEnd);
     const prevEndDate = startDate;
+    const supabase = getSupabase();
 
     // Active wallets (wallets with balance > 0)
     let activeWalletsQuery = supabase
@@ -73,6 +87,10 @@ router.get("/stats", auth, stationContext, async (req, res) => {
       .gt("balance", 0);
     activeWalletsQuery = applyStationFilter(activeWalletsQuery, req.stationId);
     const { count: activeWallets } = await activeWalletsQuery;
+
+    // Get previous period for comparison
+    const prevPeriodLength = endDate - startDate;
+    const prevStartDate = new Date(startDate - prevPeriodLength);
 
     let prevActiveWalletsQuery = supabase
       .from("wallets")
@@ -169,8 +187,8 @@ router.get("/stats", auth, stationContext, async (req, res) => {
 // GET /api/owner/dashboard/game-utilization - filtered by station
 router.get("/game-utilization", auth, stationContext, async (req, res) => {
   try {
-    const { period = "week" } = req.query;
-    const { startDate, endDate } = getDateRange(period);
+    const { period = "week", startDate: customStart, endDate: customEnd } = req.query;
+    const { startDate, endDate } = getDateRange(period, customStart, customEnd);
     const supabase = getSupabase();
 
     // Get all games for this station
@@ -272,8 +290,8 @@ router.get("/game-utilization", auth, stationContext, async (req, res) => {
 // GET /api/owner/dashboard/revenue - filtered by station
 router.get("/revenue", auth, stationContext, async (req, res) => {
   try {
-    const { period = "week" } = req.query;
-    const { startDate, endDate } = getDateRange(period);
+    const { period = "week", startDate: customStart, endDate: customEnd } = req.query;
+    const { startDate, endDate } = getDateRange(period, customStart, customEnd);
     const supabase = getSupabase();
 
     // Total revenue in period
@@ -351,8 +369,8 @@ router.get("/revenue", auth, stationContext, async (req, res) => {
 // GET /api/owner/dashboard/summary - filtered by station
 router.get("/summary", auth, stationContext, async (req, res) => {
   try {
-    const { period = "week" } = req.query;
-    const { startDate, endDate } = getDateRange(period);
+    const { period = "week", startDate: customStart, endDate: customEnd } = req.query;
+    const { startDate, endDate } = getDateRange(period, customStart, customEnd);
     const supabase = getSupabase();
 
     // Current date for display

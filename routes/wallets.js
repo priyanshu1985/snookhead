@@ -18,15 +18,69 @@ const router = express.Router();
 router.get("/customer/:customer_id", auth, stationContext, async (req, res) => {
   try {
     const { customer_id } = req.params;
+    let wallet = null;
 
-    const where = addStationFilter({ customerid: customer_id }, req.stationId);
-    const wallet = await Wallet.findOne({
-      where,
-      include: [{ model: Customer }],
-    });
+    // 1. Try finding by UUID (customer ID) directly if it looks like a uuid
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customer_id);
+    
+    if (isUuid) {
+        const where = addStationFilter({ customerid: customer_id }, req.stationId);
+        wallet = await Wallet.findOne({
+          where,
+          include: [{ model: Customer }],
+        });
+    }
+
+    // 2. If not found by UUID, try searching Customer by member_seq, phone, or alias
+    if (!wallet) {
+        // Find customer first
+        // We need custom filter for OR condition (member_seq OR phone OR alias)
+        // Since our model helper supports basic 'where', we might need multiple attempts or advanced filter.
+        // Let's try finding unique customer matching the input.
+        
+        let customer = null;
+        
+        // Try member_seq (if numeric)
+        if (!isNaN(customer_id)) {
+             customer = await Customer.findOne({ 
+                 where: addStationFilter({ member_seq: Number(customer_id) }, req.stationId) 
+             });
+        }
+        
+        // Try Phone
+        if (!customer) {
+             customer = await Customer.findOne({ 
+                 where: addStationFilter({ phone: customer_id }, req.stationId) 
+             });
+        }
+        
+        // Try Alias
+        if (!customer) {
+             customer = await Customer.findOne({ 
+                 where: addStationFilter({ alias: customer_id }, req.stationId) 
+             });
+        }
+        
+        // Try UUID on Customer ID directly if it was a UUID but no wallet yet? (handled by logic below)
+
+        if (customer) {
+            // Found customer, now get wallet
+            const where = addStationFilter({ customerid: customer.id }, req.stationId);
+            wallet = await Wallet.findOne({
+              where,
+              include: [{ model: Customer }],
+            });
+            
+            // If wallet doesn't exist for this customer, we might want to return just customer info?
+            // But existing API returns "Wallet not found".
+            // The PaymentModal expects wallet data.
+            // If wallet missing but customer exists, maybe Create one? 
+            // For now, let's stick to existing behavior: return 404 if wallet not found.
+        }
+    }
 
     if (!wallet) {
-      return res.status(404).json({ error: "Wallet not found" });
+      return res.status(404).json({ error: "Wallet/Customer not found" });
     }
 
     res.json(wallet);
