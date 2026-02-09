@@ -57,6 +57,57 @@ router.get("/", auth, stationContext, async (req, res) => {
       ],
     });
 
+    // ------------------------------------------------------------------
+    // SYNC FROM INVENTORY: Override stock with actual Inventory levels
+    // ------------------------------------------------------------------
+    try {
+      const { Inventory } = await import("../models/index.js");
+      if (Inventory) {
+        // Fetch all active inventory items for this station
+        const inventoryWhere = { isactive: true };
+        if (req.stationId) inventoryWhere.station_id = req.stationId;
+
+        const inventoryItems = await Inventory.findAll({ where: inventoryWhere });
+
+        // Create a map for quick lookup: normalized name -> quantity
+        const inventoryMap = new Map();
+        inventoryItems.forEach(inv => {
+          if (inv.itemname) {
+            inventoryMap.set(inv.itemname.trim().toLowerCase(), inv.currentquantity);
+          }
+        });
+
+        // Update items with actual stock
+        // We modify the plain object since 'items' are Sequelize instances
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          const normalizedName = item.name.trim().toLowerCase();
+
+          if (inventoryMap.has(normalizedName)) {
+            item.stock = inventoryMap.get(normalizedName);
+          } else {
+            // Fallback: If not in inventory, treat as 0 stock? 
+            // Or keep original MenuItem.stock if it exists?
+            // User requested strict flow: "if item is finish then he shouldn't be able to add"
+            // So if it's not in inventory, it implies 0 stock or un-tracked.
+            // Let's default to item.stock (Menu level) if not found, 
+            // BUT if we want strict inventory, maybe we should assume 0 if not found?
+            // For now, let's trust the Map if it exists, otherwise keep fallback.
+            // Actually, if we just implemented sync on creation, they should exist.
+            // Let's stick to: if found in inventory, use that. If not, use menu stock.
+            // Valid improvement: if we want to force inventory usage, we could set stock=0 here.
+          }
+
+          // FORCE OVERRIDE for items that ARE in inventory map
+          if (inventoryMap.has(normalizedName)) {
+            item.setDataValue('stock', inventoryMap.get(normalizedName));
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to sync inventory stock in menu fetch:", err);
+    }
+
     // For mobile app, return simple array format
     if (
       req.headers["user-agent"] &&
