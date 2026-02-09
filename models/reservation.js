@@ -1,0 +1,35 @@
+module.exports = (sequelize, DataTypes) => {
+  return sequelize.define(
+    "Reservation",
+    {
+      id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+      station_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: "stations",
+          key: "id",
+        },
+      },
+      userId: { type: DataTypes.INTEGER },
+      tableId: { type: DataTypes.INTEGER },
+      customerName: { type: DataTypes.STRING(100) },
+      customerPhone: { type: DataTypes.STRING(20) },
+      fromTime: { type: DataTypes.DATE },
+      toTime: { type: DataTypes.DATE },
+      status: {
+        type: DataTypes.ENUM("pending", "active", "done", "cancelled"),
+        defaultValue: "pending",
+      },
+      booking_type: { type: DataTypes.STRING(20), defaultValue: "timer" },
+      frame_count: { type: DataTypes.INTEGER },
+      set_time: { type: DataTypes.STRING(20) },
+      notes: { type: DataTypes.STRING(255) },
+      food_orders: {
+        type: DataTypes.JSON, // Use JSON for storing order details
+        allowNull: true,
+      },
+    },
+    { tableName: "reservations", timestamps: true }
+  );
+};

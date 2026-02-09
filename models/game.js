@@ -1,0 +1,19 @@
+module.exports = (sequelize, DataTypes) => {
+  return sequelize.define('Game', {
+    game_id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    station_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "stations",
+        key: "id",
+      },
+    },
+    game_name: { type: DataTypes.STRING(250), allowNull: false },
+    image_key: { type: DataTypes.STRING(255), allowNull: true },
+    game_createdon: { type: DataTypes.DATE },
+    created_by: { type: DataTypes.STRING(100) },
+    game_modify: { type: DataTypes.STRING(250) },
+    modified_by: { type: DataTypes.STRING(250) }
+  }, { tableName: 'games', timestamps: false });
+};
