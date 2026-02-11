@@ -27,7 +27,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "users",
       timestamps: true,
-    }
+    },
   );
 
   User.prototype.checkPassword = function (password) {
