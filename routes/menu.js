@@ -27,6 +27,15 @@ router.get("/", auth, stationContext, async (req, res) => {
 
     console.log("GET /menu query:", req.query);
 
+    if (req.needsStationSetup) {
+      return res.json({
+        success: true,
+        total: 0,
+        currentPage: 1,
+        data: [],
+      });
+    }
+
     let where = {};
 
     // Only filter by availability if not explicitly requesting all items
@@ -34,28 +43,44 @@ router.get("/", auth, stationContext, async (req, res) => {
       where.is_available = true; // Only show available items
     }
 
-    console.log("GET /menu where:", where);
-
-    if (category) where.category = category;
-    if (minPrice || maxPrice) {
-      where.price = {};
-      if (minPrice) where.price[Op.gte] = minPrice;
-      if (maxPrice) where.price[Op.lte] = maxPrice;
-    }
-    if (search) where.name = { [Op.like]: `%${search}%` };
-
     // Apply station filter for multi-tenancy
-    where = addStationFilter(where, req.stationId);
+    where = addStationFilter(where, req.stationId, 'stationid');
 
-    const items = await MenuItem.findAll({
-      where,
-      offset: (page - 1) * parseInt(limit),
-      limit: parseInt(limit),
-      order: [
-        ["category", "ASC"],
-        ["name", "ASC"],
-      ],
+    // Fetch all matching items for this station
+    const allItems = await MenuItem.findAll({ where });
+
+    // In-memory filtering for search and price (since findAll only supports exact equality)
+    let filteredItems = allItems;
+
+    if (category) {
+        filteredItems = filteredItems.filter(item => item.category === category);
+    }
+
+    if (minPrice) {
+        filteredItems = filteredItems.filter(item => Number(item.price) >= Number(minPrice));
+    }
+    if (maxPrice) {
+        filteredItems = filteredItems.filter(item => Number(item.price) <= Number(maxPrice));
+    }
+
+    if (search) {
+        const searchLower = search.toLowerCase();
+        filteredItems = filteredItems.filter(item => 
+            item.name.toLowerCase().includes(searchLower) || 
+            (item.description && item.description.toLowerCase().includes(searchLower))
+        );
+    }
+
+    // Sort: Category then Name
+    filteredItems.sort((a, b) => {
+        if (a.category !== b.category) return a.category.localeCompare(b.category);
+        return a.name.localeCompare(b.name);
     });
+
+    const total = filteredItems.length;
+    const limitNum = parseInt(limit);
+    const start = (parseInt(page) - 1) * limitNum;
+    const items = filteredItems.slice(start, start + limitNum);
 
     // For mobile app, return simple array format
     if (
@@ -84,7 +109,7 @@ router.get("/", auth, stationContext, async (req, res) => {
 router.get("/:id", auth, stationContext, async (req, res) => {
   try {
     // Find item with station filter to ensure owner can only see their items
-    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
     const item = await MenuItem.findOne({ where });
     if (!item) return res.status(404).json({ error: "Menu item not found" });
 
@@ -127,7 +152,8 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         is_available:
           req.body.is_available !== undefined ? req.body.is_available : true,
       },
-      req.stationId
+      req.stationId,
+      'stationid'
     );
 
     const item = await MenuItem.create(itemData);
@@ -152,7 +178,7 @@ router.put(
   async (req, res) => {
     try {
       // Find item with station filter to ensure owner can only update their items
-      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
       const item = await MenuItem.findOne({ where });
 
       if (!item) return res.status(404).json({ error: "Menu item not found" });
@@ -207,7 +233,7 @@ router.delete(
   async (req, res) => {
     try {
       // Find item with station filter to ensure owner can only delete their items
-      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
       const item = await MenuItem.findOne({ where });
 
       if (!item) return res.status(404).json({ error: "Menu item not found" });
@@ -238,7 +264,7 @@ router.patch(
       }
 
       // Find item with station filter
-      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
       const item = await MenuItem.findOne({ where });
 
       if (!item) return res.status(404).json({ error: "Menu item not found" });
@@ -270,20 +296,20 @@ router.get(
   async (req, res) => {
     try {
       // Build where clause with station filter
-      let where = sequelize.where(
-        sequelize.col("stock"),
-        Op.lt,
-        sequelize.col("threshold")
-      );
+      // Build where clause with station filter
+      const where = addStationFilter({}, req.stationId, 'stationid');
 
-      // If station filter is needed, combine conditions
-      if (req.stationId) {
-        where = {
-          [Op.and]: [where, { stationid: req.stationId }],
-        };
-      }
+      // Fetch all items
+      const allItems = await MenuItem.findAll({ where });
 
-      const items = await MenuItem.findAll({ where });
+      // Filter in memory for logic: stock < threshold
+      const items = allItems.filter(item => {
+          const stock = Number(item.stock || 0);
+          const threshold = Number(item.threshold || 5);
+          // Only return if stock is being tracked (threshold > 0 or explicit logic?)
+          // Assuming all items with stock tracking have a threshold.
+          return stock < threshold;
+      });
 
       res.json({
         success: true,

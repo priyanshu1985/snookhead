@@ -631,15 +631,15 @@ router.get("/summary", auth, stationContext, async (req, res) => {
             check_out_time, 
             total_hours, 
             status,
-            users:user_id (name, role)
+            users!inner(name, role, stationid)
         `)
         .gte("check_in_time", startDate.toISOString())
         .lte("check_in_time", endDate.toISOString())
         .order("check_in_time", { ascending: false });
     
-    // Note: If you want to filter by station, shifts need station_id or we filter by user's station
-    // For now, assuming shifts are global or linked to user who is linked to station? 
-    // Given the request, we will show all shifts for the owner's context.
+    if (req.stationId) {
+        shiftsQuery.eq("users.stationid", req.stationId);
+    }
 
     const { data: shiftsData } = await shiftsQuery;
 
@@ -703,12 +703,12 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       .select("amount")
       .gte("date", startDate.toISOString().split('T')[0])
       .lte("date", endDate.toISOString().split('T')[0]);
-    // Filter expenses by created_by if needed (assuming expenses are linked to owner/user)
-    // For now, strict station filter on expenses table isn't there, but we can assume owner sees all expenses created by them or their staff?
-    // Let's refine based on user request: "under owner".
-    // Theoretically expenses should have owner_id or created_by.
-    // Let's rely on expenses being global for now as per previous logic, but add Labour Cost.
-
+    
+    // Filter expenses by station
+    if (req.stationId) {
+         expensesQuery.eq("station_id", req.stationId);
+    }
+    
     const { data: expensesData } = await expensesQuery;
     let totalExpenses = (expensesData || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 

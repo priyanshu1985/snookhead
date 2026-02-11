@@ -13,6 +13,9 @@ const router = express.Router();
 // Get all food items - filtered by station
 router.get("/", auth, stationContext, async (req, res) => {
   try {
+    if (req.needsStationSetup) {
+      return res.json([]);
+    }
     const where = addStationFilter({}, req.stationId);
     const list = await FoodItem.findAll({ where });
     res.json(list);

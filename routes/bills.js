@@ -7,6 +7,8 @@ import {
   MenuItem,
   TableAsset,
   Game,
+  Queue,
+  Reservation,
 } from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
@@ -15,6 +17,7 @@ import {
   addStationFilter,
   addStationToData,
 } from "../middleware/stationContext.js";
+import { checkQueueAndAssign } from "../utils/queueManager.js";
 
 const router = express.Router();
 
@@ -26,6 +29,9 @@ router.get(
   authorize("staff", "owner", "admin", "manager"),
   async (req, res) => {
     try {
+      if (req.needsStationSetup) {
+        return res.json([]);
+      }
       const where = addStationFilter({}, req.stationId);
       const bills = await Bill.findAll({
         where,
@@ -395,18 +401,19 @@ router.post(
       // Fetch session data for accurate revenue tracking (source/type)
       let bookingSource = 'dashboard';
       let bookingType = 'timer';
+      let session = null;
       if (session_id) {
           try {
              // Retrieve session from DB if possible using model helper (or raw Supabase if needed)
              // Using defined model:
-             const session = await ActiveTable.findByPk(session_id);
+             session = await ActiveTable.findByPk(session_id);
              if (session) {
                  bookingSource = session.bookingsource; 
                  bookingType = session.bookingtype || 'timer';
 
                  // Fallback: Check Linked Order if source missing in ActiveTable
                  if (!bookingSource) {
-                     const linkedOrder = await Order.findOne({ where: { active_id: session_id } }); // Note: Order uses active_id fk usually, but check schema
+                     const linkedOrder = await Order.findOne({ where: { activeid: session_id } }); // Note: Order uses active_id fk usually, but check schema
                      // Schema says: `active_id` int in Orders table.
                      if (linkedOrder && linkedOrder.order_source) {
                          bookingSource = linkedOrder.order_source;
@@ -414,6 +421,12 @@ router.post(
                  }
                  // Final default
                  bookingSource = bookingSource || 'dashboard';
+
+                 // Fallback: Set table_id if missing in request
+                 if (!table_id && session.tableid) {
+                     table_id = session.tableid;
+                     console.log(`[Bill] Resolved table_id ${table_id} from session.`);
+                 }
              }
           } catch (e) {
              console.log("Error fetching session for bill details:", e);
@@ -464,6 +477,138 @@ router.post(
       }
 
       const bill = await Bill.create(billData);
+
+      // --- CRITICAL FIX: Update Queue Status ---
+      // We must mark queue as served regardless of whether a session_id exists.
+      // Sometimes session is lost but queue remains "seated", causing phantom occupation.
+      if (table_id) {
+        try {
+          // Find queue entry first (checking both seated AND assigned to be safe)
+          const queueEntries = await Queue.findAll({
+            where: {
+              preferredtableid: table_id,
+              status: ["seated", "assigned"], // Array filter now supported!
+              ...(req.stationId ? { stationid: req.stationId } : {})
+            }
+          });
+
+          if (queueEntries.length > 0) {
+              for (const q of queueEntries) {
+                  await Queue.update(
+                    { status: "served" },
+                    { where: { id: q.id } }
+                  );
+                  console.log(`[Bill] Updated Queue ID ${q.id} (Status: ${q.status}) to served for table ${table_id}`);
+              }
+          } else {
+             console.log(`[Bill] No linked queue entry found for table ${table_id} (Checked seated/assigned)`);
+          }
+        } catch (qErr) {
+          console.error("Failed to update queue status on billing:", qErr);
+        }
+      }
+
+      // --- CRITICAL FIX: Stop Session & Free Table ---
+      // When a bill is created, the session should be considered finished and table available.
+      // Lookup session by table_id if session_id is missing/invalid
+      let targetSessionId = session_id;
+      if (!targetSessionId && table_id) {
+          try {
+             // Find active session for this table
+             const activeSession = await ActiveTable.findOne({
+                 where: { 
+                     tableid: table_id, 
+                     status: 'active' 
+                 }
+             });
+             if (activeSession) {
+                 targetSessionId = activeSession.activeid;
+                 console.log(`[Bill] Found active session ${targetSessionId} for table ${table_id} (was missing in request)`);
+             }
+          } catch (findErr) {
+             console.error("Failed to find active session for table:", findErr);
+          }
+      }
+
+      if (targetSessionId) {
+        try {
+           await ActiveTable.update(
+             { 
+               status: 'completed',
+               endtime: new Date(), 
+               // final_amount: total_amount // Optional if schema supports it
+             },
+             { where: { activeid: targetSessionId } }
+           );
+           console.log(`[Bill] Stopped ActiveTable session ${targetSessionId}`);
+        } catch (stopErr) {
+           console.error("Failed to stop session on billing:", stopErr);
+        }
+      }
+
+
+
+       // Always release table if we have a table_id
+       if (table_id) {
+         try {
+            await TableAsset.update(
+              { status: 'available' },
+              { where: { id: table_id } }
+            );
+            console.log(`[Bill] Set Table ${table_id} to available`);
+            
+            try {
+                // Close any active OR strictly pending (if stuck) reservations for this table
+                // Split into two updates to avoid ORM array/enum issues
+                await Reservation.update(
+                    { status: 'done' },
+                    { where: { tableId: table_id, status: 'active' } }
+                );
+                await Reservation.update(
+                    { status: 'done' },
+                    { where: { tableId: table_id, status: 'pending' } }
+                );
+                console.log(`[Bill] Closed active/pending reservations for table ${table_id}`);
+            } catch (resErr) {
+                console.error("Failed to close linked reservation:", resErr);
+            }
+
+            // --- CHECK QUEUE AND ASSIGN ---
+            // Now that table is available, check if anyone is waiting for this game
+            let gameIdForQueue = null;
+            if (session && session.gameid) {
+                gameIdForQueue = session.gameid;
+            } else if (targetSessionId) {
+                // Re-fetch active session if we only have ID, to get game_id
+                // But wait, the session is now 'completed'.
+                // We should have fetched it before or used 'activeSession' from line 510 if it was found there.
+                // activeSession from line 510 is locally scoped. 
+                // Let's try to fetch it again or better, trust that table belongs to a game?
+                // Actually, Queue assignment needs gameId.
+                // We can fetch the table asset to get gameId if it's fixed? No, gameId is per session usually.
+                // But TableAsset might have a default game associated or we rely on the finished session.
+                
+                // Optimized: Fetch session details if we don't have gameId
+                try {
+                     const finishedSession = await ActiveTable.findOne({ where: { activeid: targetSessionId } });
+                     if (finishedSession) gameIdForQueue = finishedSession.gameid;
+                } catch(e) {}
+            }
+
+            if (gameIdForQueue) {
+                 const queueResult = await checkQueueAndAssign(table_id, gameIdForQueue, req.stationId);
+                 if (queueResult && queueResult.assigned) {
+                     console.log(`[Bill] Automatically assigned Table ${table_id} to queue entry ${queueResult.queueEntry.id}`);
+                     // We could attach this info to response if needed
+                 }
+            }
+
+         } catch (tableErr) {
+            console.error("Failed to release table:", tableErr);
+         }
+       }
+      // -----------------------------------------------
+      // -----------------------------------------
 
       res.status(201).json({
         success: true,
@@ -518,8 +663,11 @@ router.post("/calculate-pricing", auth, stationContext, async (req, res) => {
 
     // Calculate table charges
     if (table_id) {
-      const table = await TableAsset.findByPk(table_id);
-      if (table) {
+       // Validate table belongs to station
+       const tableWhere = addStationFilter({ id: table_id }, req.stationId);
+       const table = await TableAsset.findOne({ where: tableWhere });
+
+       if (table) {
         const pricePerMin = parseFloat(table.pricePerMin || 0);
         const frameCharge = parseFloat(table.frameCharge || 0);
         pricing.table_charges = session_duration * pricePerMin + frame_charges;

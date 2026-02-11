@@ -18,12 +18,20 @@ router.get("/", auth, stationContext, async (req, res) => {
   try {
     const { status, type, page = 1, limit = 20 } = req.query;
 
+    if (req.needsStationSetup) {
+      return res.json({
+        total: 0,
+        currentPage: page,
+        data: [],
+      });
+    }
+
     let where = {};
     if (status) where.status = status;
     if (type) where.type = type;
 
     // Apply station filter for multi-tenancy
-    where = addStationFilter(where, req.stationId);
+    where = addStationFilter(where, req.stationId, 'stationid');
 
     const tables = await TableAsset.findAll({
       where,
@@ -86,7 +94,7 @@ router.get("/", auth, stationContext, async (req, res) => {
 router.get("/:id", auth, stationContext, async (req, res) => {
   try {
     // Apply station filter
-    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
     const table = await TableAsset.findOne({ where });
 
     if (!table) {
@@ -146,7 +154,8 @@ router.post(
           frameCharge: frameCharge,
           gameid: game_id,
         },
-        req.stationId
+        req.stationId,
+        'stationid'
       );
 
       const newTable = await TableAsset.create(tableData);
@@ -172,7 +181,7 @@ router.put(
   async (req, res) => {
     try {
       // Apply station filter
-      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
       const table = await TableAsset.findOne({ where });
 
       if (!table) {
@@ -240,7 +249,7 @@ router.delete(
       const parsedTableId = parseInt(tableId);
 
       // Apply station filter
-      const where = addStationFilter({ id: parsedTableId }, req.stationId);
+      const where = addStationFilter({ id: parsedTableId }, req.stationId, 'stationid');
       const table = await TableAsset.findOne({ where });
 
       if (!table) {
@@ -312,7 +321,7 @@ router.patch(
       }
 
       // Apply station filter
-      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
       const table = await TableAsset.findOne({ where });
 
       if (!table) {
