@@ -99,6 +99,44 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
 
       // Optional: Decrease stock if MenuItem has stock field
       // Optional: Decrease stock if MenuItem has stock field
+      // ------------------------------------------------------------------
+      // INVENTORY SYNC: Deduct from actual inventory
+      // ------------------------------------------------------------------
+      try {
+        const { Inventory } = await import("../models/index.js");
+        if (Inventory) {
+          const menuName = menuItem.name.trim();
+          const inventoryWhere = {
+            itemname: menuName,
+            isactive: true
+          };
+          if (req.stationId) inventoryWhere.station_id = req.stationId;
+
+          const inventoryItem = await Inventory.findOne({ where: inventoryWhere });
+
+          if (inventoryItem) {
+            // Strict check? We already checked menu item (which should be synced).
+            // But let's double check here to be safe against race conditions.
+            if (inventoryItem.currentquantity < qty) {
+              throw new Error(`Insufficient inventory for ${menuName}. Available: ${inventoryItem.currentquantity}`);
+            }
+
+            // Deduct stock
+            await inventoryItem.decrement('currentquantity', { by: qty });
+            console.log(`Deducted ${qty} from inventory for ${menuName}`);
+          } else {
+            console.warn(`No inventory item found for ${menuName}, skipping inventory deduction.`);
+          }
+        }
+      } catch (invErr) {
+        console.error("Inventory deduction failed:", invErr);
+        // If strict mode, we should fail the order?
+        // For now, let's return error if it's "Insufficient inventory"
+        if (invErr.message.includes("Insufficient inventory")) {
+          return res.status(400).json({ error: invErr.message });
+        }
+      }
+
       if (menuItem.stock !== undefined) {
         const newStock = Math.max(0, menuItem.stock - qty);
         await MenuItem.update(
