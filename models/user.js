@@ -19,6 +19,8 @@ module.exports = (sequelize, DataTypes) => {
         // Note: Foreign key constraint skipped at DB level due to MySQL 64 index limit on users table
         // Data integrity is maintained at application level
       },
+      reset_token: { type: DataTypes.STRING(255), allowNull: true },
+      reset_token_expiry: { type: DataTypes.DATE, allowNull: true },
       owner_panel_password: { type: DataTypes.STRING(128), allowNull: true }, // Hashed owner panel password
       owner_panel_setup: { type: DataTypes.BOOLEAN, defaultValue: false }, // Track if user has set up owner panel password
     },

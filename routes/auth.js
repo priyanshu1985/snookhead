@@ -1,6 +1,7 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import nodemailer from "nodemailer";
 import { User, Station, Game, TableAsset } from "../models/index.js";
 import tokenStore from "../utils/tokenStore.js";
 import { auth, validateRefreshToken } from "../middleware/auth.js";
@@ -48,7 +49,7 @@ router.post("/login", async (req, res) => {
     }
 
     // Check password
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -110,7 +111,7 @@ router.post("/login", async (req, res) => {
     await tokenStore.setRefreshToken(freshUser.id, refreshToken);
 
     // Return user info (exclude sensitive data)
-    const { password: _, ...userWithoutPassword } = freshUser;
+    const { passwordHash: _, ...userWithoutPassword } = freshUser;
 
     res.json({
       accessToken,
@@ -153,7 +154,7 @@ router.post("/register", async (req, res) => {
     await User.create({
       name,
       email,
-      password: hashedPassword,
+      passwordHash: hashedPassword,
       phone: phone || null,
       role: role || "owner", // Default to owner for new registrations
       email_verified: false, // User must verify email first
@@ -284,7 +285,7 @@ router.post("/verify-otp", async (req, res) => {
     await tokenStore.setRefreshToken(freshUserForToken.id, refreshToken);
 
     // Return user info (exclude sensitive data)
-    const { password: _, ...userWithoutPassword } = freshUserForToken;
+    const { passwordHash: _, ...userWithoutPassword } = freshUserForToken;
 
     res.json({
       message: "Email verified successfully. Welcome!",
@@ -509,6 +510,197 @@ router.get("/debug-station", auth, async (req, res) => {
   } catch (err) {
     console.error("Debug station error:", err);
     res.status(500).json({ error: "Server error", details: err.message });
+  }
+});
+
+// @route   POST /api/auth/forgot-password
+// @desc    Send password reset link to user's email
+// @access  Public
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Validation
+    if (!email) {
+      return res.status(400).json({ error: "Please provide email address" });
+    }
+
+    // Check if user exists
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ error: "No user found with this email address" });
+    }
+
+    // Generate a secure reset token (valid for 1 hour)
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+
+    console.log('🔍 Forgot password - Generating token:', {
+      email,
+      tokenGenerated: resetToken.substring(0, 10) + '...',
+      expiryTime: resetTokenExpiry.toISOString()
+    });
+
+    // Store the reset token in the user record
+    const updateResult = await User.update(
+      { 
+        reset_token: resetToken,
+        reset_token_expiry: resetTokenExpiry 
+      },
+      { where: { email } }
+    );
+
+    console.log('🔍 Token update result:', { 
+      rowsAffected: updateResult[0],
+      wasSuccessful: updateResult[0] > 0 
+    });
+
+    // Verify the token was saved
+    const verifyUser = await User.findOne({ where: { email } });
+    console.log('🔍 Token verification:', {
+      tokenInDB: verifyUser.reset_token?.substring(0, 10) + '...',
+      expiryInDB: verifyUser.reset_token_expiry,
+      tokensMatch: verifyUser.reset_token === resetToken
+    });
+
+    // Create reset link
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+    // Send email with reset link
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      }
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Reset Your Snookhead Password',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+          <h2>Password Reset Request</h2>
+          <p>Hello ${user.name},</p>
+          <p>You requested to reset your password. Click the button below to set a new password:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetLink}" style="background-color: #F08626; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Reset Password</a>
+          </div>
+          <p>Or copy and paste this link into your browser:</p>
+          <p style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; word-break: break-all;">${resetLink}</p>
+          <p><strong>Important:</strong> This link will expire in 1 hour for security reasons.</p>
+          <p>If you didn't request this password reset, please ignore this email or contact support if you have concerns.</p>
+          <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+          <p style="font-size: 12px; color: #666;">This is an automated message from Snookhead. Please do not reply to this email.</p>
+        </div>
+      `,
+      text: `Hello ${user.name},\n\nYou requested to reset your password. Click the link below to set a new password:\n\n${resetLink}\n\nThis link will expire in 1 hour.\n\nIf you didn't request this password reset, please ignore this email.`
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    console.log(`✅ Password reset link sent to ${email}`);
+
+    res.json({ 
+      success: true,
+      message: "Password reset link has been sent to your email address" 
+    });
+
+  } catch (err) {
+    console.error("Forgot password error:", err);
+    
+    // Check for email-specific errors
+    if (err.message && err.message.includes('Email')) {
+      return res.status(500).json({ error: "Failed to send email. Please try again later." });
+    }
+    
+    res.status(500).json({ error: "Server error occurred. Please try again later." });
+  }
+});
+
+// @route   POST /api/auth/reset-password
+// @desc    Reset password using token from email link
+// @access  Public
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    console.log('🔍 Reset password attempt:', { 
+      tokenReceived: !!token, 
+      tokenLength: token?.length,
+      passwordReceived: !!newPassword 
+    });
+
+    // Validation
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: "Token and new password are required" });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+
+    // Find user with this token
+    const user = await User.findOne({ where: { reset_token: token } });
+    
+    console.log('🔍 User lookup result:', { 
+      userFound: !!user,
+      userId: user?.id,
+      hasResetToken: !!user?.reset_token,
+      hasExpiry: !!user?.reset_token_expiry 
+    });
+    
+    if (!user) {
+      console.log('❌ No user found with this reset token');
+      return res.status(400).json({ error: "Invalid or expired reset token" });
+    }
+
+    // Check if reset_token_expiry exists and token has expired
+    if (!user.reset_token_expiry) {
+      console.log('❌ User has no reset_token_expiry');
+      return res.status(400).json({ error: "Invalid reset token. Please request a new one." });
+    }
+
+    const now = new Date();
+    const expiry = new Date(user.reset_token_expiry);
+    
+    console.log('🔍 Token expiry check:', { 
+      now: now.toISOString(), 
+      expiry: expiry.toISOString(),
+      isExpired: now > expiry 
+    });
+    
+    if (now > expiry) {
+      console.log('❌ Token has expired');
+      return res.status(400).json({ error: "Reset token has expired. Please request a new one." });
+    }
+
+    // Hash the new password
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update user's password and clear reset token
+    await User.update(
+      { 
+        passwordHash: hashedPassword,
+        reset_token: null,
+        reset_token_expiry: null
+      },
+      { where: { id: user.id } }
+    );
+
+    console.log(`✅ Password reset successful for ${user.email}`);
+
+    res.json({ 
+      success: true,
+      message: "Password has been reset successfully. You can now log in with your new password." 
+    });
+
+  } catch (err) {
+    console.error("Reset password error:", err);
+    res.status(500).json({ error: "Server error occurred. Please try again later." });
   }
 });
 
