@@ -34,34 +34,46 @@ const stationContext = async (req, res, next) => {
 
     // For owner/staff/manager roles, get station_id from user record
     if (["owner", "staff", "manager"].includes(req.user.role)) {
-      // First check if station_id is already in JWT payload (JWT uses station_id usually, but let's check)
+      // First check if station_id is already in JWT payload
       if (req.user.station_id) {
         req.stationId = req.user.station_id;
         return next();
       }
 
       // Otherwise fetch from database
-      const user = await User.findByPk(req.user.id, {
-        attributes: ["id", "stationid", "role"],
-      });
+      const user = await User.findByPk(req.user.id);
 
       if (!user) {
         return res.status(401).json({ error: "User not found" });
       }
 
-      // For owners without a station_id, they might need to create one first
+      // For owners without a station_id, auto-create one (Self-Healing)
       if (req.user.role === "owner" && !user.stationid) {
-        // Check if they have an owned station
-        const ownedStation = await Station.findOne({
-          where: { owneruserid: user.id },
-        });
+        try {
+          console.log(
+            `MW: Owner ${user.email} has no station. Auto-creating...`,
+          );
+          const newStation = await Station.create({
+            stationname: `${user.name}'s Club`,
+            ownername: user.name,
+            ownerphone: user.phone || "Not provided",
+            locationcity: "Unknown City",
+            locationstate: "Unknown State",
+            onboardingdate: new Date(),
+            status: "active",
+            subscriptiontype: "free",
+          });
 
-        if (ownedStation) {
-          // Update user's station_id
-          await User.update({ stationid: ownedStation.id }, { where: { id: user.id } });
-          req.stationId = ownedStation.id;
-        } else {
-          // Owner needs to create a station first
+          await User.update(
+            { stationid: newStation.id },
+            { where: { id: user.id } },
+          );
+
+          req.stationId = newStation.id;
+          // req.needsStationSetup = false; // logic flow continues successfully
+        } catch (err) {
+          console.error("MW: Failed to auto-create station:", err);
+          // Fallback to blocking if auto-create fails
           req.stationId = null;
           req.needsStationSetup = true;
         }
@@ -69,7 +81,10 @@ const stationContext = async (req, res, next) => {
       }
 
       // Staff/Manager must have a station_id
-      if ((req.user.role === "staff" || req.user.role === "manager") && !user.stationid) {
+      if (
+        (req.user.role === "staff" || req.user.role === "manager") &&
+        !user.stationid
+      ) {
         return res.status(403).json({
           error: "Staff/Manager not assigned to any station",
           code: "NO_STATION_ASSIGNED",
@@ -120,9 +135,10 @@ const requireStation = (req, res, next) => {
  * Helper function to add station filter to Sequelize where clause
  * @param {Object} where - Existing where clause
  * @param {Number|null} stationId - Station ID from req.stationId
+ * @param {String} [columnName='stationid'] - Column name for station ID (default: stationid)
  * @returns {Object} - Updated where clause with station filter
  */
-const addStationFilter = (where = {}, stationId) => {
+const addStationFilter = (where = {}, stationId, columnName = "stationid") => {
   // If stationId is null (admin), don't add filter
   if (stationId === null || stationId === undefined) {
     return where;
@@ -130,7 +146,7 @@ const addStationFilter = (where = {}, stationId) => {
 
   return {
     ...where,
-    stationid: stationId,
+    [columnName]: stationId,
   };
 };
 
@@ -138,16 +154,17 @@ const addStationFilter = (where = {}, stationId) => {
  * Helper function to add station_id to create data
  * @param {Object} data - Data to be created
  * @param {Number|null} stationId - Station ID from req.stationId
+ * @param {String} [columnName='stationid'] - Column name for station ID (default: stationid)
  * @returns {Object} - Updated data with station_id
  */
-const addStationToData = (data = {}, stationId) => {
+const addStationToData = (data = {}, stationId, columnName = "stationid") => {
   if (stationId === null || stationId === undefined) {
     return data;
   }
 
   return {
     ...data,
-    stationid: stationId,
+    [columnName]: stationId,
   };
 };
 

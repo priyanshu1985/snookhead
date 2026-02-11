@@ -21,6 +21,9 @@ router.get(
   authorize("admin", "owner", "manager", "staff"),
   async (req, res) => {
     try {
+      if (req.needsStationSetup) {
+        return res.json([]);
+      }
       const where = addStationFilter({}, req.stationId);
       const list = await Customer.findAll({
         where,

@@ -1,13 +1,25 @@
 import express from "express";
 import { Expense } from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
+import {
+  stationContext,
+  requireStation,
+  addStationFilter,
+  addStationToData,
+} from "../middleware/stationContext.js";
 
 const router = express.Router();
 
 // Get all expenses (Owner/Admin)
-router.get("/", auth, authorize("owner", "admin"), async (req, res) => {
+router.get("/", auth, stationContext, authorize("owner", "admin"), async (req, res) => {
   try {
+    if (req.needsStationSetup) {
+      return res.json([]);
+    }
+
+    const where = addStationFilter({}, req.stationId);
     const expenses = await Expense.findAll({
+      where,
       order: [["date", "DESC"]],
     });
     res.json(expenses);
@@ -17,7 +29,7 @@ router.get("/", auth, authorize("owner", "admin"), async (req, res) => {
 });
 
 // Add new expense
-router.post("/", auth, authorize("owner", "admin"), async (req, res) => {
+router.post("/", auth, stationContext, requireStation, authorize("owner", "admin"), async (req, res) => {
   try {
     const { title, amount, category, date, description } = req.body;
 
@@ -25,7 +37,7 @@ router.post("/", auth, authorize("owner", "admin"), async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const newExpense = await Expense.create({
+    const expenseData = addStationToData({
       title,
       amount: parseFloat(amount),
       category: category || "Other",
@@ -34,7 +46,9 @@ router.post("/", auth, authorize("owner", "admin"), async (req, res) => {
       created_by: req.user.id,
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    }, req.stationId);
+
+    const newExpense = await Expense.create(expenseData);
 
     res.status(201).json(newExpense);
   } catch (err) {
@@ -44,10 +58,16 @@ router.post("/", auth, authorize("owner", "admin"), async (req, res) => {
 });
 
 // Delete expense
-router.delete("/:id", auth, authorize("owner", "admin"), async (req, res) => {
+router.delete("/:id", auth, stationContext, authorize("owner", "admin"), async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    await Expense.destroy({ where: { id } });
+    const where = addStationFilter({ id }, req.stationId);
+    
+    // Check if exists first to be safe (optional with destroy where but good for 404)
+    const expense = await Expense.findOne({ where });
+    if (!expense) return res.status(404).json({ error: "Expense not found" });
+
+    await Expense.destroy({ where: { id: expense.id } });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

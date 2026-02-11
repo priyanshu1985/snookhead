@@ -64,7 +64,8 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         // orderDate: new Date(), // Removing as column doesn't exist. DB uses createdAt.
         created_by: req.user.id,
       },
-      req.stationId
+      req.stationId,
+      "stationid",
     );
 
     const order = await Order.create(orderData);
@@ -138,7 +139,10 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
 
       if (menuItem.stock !== undefined) {
         const newStock = Math.max(0, menuItem.stock - qty);
-        await MenuItem.update({ stock: newStock }, { where: { id: menuItem.id } });
+        await MenuItem.update(
+          { stock: newStock },
+          { where: { id: menuItem.id } },
+        );
       }
     }
 
@@ -179,6 +183,14 @@ router.get("/", auth, stationContext, async (req, res) => {
       table_id,
     } = req.query;
 
+    if (req.needsStationSetup) {
+      return res.json({
+        total: 0,
+        currentPage: page,
+        data: [],
+      });
+    }
+
     let where = {};
     if (status) where.status = status;
     if (source && source !== "all") where.order_source = source;
@@ -186,13 +198,13 @@ router.get("/", auth, stationContext, async (req, res) => {
     if (table_id) where.table_id = parseInt(table_id);
 
     // Apply station filter for multi-tenancy
-    where = addStationFilter(where, req.stationId);
+    where = addStationFilter(where, req.stationId, "stationid");
 
     const orders = await Order.findAll({
       where,
       offset: (page - 1) * limit,
       limit: parseInt(limit),
-      select: "*, OrderItems:orderitems(*, MenuItem:menuitems(*))",
+      select: "*, OrderItems:orderitem(*, MenuItem:menuitems(*))",
       order: [["createdAt", "DESC"]], // Ensure ordering works with new select
     });
 
@@ -200,6 +212,11 @@ router.get("/", auth, stationContext, async (req, res) => {
       total: orders.length,
       currentPage: page,
       data: orders,
+      debug: {
+        station_id: req.stationId,
+        where_filter: where,
+        raw_orders_count: orders.length,
+      },
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -216,7 +233,9 @@ router.get("/by-session/:sessionId", auth, stationContext, async (req, res) => {
     // Apply station filter
     const where = addStationFilter(
       { session_id: parseInt(sessionId) },
-      req.stationId
+      { session_id: parseInt(sessionId) },
+      req.stationId,
+      "stationid",
     );
 
     const orders = await Order.findAll({
@@ -251,7 +270,7 @@ router.get("/by-session/:sessionId", auth, stationContext, async (req, res) => {
     // Calculate total of all orders for this session
     const sessionMenuTotal = transformedOrders.reduce(
       (sum, order) => sum + order.total,
-      0
+      0,
     );
 
     // Flatten all items from all orders for consolidated billing
@@ -276,7 +295,11 @@ router.get("/by-session/:sessionId", auth, stationContext, async (req, res) => {
 router.get("/:id", auth, stationContext, async (req, res) => {
   try {
     // Apply station filter
-    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const where = addStationFilter(
+      { id: req.params.id },
+      req.stationId,
+      "stationid",
+    );
 
     const order = await Order.findOne({
       where,
@@ -301,7 +324,11 @@ router.post("/:orderId/items", auth, stationContext, async (req, res) => {
     const { items } = req.body; // [{id, name, price, qty}]
 
     // Find order with station filter
-    const where = addStationFilter({ id: req.params.orderId }, req.stationId);
+    const where = addStationFilter(
+      { id: req.params.orderId },
+      req.stationId,
+      "stationid",
+    );
     const order = await Order.findOne({ where });
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
@@ -359,7 +386,11 @@ router.patch("/:id/status", auth, stationContext, async (req, res) => {
     }
 
     // Find order with station filter
-    const where = addStationFilter({ id: req.params.id }, req.stationId);
+    const where = addStationFilter(
+      { id: req.params.id },
+      req.stationId,
+      "stationid",
+    );
     const order = await Order.findOne({ where });
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
@@ -388,7 +419,11 @@ router.delete(
   async (req, res) => {
     try {
       // Find order with station filter
-      const where = addStationFilter({ id: req.params.id }, req.stationId);
+      const where = addStationFilter(
+        { id: req.params.id },
+        req.stationId,
+        "stationid",
+      );
       const order = await Order.findOne({ where });
       if (!order) {
         return res.status(404).json({ error: "Order not found" });
@@ -402,7 +437,7 @@ router.delete(
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 export default router;

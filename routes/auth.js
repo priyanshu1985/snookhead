@@ -1,294 +1,389 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import crypto from "crypto";
-import { User, Station } from "../models/index.js";
+import { User, Station, Game, TableAsset } from "../models/index.js";
 import tokenStore from "../utils/tokenStore.js";
 import { auth, validateRefreshToken } from "../middleware/auth.js";
-import {
-  validateRequired,
-  validateEmailFormat,
-  validatePasswordStrength,
-} from "../middleware/validation.js";
-import { rateLimit } from "../middleware/rateLimiter.js";
+import { sendOTP, verifyOTP } from "../utils/otpService.js";
+import crypto from "crypto";
 import dotenv from "dotenv";
 
-const router = express.Router();
 dotenv.config();
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXP = process.env.JWT_EXP || "7d"; // access token expiry
-const REFRESH_EXP = 30 * 24 * 60 * 60 * 1000; // 30 days in ms for refresh token - users stay logged in until manual logout
-const NODE_ENV = process.env.NODE_ENV || "development";
+const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || "default_secret"; // Fallback for dev
+const ACCESS_TOKEN_EXPIRY = "7d"; // 7 days
 
-function makeAccessToken(user) {
+// Helper: Generate Access Token
+const generateAccessToken = (user) => {
   return jwt.sign(
     {
       id: user.id,
-      email: user.email,
       role: user.role,
-      station_id: user.station_id || null, // Include station_id for multi-tenancy
-      iat: Math.floor(Date.now() / 1000),
+      station_id: user.stationid,
     },
     JWT_SECRET,
-    { expiresIn: JWT_EXP }
+    { expiresIn: ACCESS_TOKEN_EXPIRY },
   );
-}
+};
 
-function makeRefreshToken() {
-  return crypto.randomBytes(64).toString("hex");
-}
+// @route   POST /api/auth/login
+// @desc    Authenticate user & get token
+// @access  Public
+router.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-// Set refresh token as httpOnly cookie
-function setRefreshTokenCookie(res, refreshToken) {
-  res.cookie("refreshToken", refreshToken, {
-    httpOnly: true,
-    secure: NODE_ENV === "production", // Only send over HTTPS in production
-    sameSite: "strict",
-    maxAge: REFRESH_EXP,
-    path: "/api/auth/refresh",
-  });
-}
+    // Validation
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ error: "Please provide email and password" });
+    }
 
-// Clear refresh token cookie
-function clearRefreshTokenCookie(res) {
-  res.clearCookie("refreshToken", {
-    httpOnly: true,
-    secure: NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/api/auth/refresh",
-  });
-}
+    // Check for user
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
 
-// register
-router.post(
-  "/register",
-  validateRequired(["name", "email", "password"]),
-  validateEmailFormat,
-  validatePasswordStrength,
-  async (req, res) => {
-    try {
-      const { name, email, password, phone, role } = req.body;
+    // Check password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
 
-      // Prevent admin role creation during registration
-      if (role === "admin") {
-        return res.status(403).json({ error: "Cannot register as admin" });
-      }
+    // Check if email is verified
+    if (!user.email_verified) {
+      return res.status(403).json({
+        error: "Please verify your email address first",
+        emailNotVerified: true,
+        email: user.email,
+      });
+    }
 
-      // Use the provided role, default to 'customer' only if role is undefined/null/empty
-      const validRoles = ["staff", "owner", "customer"];
-      let userRole = "customer";
-      if (
-        role &&
-        typeof role === "string" &&
-        validRoles.includes(role.toLowerCase())
-      ) {
-        userRole = role.toLowerCase();
-      }
+    // Fetch fresh user data to get latest station_id
+    // Fetch fresh user data to get latest station_id
+    let freshUser = await User.findByPk(user.id);
+    if (!freshUser) {
+      return res.status(401).json({ error: "User not found" });
+    }
 
-      const existing = await User.findOne({ where: { email } });
-      if (existing) return res.status(400).json({ error: "User exists" });
-
-      const hash = await bcrypt.hash(password, 10);
-
-      // If registering as owner, create a station for them first
-      let stationId = null;
-      if (userRole === "owner") {
-        const station = await Station.create({
-          stationname: `${name}'s Cafe`,
-          subscriptiontype: "free",
-          subscriptionstatus: "active",
-          locationcity: req.body.city || "Not Set",
-          locationstate: req.body.state || "Not Set",
-          ownername: name,
-          ownerphone: phone || "Not Set",
+    // Self-healing: Auto-create station for owners if missing
+    if (freshUser.role === "owner" && !freshUser.stationid) {
+      try {
+        console.log(
+          `⚠️ Owner ${freshUser.email} has no station. Auto-creating...`,
+        );
+        const newStation = await Station.create({
+          stationname: `${freshUser.name}'s Club`,
+          ownername: freshUser.name,
+          ownerphone: freshUser.phone || "Not provided",
+          locationcity: "Unknown City",
+          locationstate: "Unknown State",
           onboardingdate: new Date(),
           status: "active",
+          subscriptiontype: "free",
         });
-        stationId = station.id;
-      }
 
-      const user = await User.create({
-        name,
-        email,
-        passwordHash: hash,
-        phone,
-        role: userRole,
-        station_id: stationId,
-      });
-
-      // Link station to owner user
-      if (stationId) {
-        await Station.update(
-          { owneruserid: user.id },
-          { where: { id: stationId } }
+        await User.update(
+          { stationid: newStation.id },
+          { where: { id: freshUser.id } },
         );
+
+        // Refresh user data with new station_id
+        freshUser = await User.findByPk(user.id);
+        console.log(
+          `✅ Auto-created station ${newStation.id} for user ${freshUser.email}`,
+        );
+      } catch (stationErr) {
+        console.error("❌ Failed to auto-create station on login:", stationErr);
+        // Continue login, user will see "Setup Station" errors but at least can login
       }
-
-      // Generate tokens so user is logged in after registration
-      const access = makeAccessToken(user);
-      const refresh = makeRefreshToken();
-      tokenStore.setRefreshToken(user.id, refresh);
-
-      // Set refresh token as httpOnly cookie
-      setRefreshTokenCookie(res, refresh);
-
-      res.status(201).json({
-        success: true,
-        accessToken: access,
-        refreshToken: refresh, // Also send in body for mobile compatibility
-        expiresIn: JWT_EXP,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          phone: user.phone,
-          station_id: user.stationid || null,
-        },
-      });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  }
-);
-
-// login -> returns access token + refresh token
-router.post(
-  "/login",
-  rateLimit(5, 15 * 60 * 1000),
-  validateRequired(["email", "password"]),
-  validateEmailFormat,
-  async (req, res) => {
-    try {
-      const { email, password } = req.body;
-      const user = await User.findOne({ where: { email } });
-      if (!user) return res.status(400).json({ error: "Invalid credentials" });
-
-      const ok = await bcrypt.compare(password, user.passwordHash || user.passwordhash);
-      if (!ok) return res.status(400).json({ error: "Invalid credentials" });
-
-      const access = makeAccessToken(user);
-      const refresh = makeRefreshToken();
-      tokenStore.setRefreshToken(user.id, refresh);
-
-      // Set refresh token as httpOnly cookie
-      setRefreshTokenCookie(res, refresh);
-
-      res.json({
-        success: true,
-        accessToken: access,
-        refreshToken: refresh, // Also send in body for mobile compatibility
-        expiresIn: JWT_EXP,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          phone: user.phone,
-          station_id: user.stationid || null,
-        },
-      });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  }
-);
-
-// refresh token - enhanced with better security
-router.post("/refresh", async (req, res) => {
-  try {
-    // Try to get refresh token from cookie first, then from body
-    let refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
-
-    if (!refreshToken) {
-      return res.status(400).json({
-        error: "No refresh token provided",
-        code: "NO_REFRESH_TOKEN",
-      });
     }
 
-    // Find user by refresh token
-    const userId = tokenStore.findUserByRefreshToken(refreshToken);
-    if (!userId) {
-      clearRefreshTokenCookie(res);
-      return res.status(401).json({
-        error: "Invalid or expired refresh token",
-        code: "INVALID_REFRESH_TOKEN",
-      });
-    }
+    // Generate tokens with fresh user data
+    const accessToken = generateAccessToken(freshUser);
+    const refreshToken = crypto.randomBytes(40).toString("hex");
 
-    // Get user from database
-    const user = await User.findByPk(userId);
-    if (!user) {
-      tokenStore.revokeRefreshToken(userId);
-      clearRefreshTokenCookie(res);
-      return res.status(401).json({
-        error: "User not found",
-        code: "USER_NOT_FOUND",
-      });
-    }
+    // Save refresh token
+    await tokenStore.setRefreshToken(freshUser.id, refreshToken);
 
-    // Generate new access token
-    const newAccessToken = makeAccessToken(user);
-
-    // Optionally generate new refresh token (token rotation)
-    const rotateRefreshToken = process.env.ROTATE_REFRESH_TOKENS === "true";
-    let newRefreshToken = refreshToken;
-
-    if (rotateRefreshToken) {
-      newRefreshToken = makeRefreshToken();
-      tokenStore.setRefreshToken(userId, newRefreshToken);
-      setRefreshTokenCookie(res, newRefreshToken);
-    }
+    // Return user info (exclude sensitive data)
+    const { password: _, ...userWithoutPassword } = freshUser;
 
     res.json({
-      success: true,
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
-      expiresIn: JWT_EXP,
+      accessToken,
+      refreshToken,
+      user: userWithoutPassword,
+    });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// @route   POST /api/auth/register
+// @desc    Register new user (sends OTP to email)
+// @access  Public
+router.post("/register", async (req, res) => {
+  try {
+    const { name, email, password, phone, role } = req.body;
+
+    // Validation
+    if (!name || !email || !password) {
+      return res
+        .status(400)
+        .json({ error: "Please provide name, email, and password" });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res
+        .status(409)
+        .json({ error: "User already exists with this email" });
+    }
+
+    // Hash password
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Create user with pending status (default role is 'owner' for new registrations)
+    await User.create({
+      name,
+      email,
+      password: hashedPassword,
+      phone: phone || null,
+      role: role || "owner", // Default to owner for new registrations
+      email_verified: false, // User must verify email first
+    });
+
+    // Send OTP to email
+    await sendOTP(email);
+
+    res.status(201).json({
+      message:
+        "Registration initiated. Please check your email for verification code.",
+      email,
+    });
+  } catch (err) {
+    console.error("Register error:", err);
+
+    // Handle specific OTP service errors
+    if (
+      err.message.includes("Database error") ||
+      err.message.includes("Email error")
+    ) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// @route   POST /api/auth/verify-otp
+// @desc    Verify OTP and complete registration
+// @access  Public
+router.post("/verify-otp", async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    // Validation
+    if (!email || !code) {
+      return res
+        .status(400)
+        .json({ error: "Please provide email and verification code" });
+    }
+
+    // Verify OTP
+    const otpResult = await verifyOTP(email, code);
+    if (!otpResult.valid) {
+      return res
+        .status(400)
+        .json({ error: otpResult.message || "Invalid verification code" });
+    }
+
+    // Find user and mark as verified
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Check if user already has a station (avoid duplicates)
+    let userStation = null;
+    if (!user.stationid) {
+      try {
+        // Try to create a minimal station for this user (isolated workspace)
+        userStation = await Station.create({
+          stationname: `${user.name}'s Club`,
+          ownername: user.name,
+          ownerphone: user.phone || "Not provided",
+          locationcity: "Unknown City",
+          locationstate: "Unknown State",
+        });
+
+        console.log(`✅ Created station for ${user.email}:`, {
+          station_id: userStation.id,
+          station_name: userStation.stationname,
+        });
+
+        // Update user with station_id and mark as verified
+        const updateResult = await User.update(
+          {
+            email_verified: true,
+            stationid: userStation.id,
+          },
+          { where: { email } },
+        );
+
+        console.log(`✅ Updated user ${email} with station_id:`, updateResult);
+
+        // Fetch fresh user data to ensure we have latest info
+        const updatedUser = await User.findOne({ where: { email } });
+        if (updatedUser) {
+          user.stationid = updatedUser.stationid;
+          user.email_verified = updatedUser.email_verified;
+        }
+      } catch (stationError) {
+        console.log(
+          "❌ Station creation failed, continuing with user verification:",
+          stationError.message,
+        );
+        // If station creation fails, just mark user as verified without station
+        await User.update({ email_verified: true }, { where: { email } });
+      }
+    } else {
+      console.log(
+        `✅ User ${user.email} already has station_id: ${user.stationid}`,
+      );
+      // User already has a station, just mark as verified
+      await User.update({ email_verified: true }, { where: { email } });
+
+      // Fetch fresh user data
+      const updatedUser = await User.findOne({ where: { email } });
+      if (updatedUser) {
+        user.email_verified = updatedUser.email_verified;
+      }
+    }
+
+    // Generate tokens for the verified user (use fresh user data)
+    const freshUserForToken = await User.findOne({ where: { email } });
+    if (!freshUserForToken) {
+      return res.status(404).json({ error: "User not found after update" });
+    }
+
+    console.log(
+      `🔑 Generating JWT for user ${email} with station_id: ${freshUserForToken.stationid}`,
+    );
+
+    const accessToken = generateAccessToken(freshUserForToken);
+    const refreshToken = crypto.randomBytes(40).toString("hex");
+
+    // Save refresh token
+    await tokenStore.setRefreshToken(freshUserForToken.id, refreshToken);
+
+    // Return user info (exclude sensitive data)
+    const { password: _, ...userWithoutPassword } = freshUserForToken;
+
+    res.json({
+      message: "Email verified successfully. Welcome!",
+      accessToken,
+      refreshToken,
       user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        station_id: user.stationid || null,
+        ...userWithoutPassword,
+        email_verified: true,
+        station_id: freshUserForToken.stationid,
+      },
+      debugInfo: {
+        station_created: userStation ? userStation.id : "existing",
+        station_name: userStation ? userStation.stationname : "N/A",
       },
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("OTP verification error:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-// logout (revoke refresh token and clear session)
-router.post("/logout", async (req, res) => {
+// @route   POST /api/auth/resend-otp
+// @desc    Resend OTP to email
+// @access  Public
+router.post("/resend-otp", async (req, res) => {
   try {
-    // Get refresh token from cookie or body
-    let refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
+    const { email } = req.body;
 
-    if (refreshToken) {
-      // Find and revoke the refresh token
-      const userId = tokenStore.findUserByRefreshToken(refreshToken);
-      if (userId) {
-        tokenStore.revokeRefreshToken(userId);
-      }
+    // Validation
+    if (!email) {
+      return res.status(400).json({ error: "Please provide email" });
     }
 
-    // Clear the refresh token cookie
-    clearRefreshTokenCookie(res);
+    // Check if user exists
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
 
-    res.json({
-      success: true,
-      message: "Successfully logged out",
-    });
+    // Check if user is already verified
+    if (user.email_verified) {
+      return res.status(400).json({ error: "Email is already verified" });
+    }
+
+    // Send new OTP
+    await sendOTP(email);
+
+    res.json({ message: "Verification code resent to your email" });
   } catch (err) {
-    // Even if there's an error, clear the cookie
-    clearRefreshTokenCookie(res);
-    res.status(500).json({ error: err.message });
+    console.error("Resend OTP error:", err);
+
+    // Handle specific OTP service errors
+    if (
+      err.message.includes("Database error") ||
+      err.message.includes("Email error")
+    ) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-// Get current user info (protected route)
+// @route   POST /api/auth/refresh-token
+// @desc    Get new access token using refresh token
+// @access  Public (validated by middleware)
+router.post("/refresh-token", validateRefreshToken, async (req, res) => {
+  try {
+    const userId = req.refreshTokenUserId;
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const accessToken = generateAccessToken(user);
+    res.json({ accessToken });
+  } catch (err) {
+    console.error("Refresh token error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// @route   POST /api/auth/logout
+// @desc    Logout user (revoke refresh token)
+// @access  Private
+router.post("/logout", auth, async (req, res) => {
+  try {
+    await tokenStore.revokeRefreshToken(req.user.id);
+    res.json({ message: "Logged out successfully" });
+  } catch (err) {
+    console.error("Logout error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// @route   GET /api/auth/me
+// @desc    Get current user info
+// @access  Private
 router.get("/me", auth, async (req, res) => {
   try {
     const user = await User.findByPk(req.user.id);
@@ -296,72 +391,125 @@ router.get("/me", auth, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    // Also get station info if user has one
+    let stationInfo = null;
+    if (user.stationid) {
+      stationInfo = await Station.findByPk(user.stationid);
+    }
+
+    const { password, ...userWithoutPassword } = user;
+
     res.json({
-      success: true,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        station_id: user.stationid || null,
+      user: userWithoutPassword,
+      station: stationInfo,
+      debugInfo: {
+        jwt_station_id: req.user.station_id,
+        user_station_id: user.stationid,
+        jwt_role: req.user.role,
+        user_role: user.role,
       },
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Get user error:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-// request password reset -> returns reset token (in prod you'd email it)
-router.post(
-  "/request-reset",
-  rateLimit(3, 15 * 60 * 1000),
-  validateRequired(["email"]),
-  validateEmailFormat,
-  async (req, res) => {
-    try {
-      const { email } = req.body;
-      if (!email) return res.status(400).json({ error: "Email required" });
-      const user = await User.findOne({ where: { email } });
-      if (!user) return res.status(400).json({ error: "Unknown email" });
-      const token = crypto.randomBytes(20).toString("hex");
-      tokenStore.setResetToken(token, {
-        userId: user.id,
-        expiresAt: Date.now() + 3600 * 1000,
-      }); // 1 hour
-      // In real app: send email. Here we return token for dev/testing.
-      res.json({ resetToken: token, expiresIn: 3600 });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
+// @route   POST /api/auth/create-station
+// @desc    Create station for existing user (if they don't have one)
+// @access  Private
+router.post("/create-station", auth, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
     }
-  }
-);
 
-// perform password reset
-router.post(
-  "/reset-password",
-  validateRequired(["token", "newPassword"]),
-  validatePasswordStrength,
-  async (req, res) => {
-    try {
-      const { token, newPassword } = req.body;
-      if (!token || !newPassword)
-        return res
-          .status(400)
-          .json({ error: "Token and newPassword required" });
-      const info = tokenStore.getResetToken(token);
-      if (!info)
-        return res.status(400).json({ error: "Invalid or expired token" });
-      const user = await User.findByPk(info.userId);
-      if (!user) return res.status(400).json({ error: "User not found" });
-      const hash = await bcrypt.hash(newPassword, 10);
-      await User.update({ passwordHash: hash }, { where: { id: user.id } });
-      tokenStore.revokeResetToken(token);
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
+    // Check if user already has a station
+    if (user.stationid) {
+      const existingStation = await Station.findByPk(user.stationid);
+      return res.json({
+        message: "User already has a station",
+        station: existingStation,
+      });
     }
+
+    // Create new station for user
+    const newStation = await Station.create({
+      stationname: `${user.name}'s Club`,
+      ownername: user.name,
+      ownerphone: user.phone || "Not provided",
+      locationcity: "Unknown City",
+      locationstate: "Unknown State",
+    });
+
+    // Update user with station_id
+    await User.update(
+      {
+        stationid: newStation.id,
+      },
+      { where: { id: user.id } },
+    );
+
+    res.json({
+      message: "Station created successfully!",
+      station: newStation,
+    });
+  } catch (err) {
+    console.error("Create station error:", err);
+    res.status(500).json({ error: "Server error", details: err.message });
   }
-);
+});
+
+// @route   GET /api/auth/debug-station
+// @desc    Debug station context and data filtering
+// @access  Private
+router.get("/debug-station", auth, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id);
+
+    // Get user's station
+    let userStation = null;
+    if (user?.stationid) {
+      userStation = await Station.findByPk(user.stationid);
+    }
+
+    // Get all stations (to see what exists)
+    const allStations = await Station.findAll();
+
+    // Check tables and games data for debugging
+    const allTables = await TableAsset.findAll();
+    const allGames = await Game.findAll();
+
+    res.json({
+      jwt_payload: req.user,
+      user_from_db: user
+        ? {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            station_id: user.stationid,
+            email_verified: user.email_verified,
+          }
+        : null,
+      user_station: userStation,
+      all_stations: allStations.map((s) => ({
+        id: s.id,
+        station_name: s.stationname,
+        owner_name: s.ownername,
+      })),
+      station_count: allStations.length,
+      debug_data: {
+        total_tables: allTables.length,
+        total_games: allGames.length,
+        sample_table: allTables[0] || null,
+        sample_game: allGames[0] || null,
+      },
+    });
+  } catch (err) {
+    console.error("Debug station error:", err);
+    res.status(500).json({ error: "Server error", details: err.message });
+  }
+});
 
 export default router;

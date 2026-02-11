@@ -73,17 +73,17 @@ router.get("/test", (req, res) => {
 // GET /api/inventory - List all inventory items
 router.get("/", auth, stationContext, async (req, res) => {
   try {
-    console.log("GET /api/inventory - Starting request...");
-
-    const models = await getModels();
-    console.log("Models loaded:", Object.keys(models));
-
-    const { Inventory } = models;
-    if (!Inventory) {
-      throw new Error("Inventory model not found");
+    if (req.needsStationSetup) {
+      return res.json({
+        success: true,
+        data: [],
+        pagination: { page: 1, limit: 50, total: 0, pages: 0 },
+        summary: { total_items: 0, active_items: 0, low_stock_items: 0, out_of_stock_items: 0, total_value: 0, categories: [] }
+      });
     }
 
-    console.log("Inventory model found, executing query...");
+    const models = await getModels();
+    const { Inventory } = models;
 
     const {
       category,
@@ -96,107 +96,140 @@ router.get("/", auth, stationContext, async (req, res) => {
       include_inactive = "false",
     } = req.query;
 
-    // Build where clause
-    let whereClause = {};
-
-    if (include_inactive !== "true") {
-      whereClause.isactive = true;
-    }
-
-    if (category) {
-      whereClause.category = category;
-    }
-    
-    console.log("Building query with filters:", { category, search, stationId: req.stationId });
-
-    if (search) {
-      whereClause[Op.or] = [
-        { itemname: { [Op.like]: `%${search}%` } },
-        { description: { [Op.like]: `%${search}%` } },
-        { supplier: { [Op.like]: `%${search}%` } },
-      ];
-    }
-
-    // Apply station filter for multi-tenancy
-    // Use station_id (snake_case) to match inventory table schema, 
-    // overriding default stationid (no underscore) from helper
+    // Fetch ALL items for this station
+    const where = {};
     if (req.stationId) {
-        whereClause.station_id = req.stationId;
+        where.station_id = req.stationId;
     }
-    console.log("Final Where Clause:", JSON.stringify(whereClause, null, 2));
+    // Note: 'isactive' filter is better done in memory if not all fields are reliable, 
+    // but we can try to filter simple fields at DB level if findAll supports it.
+    // The custom findAll supports simple equality.
+    if (include_inactive !== "true") {
+      where.isactive = true;
+    }
+    if (category) {
+      where.category = category;
+    }
 
-    // Pagination
-    const offset = (page - 1) * limit;
-    const limitNum = Math.min(parseInt(limit), 100); // Max 100 items per page
+    // Fetch all matching station items
+    const allItems = await Inventory.findAll({ where });
 
-    // Order clause
-    // Map frontend sort keys to DB columns if needed
-    const sortField = sort_by === "item_name" ? "itemname" : 
-                      sort_by === "current_quantity" ? "currentquantity" :
-                      sort_by === "minimum_threshold" ? "minimumthreshold" :
-                      sort_by;
-
-    const orderClause = [[sortField, sort_order.toUpperCase()]];
+    // In-memory filtering for Search (LIKE equivalent)
+    let filteredRows = allItems;
     
-    console.log("Executing findAndCountAll...");
+    if (search) {
+      const lowerSearch = search.toLowerCase();
+      filteredRows = filteredRows.filter(item => 
+          (item.itemname && item.itemname.toLowerCase().includes(lowerSearch)) ||
+          (item.description && item.description.toLowerCase().includes(lowerSearch)) ||
+          (item.supplier && item.supplier.toLowerCase().includes(lowerSearch))
+      );
+    }
 
-    const { count, rows } = await Inventory.findAndCountAll({
-      where: whereClause,
-      order: orderClause,
-      limit: limitNum,
-      offset: offset,
-    });
-    
-    console.log("Query success. Count:", count, "Rows:", rows.length);
-
-    // Filter by status if requested
-    let filteredRows = rows;
+    // Filter by status
     if (status) {
       if (status === "low_stock") {
-        filteredRows = rows.filter(
+        filteredRows = filteredRows.filter(
           (item) => item.currentquantity <= item.minimumthreshold
         );
       } else if (status === "out_of_stock") {
-        filteredRows = rows.filter((item) => item.currentquantity === 0);
+        filteredRows = filteredRows.filter((item) => item.currentquantity === 0);
       } else if (status === "in_stock") {
-        filteredRows = rows.filter(
+        filteredRows = filteredRows.filter(
           (item) => item.currentquantity > item.minimumthreshold
         );
       }
     }
 
-    // Calculate summary statistics
-    const summary = {
-      total_items: count,
-      active_items: rows.filter((item) => item.isactive).length,
-      low_stock_items: filteredRows.filter(
-        (item) => item.currentquantity <= item.minimumthreshold
-      ).length,
-      out_of_stock_items: filteredRows.filter(
-        (item) => item.currentquantity === 0
-      ).length,
-      total_value: filteredRows.reduce(
-        (sum, item) => sum + (item.costperunit || 0) * item.currentquantity,
-        0
-      ),
-      categories: [], 
+    // Sorting
+    filteredRows.sort((a, b) => {
+        let valA = a[sort_by];
+        let valB = b[sort_by];
+        
+        // Handle string vs number
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+        
+        if (valA < valB) return sort_order === 'asc' ? -1 : 1;
+        if (valA > valB) return sort_order === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    // Pagination
+    const totalCount = filteredRows.length;
+    const offset = (page - 1) * limit;
+    const limitNum = parseInt(limit);
+    const paginatedRows = filteredRows.slice(offset, offset + limitNum);
+
+    // Calculate Summary from FILTERED rows (or allRows? usually summary is for current view or all? 
+    // The original code calculated summary from 'rows' which was 'findAndCountAll' result (post-DB-filter).
+    // So distinct from 'filteredRows' by status? 
+    // Original code: 'filteredRows' was derived from 'rows' by applying 'status' filter.
+    // 'summary' used 'count' (DB result) and 'rows' (DB result) and 'filteredRows' (status filtered).
+    // Let's stick to 'filteredRows' being the result of search/category/station.
+    // AND 'status' is applied on top?
+    // Wait, original: DB filter had Search + Category + Station. Status was applied in memory.
+    // So 'rows' = search/cat/station matches.
+    
+    // My 'filteredRows' above has Search/Cat/Station applied. 
+    // THEN I applied Status to it.
+    // So 'paginatedRows' is correct for the table.
+    
+    // Summary needs 'all rows matching search/cat/station' (ignoring status filter? or respecting it?)
+    // Original summary usage:
+    // total_items: count (from DB, so search/cat/station match)
+    // active_items: rows.filter(...)
+    // low_stock_items: filteredRows.filter(...) -> This implies logic re-filtering?
+    // In original: 'filteredRows = rows' then 'if (status) filteredRows = ...'
+    // So 'rows' = search/cat/station results.
+    // 'filteredRows' = search/cat/station + status results.
+    
+    // I need to separate the Status filter step if I want to replicate exact summary logic.
+    // or just calculate summary on valid dataset.
+    
+    // Let's re-organized:
+    // 1. Base set = All items for station
+    // 2. Search/Category set = Base set filtered by Search & Category & Active
+    // 3. Status set = Search/Cat set filtered by Status
+    
+    // Re-eval:
+    // 'categories' in summary was empty array in original.
+    
+    // Let's implement robustly.
+    
+    const summaryData = {
+        total_items: filteredRows.length, // Logic change: Summary reflects current filters? Or broader? 
+        // Original: 'count' was DB result (Search + Cat + Station).
+        // My 'filteredRows' includes Status filter if applied.
+        // Let's just use filteredRows for stats to be consistent with what user sees.
+        active_items: filteredRows.filter((item) => item.isactive).length,
+        low_stock_items: filteredRows.filter(
+            (item) => item.currentquantity <= item.minimumthreshold
+        ).length,
+        out_of_stock_items: filteredRows.filter(
+            (item) => item.currentquantity === 0
+        ).length,
+        total_value: filteredRows.reduce(
+            (sum, item) => sum + (item.costperunit || 0) * item.currentquantity,
+            0
+        ),
+        categories: []
     };
 
     res.json({
       success: true,
-      data: filteredRows,
+      data: paginatedRows,
       pagination: {
         page: parseInt(page),
         limit: limitNum,
-        total: count,
-        pages: Math.ceil(count / limitNum),
+        total: totalCount,
+        pages: Math.ceil(totalCount / limitNum),
       },
-      summary,
+      summary: summaryData,
     });
   } catch (error) {
-    console.error("CRITICAL ERROR fetching inventory:");
-    console.error(error); // This prints the stack trace
-    console.error(JSON.stringify(error, Object.getOwnPropertyNames(error))); // This prints hidden properties
+    console.error("Error fetching inventory:");
+    console.error(error);
     res.status(500).json({
       error: "Failed to fetch inventory items",
       details: error.message,
@@ -498,21 +531,21 @@ router.get("/alerts/low-stock", auth, stationContext, async (req, res) => {
   try {
     const { Inventory } = await getModels();
 
-    // Build where clause with station filter
-    let whereClause = {
-      isactive: true,
-      currentquantity: {
-        [Op.lte]: Inventory.sequelize.col("minimumthreshold"),
-      },
-    };
+    // Fetch all active items for station
+    const whereClause = { isactive: true };
     if (req.stationId) {
         whereClause.station_id = req.stationId;
     }
 
-    const lowStockItems = await Inventory.findAll({
-      where: whereClause,
-      order: [["currentquantity", "ASC"]],
-    });
+    const allItems = await Inventory.findAll({ where: whereClause });
+
+    // In-memory filter for low stock
+    const lowStockItems = allItems.filter(
+        (item) => item.currentquantity <= item.minimumthreshold
+    );
+
+    // Sort by quantity asc
+    lowStockItems.sort((a, b) => a.currentquantity - b.currentquantity);
 
     const outOfStockItems = lowStockItems.filter(
       (item) => item.currentquantity === 0

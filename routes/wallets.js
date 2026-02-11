@@ -18,6 +18,11 @@ const router = express.Router();
 router.get("/customer/:customer_id", auth, stationContext, async (req, res) => {
   try {
     const { customer_id } = req.params;
+    
+    if (req.needsStationSetup) {
+      return res.status(404).json({ error: "Wallet/Customer not found" });
+    }
+
     let wallet = null;
 
     // 1. Try finding by UUID (customer ID) directly if it looks like a uuid
@@ -168,6 +173,47 @@ router.post(
 );
 
 /* =====================================================
+   HELPER: Find Wallet by flexible Customer ID
+   ===================================================== */
+async function findWalletByCustomerId(customer_id, stationId) {
+    if (!customer_id) return null;
+    
+    // 1. Try finding by UUID (customer ID) directly
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customer_id);
+    
+    if (isUuid) {
+        const where = addStationFilter({ customerid: customer_id }, stationId);
+        const wallet = await Wallet.findOne({ where });
+        if (wallet) return wallet;
+    }
+
+    // 2. Lookup Customer by ID/Phone/Alias
+    let customer = null;
+    if (!isNaN(customer_id)) {
+          customer = await Customer.findOne({ 
+              where: addStationFilter({ member_seq: Number(customer_id) }, stationId) 
+          });
+    }
+    if (!customer) {
+          customer = await Customer.findOne({ 
+              where: addStationFilter({ phone: customer_id }, stationId) 
+          });
+    }
+    if (!customer) {
+          customer = await Customer.findOne({ 
+              where: addStationFilter({ alias: customer_id }, stationId) 
+          });
+    }
+
+    if (customer) {
+        const where = addStationFilter({ customerid: customer.id }, stationId);
+        return await Wallet.findOne({ where });
+    }
+
+    return null;
+}
+
+/* =====================================================
    ADD Money - filtered by station
    ===================================================== */
 router.post(
@@ -183,10 +229,9 @@ router.post(
         return res.status(400).json({ error: "Invalid amount" });
       }
 
-      const where = addStationFilter({ customerid: customer_id }, req.stationId);
-      const wallet = await Wallet.findOne({ where });
+      const wallet = await findWalletByCustomerId(customer_id, req.stationId);
       if (!wallet) {
-        return res.status(404).json({ error: "Wallet not found" });
+        return res.status(404).json({ error: "Wallet not found for this customer" });
       }
 
       const newBalance = Number(wallet.balance) + Number(amount);
@@ -268,18 +313,14 @@ router.post(
         return res.status(400).json({ error: "Invalid amount" });
       }
 
-      const where = addStationFilter({ customerid: customer_id }, req.stationId);
-      const wallet = await Wallet.findOne({ where });
+      const wallet = await findWalletByCustomerId(customer_id, req.stationId);
       if (!wallet) {
-        return res.status(404).json({ error: "Wallet not found" });
+        return res.status(404).json({ error: "Wallet not found matching this ID" });
       }
 
-      const available = Number(wallet.balance) + Number(wallet.creditlimit);
-
-      // ALLOW NEGATIVE BALANCE as per feature request
-      // if (available < amount) {
-      //   return res.status(400).json({ error: "Insufficient balance" });
-      // }
+      // Check balance (optional, currently allowing negative)
+      // const available = Number(wallet.balance) + Number(wallet.creditlimit);
+      // if (available < amount) { ... }
 
       const newBalance = Number(wallet.balance) - Number(amount);
       await Wallet.update({
@@ -295,7 +336,7 @@ router.post(
         new_balance: wallet.balance,
       });
     } catch (err) {
-      console.error(err);
+      console.error("Wallet deduction error:", err);
       res.status(500).json({ error: err.message });
     }
   }
@@ -368,6 +409,9 @@ router.get(
   authorize("admin", "owner"),
   async (req, res) => {
     try {
+      if (req.needsStationSetup) {
+        return res.json([]);
+      }
       const where = addStationFilter({}, req.stationId);
       const wallets = await Wallet.findAll({
         where,

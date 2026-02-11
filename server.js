@@ -1,11 +1,12 @@
 // server.js
 // Touch to force restart!!
+import "dotenv/config";
+import dns from "node:dns";
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder("ipv4first");
+}
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
-
-// Configure environment variables first
-dotenv.config();
 
 import { getSupabase, testConnection } from "./config/supabase.js";
 
