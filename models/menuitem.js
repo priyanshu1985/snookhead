@@ -42,7 +42,7 @@ module.exports = (sequelize, DataTypes) => {
       purchasePrice: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: true,
-        defaultValue: 0.00,
+        defaultValue: 0.0,
       },
       unit: {
         type: DataTypes.STRING(20),
@@ -72,6 +72,6 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "menuitems",
       timestamps: true,
-    }
+    },
   );
 };

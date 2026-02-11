@@ -44,7 +44,7 @@ router.get("/", auth, stationContext, async (req, res) => {
     }
 
     // Apply station filter for multi-tenancy
-    where = addStationFilter(where, req.stationId, 'stationid');
+    where = addStationFilter(where, req.stationId, "stationid");
 
     // Fetch all matching items for this station
     const allItems = await MenuItem.findAll({ where });
@@ -53,28 +53,37 @@ router.get("/", auth, stationContext, async (req, res) => {
     let filteredItems = allItems;
 
     if (category) {
-        filteredItems = filteredItems.filter(item => item.category === category);
+      filteredItems = filteredItems.filter(
+        (item) => item.category === category,
+      );
     }
 
     if (minPrice) {
-        filteredItems = filteredItems.filter(item => Number(item.price) >= Number(minPrice));
+      filteredItems = filteredItems.filter(
+        (item) => Number(item.price) >= Number(minPrice),
+      );
     }
     if (maxPrice) {
-        filteredItems = filteredItems.filter(item => Number(item.price) <= Number(maxPrice));
+      filteredItems = filteredItems.filter(
+        (item) => Number(item.price) <= Number(maxPrice),
+      );
     }
 
     if (search) {
-        const searchLower = search.toLowerCase();
-        filteredItems = filteredItems.filter(item => 
-            item.name.toLowerCase().includes(searchLower) || 
-            (item.description && item.description.toLowerCase().includes(searchLower))
-        );
+      const searchLower = search.toLowerCase();
+      filteredItems = filteredItems.filter(
+        (item) =>
+          item.name.toLowerCase().includes(searchLower) ||
+          (item.description &&
+            item.description.toLowerCase().includes(searchLower)),
+      );
     }
 
     // Sort: Category then Name
     filteredItems.sort((a, b) => {
-        if (a.category !== b.category) return a.category.localeCompare(b.category);
-        return a.name.localeCompare(b.name);
+      if (a.category !== b.category)
+        return a.category.localeCompare(b.category);
+      return a.name.localeCompare(b.name);
     });
 
     // ------------------------------------------------------------------
@@ -155,7 +164,11 @@ router.get("/", auth, stationContext, async (req, res) => {
 router.get("/:id", auth, stationContext, async (req, res) => {
   try {
     // Find item with station filter to ensure owner can only see their items
-    const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
+    const where = addStationFilter(
+      { id: req.params.id },
+      req.stationId,
+      "stationid",
+    );
     const item = await MenuItem.findOne({ where });
     if (!item) return res.status(404).json({ error: "Menu item not found" });
 
@@ -180,7 +193,6 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
 
     // Removed hardcoded category validation to allow custom categories
 
-
     // Add station_id for multi-tenancy
     const itemData = addStationToData(
       {
@@ -198,7 +210,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
           req.body.is_available !== undefined ? req.body.is_available : true,
       },
       req.stationId,
-      'stationid'
+      "stationid",
     );
 
     const item = await MenuItem.create(itemData);
@@ -223,7 +235,11 @@ router.put(
   async (req, res) => {
     try {
       // Find item with station filter to ensure owner can only update their items
-      const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
+      const where = addStationFilter(
+        { id: req.params.id },
+        req.stationId,
+        "stationid",
+      );
       const item = await MenuItem.findOne({ where });
 
       if (!item) return res.status(404).json({ error: "Menu item not found" });
@@ -245,7 +261,9 @@ router.put(
       };
 
       // Only update fields that are present in the request
-      Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+      Object.keys(updateData).forEach(
+        (key) => updateData[key] === undefined && delete updateData[key],
+      );
 
       // Explicitly handle is_available boolean
       if (req.body.is_available !== undefined) {
@@ -264,7 +282,7 @@ router.put(
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 // --------------------------------------------------
@@ -278,7 +296,11 @@ router.delete(
   async (req, res) => {
     try {
       // Find item with station filter to ensure owner can only delete their items
-      const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
+      const where = addStationFilter(
+        { id: req.params.id },
+        req.stationId,
+        "stationid",
+      );
       const item = await MenuItem.findOne({ where });
 
       if (!item) return res.status(404).json({ error: "Menu item not found" });
@@ -289,7 +311,7 @@ router.delete(
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 // --------------------------------------------------
@@ -309,7 +331,11 @@ router.patch(
       }
 
       // Find item with station filter
-      const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
+      const where = addStationFilter(
+        { id: req.params.id },
+        req.stationId,
+        "stationid",
+      );
       const item = await MenuItem.findOne({ where });
 
       if (!item) return res.status(404).json({ error: "Menu item not found" });
@@ -318,7 +344,10 @@ router.patch(
       const newStock = item.stock + Number(quantity);
       const finalStock = newStock < 0 ? 0 : newStock;
 
-      await MenuItem.update({ stock: finalStock }, { where: { id: req.params.id } });
+      await MenuItem.update(
+        { stock: finalStock },
+        { where: { id: req.params.id } },
+      );
 
       res.json({
         message: "Stock updated",
@@ -327,7 +356,7 @@ router.patch(
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 // --------------------------------------------------
@@ -342,18 +371,18 @@ router.get(
     try {
       // Build where clause with station filter
       // Build where clause with station filter
-      const where = addStationFilter({}, req.stationId, 'stationid');
+      const where = addStationFilter({}, req.stationId, "stationid");
 
       // Fetch all items
       const allItems = await MenuItem.findAll({ where });
 
       // Filter in memory for logic: stock < threshold
-      const items = allItems.filter(item => {
-          const stock = Number(item.stock || 0);
-          const threshold = Number(item.threshold || 5);
-          // Only return if stock is being tracked (threshold > 0 or explicit logic?)
-          // Assuming all items with stock tracking have a threshold.
-          return stock < threshold;
+      const items = allItems.filter((item) => {
+        const stock = Number(item.stock || 0);
+        const threshold = Number(item.threshold || 5);
+        // Only return if stock is being tracked (threshold > 0 or explicit logic?)
+        // Assuming all items with stock tracking have a threshold.
+        return stock < threshold;
       });
 
       res.json({
@@ -365,7 +394,7 @@ router.get(
       console.error("Low stock fetch error:", err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 export default router;
