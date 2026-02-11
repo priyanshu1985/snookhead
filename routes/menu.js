@@ -44,7 +44,7 @@ router.get("/", auth, stationContext, async (req, res) => {
     }
 
     // Apply station filter for multi-tenancy
-    where = addStationFilter(where, req.stationId, 'stationid');
+    where = addStationFilter(where, req.stationId, 'station_id');
 
     // Fetch all matching items for this station
     const allItems = await MenuItem.findAll({ where });
@@ -93,7 +93,7 @@ router.get("/", auth, stationContext, async (req, res) => {
     // For web/admin, return detailed format
     res.json({
       success: true,
-      total: items.length,
+      total: total,
       currentPage: parseInt(page),
       data: items,
     });
@@ -109,7 +109,7 @@ router.get("/", auth, stationContext, async (req, res) => {
 router.get("/:id", auth, stationContext, async (req, res) => {
   try {
     // Find item with station filter to ensure owner can only see their items
-    const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
+    const where = addStationFilter({ id: req.params.id }, req.stationId, 'station_id');
     const item = await MenuItem.findOne({ where });
     if (!item) return res.status(404).json({ error: "Menu item not found" });
 
@@ -136,7 +136,6 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
 
 
     // Add station_id for multi-tenancy
-    // Using snakeless 'stationid' based on previous findings
     const itemData = addStationToData(
       {
         name,
@@ -153,7 +152,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
           req.body.is_available !== undefined ? req.body.is_available : true,
       },
       req.stationId,
-      'stationid'
+      'station_id'
     );
 
     const item = await MenuItem.create(itemData);
@@ -178,7 +177,7 @@ router.put(
   async (req, res) => {
     try {
       // Find item with station filter to ensure owner can only update their items
-      const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
+      const where = addStationFilter({ id: req.params.id }, req.stationId, 'station_id');
       const item = await MenuItem.findOne({ where });
 
       if (!item) return res.status(404).json({ error: "Menu item not found" });
@@ -233,7 +232,7 @@ router.delete(
   async (req, res) => {
     try {
       // Find item with station filter to ensure owner can only delete their items
-      const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
+      const where = addStationFilter({ id: req.params.id }, req.stationId, 'station_id');
       const item = await MenuItem.findOne({ where });
 
       if (!item) return res.status(404).json({ error: "Menu item not found" });
@@ -264,7 +263,7 @@ router.patch(
       }
 
       // Find item with station filter
-      const where = addStationFilter({ id: req.params.id }, req.stationId, 'stationid');
+      const where = addStationFilter({ id: req.params.id }, req.stationId, 'station_id');
       const item = await MenuItem.findOne({ where });
 
       if (!item) return res.status(404).json({ error: "Menu item not found" });
@@ -297,7 +296,7 @@ router.get(
     try {
       // Build where clause with station filter
       // Build where clause with station filter
-      const where = addStationFilter({}, req.stationId, 'stationid');
+      const where = addStationFilter({}, req.stationId, 'station_id');
 
       // Fetch all items
       const allItems = await MenuItem.findAll({ where });
