@@ -13,6 +13,10 @@ const router = express.Router();
 // List games (filtered by station for multi-tenancy)
 router.get("/", auth, stationContext, async (req, res) => {
   try {
+    if (req.needsStationSetup) {
+      return res.json([]);
+    }
+    
     const where = addStationFilter({}, req.stationId);
     const list = await Game.findAll({ where });
     res.json(list);
@@ -25,6 +29,10 @@ router.get("/", auth, stationContext, async (req, res) => {
 // Get single game
 router.get("/:id", auth, stationContext, async (req, res) => {
   try {
+    if (req.needsStationSetup) {
+      return res.status(404).json({ error: "Game not found" });
+    }
+
     const where = addStationFilter({ game_id: req.params.id }, req.stationId);
     // Note: The database likely uses gameid not game_id based on patterns
     // fixing filter key for future but assuming findOne below might mismatch if model def isn't updated?
@@ -86,11 +94,12 @@ router.post(
         req.stationId
       );
 
+      console.log("Game creation payload:", payload);
       const newG = await Game.create(payload);
       res.status(201).json(newG);
     } catch (err) {
-      console.error(err);
-      res.status(400).json({ error: "Bad request", details: err.message });
+      console.error("Game create error DETAILS:", err);
+      res.status(400).json({ error: "Bad request", details: err.message, stack: err.stack });
     }
   }
 );

@@ -64,24 +64,8 @@ router.post("/", auth, authorize("admin", "owner"), async (req, res) => {
       updatedAt: new Date()
     });
 
-    // Create Shift if provided
-    if (shift) {
-        /*
-          shift: {
-             start_time: "09:00",
-             end_time: "17:00",
-             work_days: ["Mon", "Tue"]
-          }
-        */
-        await import("../models/index.js").then(m => m.Shift.create({
-             user_id: newUser.id,
-             start_time: shift.start_time,
-             end_time: shift.end_time,
-             work_days: shift.work_days, // Assuming JSON support or handle stringify if needed. Supabase handles JSON types.
-             createdAt: new Date(),
-             updatedAt: new Date()
-        }));
-    }
+    // Shift creation removed as per user request to simplify employee creation
+    // if (shift) { ... }
 
     const { passwordHash: _, ...userWithoutPassword } = newUser;
     res.status(201).json(userWithoutPassword);
@@ -95,8 +79,25 @@ router.post("/", auth, authorize("admin", "owner"), async (req, res) => {
 router.get("/:id", auth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    if (req.user.role !== "admin" && req.user.role !== "owner" && req.user.id !== id)
-      return res.status(403).json({ error: "Forbidden" });
+    // Security check:
+    // 1. Admin can see all
+    // 2. Self can see self
+    // 3. Owner can see ONLY their employees
+    
+    if (req.user.role === 'admin') {
+        // allow
+    } else if (req.user.id === id) {
+        // allow
+    } else if (req.user.role === 'owner') {
+        // Check ownership
+        const targetUser = await User.findByPk(id);
+        if (!targetUser || targetUser.owner_id !== req.user.id) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
+    } else {
+         return res.status(403).json({ error: "Forbidden" });
+    }
+
     const u = await User.findByPk(id, {
       attributes: ["id", "name", "email", "phone", "role", "createdAt"],
     });
@@ -111,17 +112,29 @@ router.get("/:id", auth, async (req, res) => {
 router.put("/:id", auth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    if (req.user.role !== "admin" && req.user.role !== "owner" && req.user.id !== id)
-      return res.status(403).json({ error: "Forbidden" });
+    
     const u = await User.findByPk(id);
     if (!u) return res.status(404).json({ error: "Not found" });
+
+    // Perms
+    if (req.user.role === 'admin') {
+        // ok
+    } else if (req.user.id === id) {
+        // ok (self)
+    } else if (req.user.role === 'owner') {
+        if (u.owner_id !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+    } else {
+        return res.status(403).json({ error: "Forbidden" });
+    }
+
     const { name, phone, salary_type, salary_amount } = req.body;
     
     const updateData = {};
     if (name) updateData.name = name;
     if (phone) updateData.phone = phone;
-    if (salary_type) updateData.salary_type = salary_type;
-    if (salary_amount) updateData.salary_amount = salary_amount;
+    // Only owner/admin can update salary
+    if ((req.user.role === 'owner' || req.user.role === 'admin') && salary_type) updateData.salary_type = salary_type;
+    if ((req.user.role === 'owner' || req.user.role === 'admin') && salary_amount) updateData.salary_amount = salary_amount;
 
     await User.update(updateData, { where: { id: id } });
     res.json({ success: true });
@@ -149,6 +162,12 @@ router.post("/:id/role", auth, authorize("admin", "owner"), async (req, res) => 
 
     const u = await User.findByPk(id);
     if (!u) return res.status(404).json({ error: "Not found" });
+    
+    // Check ownership if owner
+    if (req.user.role === 'owner' && u.owner_id !== req.user.id) {
+        return res.status(403).json({ error: "Forbidden" });
+    }
+
     await User.update({ role }, { where: { id: id } });
     res.json({ success: true });
   } catch (err) {
@@ -166,6 +185,11 @@ router.delete("/:id", auth, authorize("admin", "owner"), async (req, res) => {
     // Prevent deleting other admin users only
     if (u.role === "admin") {
       return res.status(403).json({ error: "Cannot delete admin users" });
+    }
+    
+    // Check ownership if owner
+    if (req.user.role === 'owner' && u.owner_id !== req.user.id) {
+        return res.status(403).json({ error: "Forbidden" });
     }
 
     await User.destroy({ where: { id: id } });

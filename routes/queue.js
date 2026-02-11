@@ -1,5 +1,14 @@
 import express from "express";
-import { Queue, TableAsset, Game, Reservation, Order, OrderItem, MenuItem } from "../models/index.js";
+import {
+  Queue,
+  TableAsset,
+  Game,
+  Reservation,
+  Order,
+  OrderItem,
+  MenuItem,
+  ActiveTable,
+} from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
   stationContext,
@@ -7,6 +16,7 @@ import {
   addStationFilter,
   addStationToData,
 } from "../middleware/stationContext.js";
+import { checkTimeConflicts } from "../middleware/timeConflicts.js";
 
 const router = express.Router();
 
@@ -25,6 +35,10 @@ const router = express.Router();
 router.get("/", auth, stationContext, async (req, res) => {
   try {
     const { gameid, status } = req.query;
+
+    if (req.needsStationSetup) {
+      return res.json([]);
+    }
 
     // Build filter
     const where = {};
@@ -57,13 +71,21 @@ router.get("/", auth, stationContext, async (req, res) => {
     }
 
     // Extract IDs for bulk fetching
-    const gameIds = [...new Set(filteredEntries.map(e => e.gameid).filter(Boolean))];
-    const tableIds = [...new Set(filteredEntries.map(e => e.preferredtableid).filter(Boolean))];
+    const gameIds = [
+      ...new Set(filteredEntries.map((e) => e.gameid).filter(Boolean)),
+    ];
+    const tableIds = [
+      ...new Set(
+        filteredEntries.map((e) => e.preferredtableid).filter(Boolean),
+      ),
+    ];
 
     // Bulk fetch games and tables
     const [games, tables] = await Promise.all([
-        gameIds.length > 0 ? Game.findAll({ where: { gameid: gameIds } }) : [],
-        tableIds.length > 0 ? TableAsset.findAll({ where: { id: tableIds } }) : []
+      gameIds.length > 0 ? Game.findAll({ where: { gameid: gameIds } }) : [],
+      tableIds.length > 0
+        ? TableAsset.findAll({ where: { id: tableIds } })
+        : [],
     ]);
 
     // Create lookup maps
@@ -72,12 +94,14 @@ router.get("/", auth, stationContext, async (req, res) => {
 
     // Enrich list in memory
     const enrichedList = filteredEntries.map((entry, index) => {
-        return {
-            ...entry,
-            position: index + 1,
-            Game: entry.gameid ? gamesMap[entry.gameid] : null,
-            PreferredTable: entry.preferredtableid ? tablesMap[entry.preferredtableid] : null
-        };
+      return {
+        ...entry,
+        position: index + 1,
+        Game: entry.gameid ? gamesMap[entry.gameid] : null,
+        PreferredTable: entry.preferredtableid
+          ? tablesMap[entry.preferredtableid]
+          : null,
+      };
     });
 
     res.json(enrichedList);
@@ -93,6 +117,15 @@ router.get("/", auth, stationContext, async (req, res) => {
    ===================================================== */
 router.get("/summary", auth, stationContext, async (req, res) => {
   try {
+    if (req.needsStationSetup) {
+      return res.json({
+        totalWaiting: 0,
+        totalPlaying: 0,
+        waitingByGame: {},
+        currentGames: [],
+        nextPlayer: null,
+      });
+    }
     const where = {};
     if (req.stationId) {
       where.stationid = req.stationId;
@@ -134,13 +167,17 @@ router.get("/summary", auth, stationContext, async (req, res) => {
 
     // Enrich playing entries with table info
     // Extract IDs for bulk fetching
-    const gameIds = [...new Set(playing.map(e => e.gameid).filter(Boolean))];
-    const tableIds = [...new Set(playing.map(e => e.preferredtableid).filter(Boolean))];
+    const gameIds = [...new Set(playing.map((e) => e.gameid).filter(Boolean))];
+    const tableIds = [
+      ...new Set(playing.map((e) => e.preferredtableid).filter(Boolean)),
+    ];
 
     // Bulk fetch games and tables
     const [games, tables] = await Promise.all([
-        gameIds.length > 0 ? Game.findAll({ where: { gameid: gameIds } }) : [],
-        tableIds.length > 0 ? TableAsset.findAll({ where: { id: tableIds } }) : []
+      gameIds.length > 0 ? Game.findAll({ where: { gameid: gameIds } }) : [],
+      tableIds.length > 0
+        ? TableAsset.findAll({ where: { id: tableIds } })
+        : [],
     ]);
 
     // Create lookup maps
@@ -148,14 +185,14 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     const tablesMap = tables.reduce((acc, t) => ({ ...acc, [t.id]: t }), {});
 
     const playingEnriched = playing.map((entry) => {
-        const result = { ...entry };
-        if (entry.preferredtableid) {
-            result.Table = tablesMap[entry.preferredtableid];
-        }
-        if (entry.gameid) {
-            result.Game = gamesMap[entry.gameid];
-        }
-        return result;
+      const result = { ...entry };
+      if (entry.preferredtableid) {
+        result.Table = tablesMap[entry.preferredtableid];
+      }
+      if (entry.gameid) {
+        result.Game = gamesMap[entry.gameid];
+      }
+      return result;
     });
 
     res.json({
@@ -204,19 +241,29 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
 
     // Verify preferred table if specified
     if (preferredtableid) {
-      const tableWhere = addStationFilter({ id: preferredtableid }, req.stationId);
+      const tableWhere = addStationFilter(
+        { id: preferredtableid },
+        req.stationId,
+        "stationid",
+      );
       const table = await TableAsset.findOne({ where: tableWhere });
       if (!table) {
         return res.status(404).json({ error: "Preferred table not found" });
       }
       // Check if table is for the same game
       if (table.gameid !== parseInt(gameid)) {
-        return res.status(400).json({ error: "Table is not for the selected game" });
+        return res
+          .status(400)
+          .json({ error: "Table is not for the selected game" });
       }
     }
 
     // Calculate estimated wait time based on queue length for this game
-    const gameQueueWhere = addStationFilter({ gameid: parseInt(gameid) }, req.stationId);
+    const gameQueueWhere = addStationFilter(
+      { gameid: parseInt(gameid) },
+      req.stationId,
+      "stationid",
+    );
     const gameQueue = await Queue.findAll({ where: gameQueueWhere });
     const waitingCount = gameQueue.filter((e) => e.status === "waiting").length;
     const estimatedWait = waitingCount * 15; // 15 mins per person average
@@ -238,7 +285,8 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         set_time,
         food_orders: req.body.food_orders || req.body.cart || [], // Save food selection
       },
-      req.stationId
+      req.stationId,
+      "stationid",
     );
 
     const entry = await Queue.create(entryData);
@@ -246,59 +294,66 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
     // CREATE ORDER IF FOOD ITEMS EXIST
     const foodItems = req.body.food_orders || req.body.cart || [];
     if (foodItems.length > 0) {
-        try {
-            let orderTotal = 0;
-            const validItems = [];
+      try {
+        let orderTotal = 0;
+        const validItems = [];
 
-            // Calculate total and validate items
-            for (const item of foodItems) {
-                // Handle both {id, qty} and {menu_item_id, quantity} formats
-                const itemId = item.id || item.menu_item_id;
-                const qty = Number(item.qty || item.quantity) || 1;
+        // Calculate total and validate items
+        for (const item of foodItems) {
+          // Handle both {id, qty} and {menu_item_id, quantity} formats
+          const itemId = item.id || item.menu_item_id;
+          const qty = Number(item.qty || item.quantity) || 1;
 
-                const menuItem = await MenuItem.findByPk(itemId);
-                if (menuItem) {
-                    const price = Number(menuItem.price) || 0;
-                    orderTotal += price * qty;
-                    validItems.push({ menuItem, qty, price });
-                }
-            }
-
-            if (validItems.length > 0) {
-                // Create Pending Order linked to Queue
-                const orderData = addStationToData({
-                    userId: req.user.id,
-                    personName: customername,
-                    total: orderTotal,
-                    paymentMethod: 'offline', // Default for queue
-                    status: 'pending',
-                    order_source: 'queue',
-                    queue_id: entry.id,
-                    created_by: req.user.id
-                }, req.stationId);
-
-                const order = await Order.create(orderData);
-
-                // Create Order Items
-                for (const vi of validItems) {
-                     await OrderItem.create({
-                        orderId: order.id,
-                        menuItemId: vi.menuItem.id,
-                        qty: vi.qty,
-                        priceEach: vi.price
-                     });
-                     
-                     // Optional: Decrease Stock? (Maybe wait until confirmed? But standard flow decreases it)
-                     if (vi.menuItem.stock !== undefined) {
-                        const newStock = Math.max(0, vi.menuItem.stock - vi.qty);
-                        await MenuItem.update({ stock: newStock }, { where: { id: vi.menuItem.id } });
-                     }
-                }
-            }
-        } catch (orderErr) {
-            console.error("Failed to create queue order:", orderErr);
-            // Don't fail the queue entry if order fails, just log it
+          const menuItem = await MenuItem.findByPk(itemId);
+          if (menuItem) {
+            const price = Number(menuItem.price) || 0;
+            orderTotal += price * qty;
+            validItems.push({ menuItem, qty, price });
+          }
         }
+
+        if (validItems.length > 0) {
+          // Create Pending Order linked to Queue
+          const orderData = addStationToData(
+            {
+              userId: req.user.id,
+              personName: customername,
+              total: orderTotal,
+              paymentMethod: "offline", // Default for queue
+              status: "pending",
+              order_source: "queue",
+              queue_id: entry.id,
+              created_by: req.user.id,
+            },
+            req.stationId,
+            "stationid",
+          ); // Use stationid for Order creation too if it uses that column (Assuming Orders uses same pattern, verifying in next step)
+
+          const order = await Order.create(orderData);
+
+          // Create Order Items
+          for (const vi of validItems) {
+            await OrderItem.create({
+              orderId: order.id,
+              menuItemId: vi.menuItem.id,
+              qty: vi.qty,
+              priceEach: vi.price,
+            });
+
+            // Optional: Decrease Stock? (Maybe wait until confirmed? But standard flow decreases it)
+            if (vi.menuItem.stock !== undefined) {
+              const newStock = Math.max(0, vi.menuItem.stock - vi.qty);
+              await MenuItem.update(
+                { stock: newStock },
+                { where: { id: vi.menuItem.id } },
+              );
+            }
+          }
+        }
+      } catch (orderErr) {
+        console.error("Failed to create queue order:", orderErr);
+        // Don't fail the queue entry if order fails, just log it
+      }
     }
 
     // Enrich response with game info
@@ -363,6 +418,7 @@ router.post(
   auth,
   stationContext,
   authorize("staff", "owner", "admin", "manager"),
+  checkTimeConflicts, // Add comprehensive conflict checking
   async (req, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -385,11 +441,17 @@ router.post(
 
       // Verify entry is in waiting status
       if (entry.status !== "waiting") {
-        return res.status(400).json({ error: `Cannot assign table. Current status: ${entry.status}` });
+        return res.status(400).json({
+          error: `Cannot assign table. Current status: ${entry.status}`,
+        });
       }
 
       // Find table
-      const tableWhere = addStationFilter({ id: parseInt(tableid) }, req.stationId);
+      const tableWhere = addStationFilter(
+        { id: parseInt(tableid) },
+        req.stationId,
+        "stationid",
+      );
       const table = await TableAsset.findOne({ where: tableWhere });
       if (!table) {
         return res.status(404).json({ error: "Table not found" });
@@ -397,39 +459,57 @@ router.post(
 
       // Check table is available
       if (table.status !== "available") {
-        return res.status(400).json({ error: `Table is not available. Current status: ${table.status}` });
+        return res.status(400).json({
+          error: `Table is not available. Current status: ${table.status}`,
+        });
       }
 
       // Check for CONFLICTS with Reservations
       const now = new Date();
       // Assume a 60 min session if not specified, or use queue entry preference if timer mode.
-      const durationMins = (entry.booking_type === 'timer' && entry.duration_minutes) ? entry.duration_minutes : 60; 
+      const durationMins =
+        entry.booking_type === "timer" && entry.duration_minutes
+          ? entry.duration_minutes
+          : 60;
       const sessionEnd = new Date(now.getTime() + durationMins * 60000);
 
-      const tableReservations = await Reservation.findAll({ 
-          where: addStationFilter({ tableId: parseInt(tableid), status: 'pending' }, req.stationId) 
+      const tableReservations = await Reservation.findAll({
+        where: addStationFilter(
+          { tableId: parseInt(tableid), status: "pending" },
+          req.stationId,
+        ),
       });
 
       // Filter for conflicts: ResTime < SessionEnd
-      const conflict = tableReservations.find(r => {
-          const rTime = new Date(r.reservationtime || r.reservation_time || r.fromTime);
-          // Only check future reservations today/tomorrow
-          // If ResTime is passing NOW, it should have been auto-started/expired, but if it's pending it blocks.
-          // Logic: ResTime < SessionEnd && ResTime > Now-Buffer
-          return rTime < sessionEnd && rTime > new Date(now.getTime() - 15*60000);
+      const conflict = tableReservations.find((r) => {
+        const rTime = new Date(
+          r.reservationtime || r.reservation_time || r.fromTime,
+        );
+        // Only check future reservations today/tomorrow
+        // If ResTime is passing NOW, it should have been auto-started/expired, but if it's pending it blocks.
+        // Logic: ResTime < SessionEnd && ResTime > Now-Buffer
+        return (
+          rTime < sessionEnd && rTime > new Date(now.getTime() - 15 * 60000)
+        );
       });
 
       if (conflict) {
-          const rTime = new Date(conflict.reservationtime || conflict.reservation_time || conflict.fromTime);
-          return res.status(400).json({ 
-              error: `Table is reserved at ${rTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
-              details: "Conflict with upcoming reservation."
-          });
+        const rTime = new Date(
+          conflict.reservationtime ||
+            conflict.reservation_time ||
+            conflict.fromTime,
+        );
+        return res.status(400).json({
+          error: `Table is reserved at ${rTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+          details: "Conflict with upcoming reservation.",
+        });
       }
 
       // Check table is for the correct game
       if (table.gameid !== entry.gameid) {
-        return res.status(400).json({ error: "Table is not for this game type" });
+        return res
+          .status(400)
+          .json({ error: "Table is not for this game type" });
       }
 
       // Update queue entry - assign table and mark as seated (playing)
@@ -438,11 +518,48 @@ router.post(
           preferredtableid: parseInt(tableid),
           status: "seated",
         },
-        { where: { id } }
+        { where: { id } },
       );
 
       // Update table status to occupied
-      await TableAsset.update({ status: "occupied" }, { where: { id: parseInt(tableid) } });
+      await TableAsset.update(
+        { status: "occupied" },
+        { where: { id: parseInt(tableid) } },
+      );
+
+      // Create active session automatically when queue member is assigned
+      const startTime = new Date();
+      let bookingEndTime = null;
+      if (
+        entry.booking_type === "timer" &&
+        entry.duration_minutes &&
+        entry.duration_minutes > 0
+      ) {
+        bookingEndTime = new Date(
+          startTime.getTime() + entry.duration_minutes * 60000,
+        );
+      }
+
+      const sessionData = addStationToData(
+        {
+          tableid: parseInt(tableid),
+          gameid: entry.gameid,
+          starttime: startTime,
+          bookingendtime: bookingEndTime,
+          durationminutes: entry.duration_minutes || null,
+          status: "active",
+          customer_name: entry.customername || entry.customer_name,
+          bookingtype: entry.booking_type || "timer",
+          framecount: entry.frame_count || null,
+          created_by: req.user.id,
+          food_orders: entry.food_orders || JSON.stringify([]),
+          advance_payment: entry.advance_payment || 0,
+          reservation_id: entry.reservation_id || null,
+        },
+        req.stationId,
+      );
+
+      const session = await ActiveTable.create(sessionData);
 
       // Fetch updated entry
       const updatedEntry = await Queue.findByPk(id);
@@ -452,12 +569,18 @@ router.post(
         message: "Table assigned successfully. Game started!",
         entry: updatedEntry,
         table,
+        session: {
+          id: session.activeid || session.active_id,
+          customer_name: session.customer_name,
+          start_time: session.starttime,
+          booking_type: session.bookingtype,
+        },
       });
     } catch (err) {
       console.error("Error assigning table:", err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 /* =====================================================
@@ -469,6 +592,7 @@ router.post(
   auth,
   stationContext,
   authorize("staff", "owner", "admin", "manager"),
+  checkTimeConflicts, // Add comprehensive conflict checking
   async (req, res) => {
     try {
       const { gameid } = req.body;
@@ -490,7 +614,9 @@ router.post(
 
       let waitingFiltered = allWaiting.filter((e) => e.status === "waiting");
       if (gameid) {
-        waitingFiltered = waitingFiltered.filter((e) => e.gameid === parseInt(gameid));
+        waitingFiltered = waitingFiltered.filter(
+          (e) => e.gameid === parseInt(gameid),
+        );
       }
 
       if (waitingFiltered.length === 0) {
@@ -503,28 +629,38 @@ router.post(
       const allTables = await TableAsset.findAll({
         where: req.stationId ? { stationid: req.stationId } : {},
       });
-      
-      const gameTables = allTables.filter((t) => t.status === "available" && t.gameid === nextEntry.gameid);
+
+      const gameTables = allTables.filter(
+        (t) => t.status === "available" && t.gameid === nextEntry.gameid,
+      );
 
       // Filter out tables with conflicts
       const now = new Date();
-      const durationMins = (nextEntry.booking_type === 'timer' && nextEntry.duration_minutes) ? nextEntry.duration_minutes : 60; 
+      const durationMins =
+        nextEntry.booking_type === "timer" && nextEntry.duration_minutes
+          ? nextEntry.duration_minutes
+          : 60;
       const sessionEnd = new Date(now.getTime() + durationMins * 60000);
 
       // Get all pending reservations for this station
-      const allReservations = await Reservation.findAll({ 
-          where: addStationFilter({ status: 'pending' }, req.stationId) 
+      const allReservations = await Reservation.findAll({
+        where: addStationFilter({ status: "pending" }, req.stationId),
       });
 
-      const availableTable = gameTables.find(table => {
-           // Check if this specific table has a conflict
-           const conflict = allReservations.find(r => {
-                if (String(r.tableId || r.table_id) !== String(table.id)) return false;
-                
-                const rTime = new Date(r.reservationtime || r.reservation_time || r.fromTime);
-                return rTime < sessionEnd && rTime > new Date(now.getTime() - 15*60000);
-           });
-           return !conflict; // Keep if no conflict
+      const availableTable = gameTables.find((table) => {
+        // Check if this specific table has a conflict
+        const conflict = allReservations.find((r) => {
+          if (String(r.tableId || r.table_id) !== String(table.id))
+            return false;
+
+          const rTime = new Date(
+            r.reservationtime || r.reservation_time || r.fromTime,
+          );
+          return (
+            rTime < sessionEnd && rTime > new Date(now.getTime() - 15 * 60000)
+          );
+        });
+        return !conflict; // Keep if no conflict
       });
 
       if (!availableTable) {
@@ -540,11 +676,48 @@ router.post(
           preferredtableid: availableTable.id,
           status: "seated",
         },
-        { where: { id: nextEntry.id } }
+        { where: { id: nextEntry.id } },
       );
 
       // Mark table as occupied
-      await TableAsset.update({ status: "occupied" }, { where: { id: availableTable.id } });
+      await TableAsset.update(
+        { status: "occupied" },
+        { where: { id: availableTable.id } },
+      );
+
+      // Create active session automatically when queue member is auto-assigned
+      const startTime = new Date();
+      let bookingEndTime = null;
+      if (
+        nextEntry.booking_type === "timer" &&
+        nextEntry.duration_minutes &&
+        nextEntry.duration_minutes > 0
+      ) {
+        bookingEndTime = new Date(
+          startTime.getTime() + nextEntry.duration_minutes * 60000,
+        );
+      }
+
+      const sessionData = addStationToData(
+        {
+          tableid: availableTable.id,
+          gameid: nextEntry.gameid,
+          starttime: startTime,
+          bookingendtime: bookingEndTime,
+          durationminutes: nextEntry.duration_minutes || null,
+          status: "active",
+          customer_name: nextEntry.customername || nextEntry.customer_name,
+          bookingtype: nextEntry.booking_type || "timer",
+          framecount: nextEntry.frame_count || null,
+          created_by: req.user.id,
+          food_orders: nextEntry.food_orders || JSON.stringify([]),
+          advance_payment: nextEntry.advance_payment || 0,
+          reservation_id: nextEntry.reservation_id || null,
+        },
+        req.stationId,
+      );
+
+      const autoSession = await ActiveTable.create(sessionData);
 
       // Fetch updated entry
       const updatedEntry = await Queue.findByPk(nextEntry.id);
@@ -554,12 +727,18 @@ router.post(
         message: `${nextEntry.customername} has been seated at ${availableTable.name || `Table ${availableTable.id}`}`,
         entry: updatedEntry,
         table: availableTable,
+        session: {
+          id: autoSession.activeid || autoSession.active_id,
+          customer_name: autoSession.customer_name,
+          start_time: autoSession.starttime,
+          booking_type: autoSession.bookingtype,
+        },
       });
     } catch (err) {
       console.error("Error seating next in queue:", err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 /* =====================================================
@@ -589,12 +768,17 @@ router.post(
 
       // Verify entry is in seated (playing) status
       if (entry.status !== "seated") {
-        return res.status(400).json({ error: `Cannot complete. Current status: ${entry.status}` });
+        return res
+          .status(400)
+          .json({ error: `Cannot complete. Current status: ${entry.status}` });
       }
 
       // Free up the table
       if (entry.preferredtableid) {
-        await TableAsset.update({ status: "available" }, { where: { id: entry.preferredtableid } });
+        await TableAsset.update(
+          { status: "available" },
+          { where: { id: entry.preferredtableid } },
+        );
       }
 
       // Mark as served (completed)
@@ -608,7 +792,7 @@ router.post(
       console.error("Error completing game:", err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 /* =====================================================
@@ -623,7 +807,7 @@ router.post(
     // Redirect to complete endpoint
     req.params.id = req.params.id;
     return router.handle(req, res);
-  }
+  },
 );
 
 /* =====================================================
@@ -652,16 +836,24 @@ router.post(
 
       // If entry was seated (playing), free up the table
       if (entry.status === "seated" && entry.preferredtableid) {
-        await TableAsset.update({ status: "available" }, { where: { id: entry.preferredtableid } });
+        await TableAsset.update(
+          { status: "available" },
+          { where: { id: entry.preferredtableid } },
+        );
       }
 
       // Mark as cancelled
       await Queue.update({ status: "cancelled" }, { where: { id } });
 
       // Cancel associated pending order
-      const order = await Order.findOne({ where: { queue_id: id, status: 'pending' } });
+      const order = await Order.findOne({
+        where: { queue_id: id, status: "pending" },
+      });
       if (order) {
-          await Order.update({ status: 'cancelled' }, { where: { id: order.id } });
+        await Order.update(
+          { status: "cancelled" },
+          { where: { id: order.id } },
+        );
       }
 
       res.json({
@@ -672,7 +864,7 @@ router.post(
       console.error("Error cancelling queue entry:", err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 /* =====================================================
@@ -710,7 +902,7 @@ router.post(
       console.error("Error marking no-show:", err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 /* =====================================================
@@ -732,7 +924,10 @@ router.post(
 
       // Cancel each one
       for (const entry of waitingEntries) {
-        await Queue.update({ status: "cancelled" }, { where: { id: entry.id } });
+        await Queue.update(
+          { status: "cancelled" },
+          { where: { id: entry.id } },
+        );
       }
 
       res.json({
@@ -744,7 +939,7 @@ router.post(
       console.error("Error clearing queue:", err);
       res.status(500).json({ error: err.message });
     }
-  }
+  },
 );
 
 /* =====================================================

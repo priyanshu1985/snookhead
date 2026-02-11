@@ -4,7 +4,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
 
-      owner_user_id: {
+      owneruserid: {
         type: DataTypes.INTEGER,
         allowNull: true,
         references: {
@@ -13,49 +13,49 @@ module.exports = (sequelize, DataTypes) => {
         },
       },
 
-      station_name: {
+      stationname: {
         type: DataTypes.STRING(150),
         allowNull: false,
       },
 
-      onboarding_date: {
+      onboardingdate: {
         type: DataTypes.DATE,
         allowNull: false,
         defaultValue: DataTypes.NOW,
       },
 
-      subscription_type: {
-        type: DataTypes.ENUM("free", "basic", "pro", "enterprise"),
+      subscriptiontype: {
+        type: DataTypes.STRING(50),
         allowNull: false,
         defaultValue: "free",
       },
 
-      subscription_status: {
-        type: DataTypes.ENUM("active", "paused", "expired"),
+      subscriptionstatus: {
+        type: DataTypes.STRING(50),
         defaultValue: "active",
       },
 
-      location_city: {
+      locationcity: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
+
+      locationstate: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
+
+      ownername: {
         type: DataTypes.STRING(100),
         allowNull: false,
       },
 
-      location_state: {
-        type: DataTypes.STRING(100),
-        allowNull: false,
-      },
-
-      owner_name: {
-        type: DataTypes.STRING(100),
-        allowNull: false,
-      },
-
-      owner_phone: {
+      ownerphone: {
         type: DataTypes.STRING(20),
-        allowNull: false,
+        allowNull: true,
       },
 
-      station_photo_url: {
+      stationphotourl: {
         type: DataTypes.STRING(255),
         allowNull: true,
       },
@@ -66,7 +66,7 @@ module.exports = (sequelize, DataTypes) => {
       },
 
       status: {
-        type: DataTypes.ENUM("active", "removed"),
+        type: DataTypes.STRING(50),
         defaultValue: "active",
       },
     },
@@ -78,6 +78,6 @@ module.exports = (sequelize, DataTypes) => {
         { fields: ["location_city"] },
         { fields: ["status"] },
       ],
-    }
+    },
   );
 };
