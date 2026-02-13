@@ -486,12 +486,12 @@ router.get("/debug-station", auth, async (req, res) => {
       jwt_payload: req.user,
       user_from_db: user
         ? {
-            id: user.id,
-            email: user.email,
-            role: user.role,
-            station_id: user.stationid,
-            email_verified: user.email_verified,
-          }
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          station_id: user.stationid,
+          email_verified: user.email_verified,
+        }
         : null,
       user_station: userStation,
       all_stations: allStations.map((s) => ({
@@ -675,11 +675,20 @@ router.post("/reset-password", async (req, res) => {
     }
 
     const now = new Date();
-    const expiry = new Date(user.reset_token_expiry);
+
+    // Handle potential timezone issues with string dates from DB
+    let expiryString = user.reset_token_expiry;
+    // If it's a string and looks like ISO but missing Z at end, append it to force UTC
+    if (typeof expiryString === 'string' && !expiryString.endsWith('Z') && !expiryString.includes('+')) {
+      expiryString += 'Z';
+    }
+
+    const expiry = new Date(expiryString);
 
     console.log("🔍 Token expiry check:", {
       now: now.toISOString(),
-      expiry: expiry.toISOString(),
+      expiryRaw: user.reset_token_expiry,
+      expiryParsed: expiry.toISOString(),
       isExpired: now > expiry,
     });
 
