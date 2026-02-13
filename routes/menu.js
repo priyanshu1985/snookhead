@@ -86,6 +86,12 @@ router.get("/", auth, stationContext, async (req, res) => {
       return a.name.localeCompare(b.name);
     });
 
+    // Pagination
+    const total = filteredItems.length;
+    const startIndex = (Number(page) - 1) * Number(limit);
+    const endIndex = startIndex + Number(limit);
+    const items = filteredItems.slice(startIndex, endIndex);
+
     // ------------------------------------------------------------------
     // SYNC FROM INVENTORY: Override stock with actual Inventory levels
     // ------------------------------------------------------------------
