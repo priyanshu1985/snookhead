@@ -204,7 +204,7 @@ router.get("/", auth, stationContext, async (req, res) => {
       where,
       offset: (page - 1) * limit,
       limit: parseInt(limit),
-      select: "*, OrderItems:orderitem(*, MenuItem:menuitems(*))",
+      select: "*, OrderItems:orderitems(*, MenuItem:menuitems(*))",
       order: [["createdAt", "DESC"]], // Ensure ordering works with new select
     });
 

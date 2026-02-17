@@ -43,3 +43,44 @@
   "checkingAgainst": []
 }
 
+{
+  "body": {
+    "table_id": "37",
+    "game_id": 26,
+    "duration_minutes": 1,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [
+      {
+        "menu_item_id": 43,
+        "quantity": 1
+      }
+    ],
+    "food_orders": [
+      {
+        "id": 43,
+        "stationid": 50,
+        "name": "periperi fries",
+        "category": "burger and fries",
+        "description": null,
+        "price": 100,
+        "stock": 0,
+        "threshold": 5,
+        "supplierPhone": null,
+        "imageUrl": "",
+        "createdAt": "2026-02-15T11:35:39.670239+00:00",
+        "updatedAt": "2026-02-15T11:35:39.670239+00:00",
+        "unit": "piece",
+        "isavailable": true,
+        "is_available": true,
+        "purchasePrice": 0,
+        "item_type": "prepared",
+        "qty": 1
+      }
+    ]
+  },
+  "tableId": "37",
+  "checkingAgainst": []
+}
+
