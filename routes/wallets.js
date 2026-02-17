@@ -215,6 +215,53 @@ async function findWalletByCustomerId(customer_id, stationId) {
 }
 
 /* =====================================================
+   LOOKUP Wallet & Customer by ID/Phone - filtered by station
+   ===================================================== */
+router.get(
+  "/lookup",
+  auth,
+  stationContext,
+  authorize("staff", "admin", "owner"),
+  async (req, res) => {
+    try {
+      const { query } = req.query;
+
+      if (!query) {
+        return res.status(400).json({ error: "Query parameter required" });
+      }
+
+      const wallet = await findWalletByCustomerId(query, req.stationId);
+
+      if (!wallet) {
+        return res.status(404).json({ error: "Wallet not found for this customer" });
+      }
+
+      // Fetch full customer details to return
+      const customer = await Customer.findOne({
+        where: { id: wallet.customerid }
+      });
+
+      res.json({
+        wallet: {
+          id: wallet.id,
+          balance: wallet.balance,
+          currency: wallet.currency,
+        },
+        customer: {
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          member_seq: customer.member_seq
+        }
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+/* =====================================================
    ADD Money - filtered by station
    ===================================================== */
 router.post(
@@ -249,6 +296,7 @@ router.post(
           amount: amount,
           balancebefore: wallet.balance,
           balanceafter: newBalance,
+          stationid: req.stationId,
           type: "TOPUP",
           description: "Money Added via Panel",
           createdAt: new Date()
@@ -306,6 +354,7 @@ router.post(
           amount: amount,
           balancebefore: wallet.balance,
           balanceafter: newBalance,
+          stationid: req.stationId,
           type: "TOPUP",
           description: "Money Added via Panel (ID)",
           createdAt: new Date()
@@ -365,6 +414,7 @@ router.post(
           amount: amount,
           balancebefore: wallet.balance,
           balanceafter: newBalance,
+          stationid: req.stationId,
           type: "DEDUCT",
           description: "Money Deducted via Panel",
           createdAt: new Date()
@@ -479,7 +529,11 @@ router.get(
     try {
       const { wallet_id } = req.params;
 
-      const where = addStationFilter({ wallet_id }, req.stationId);
+      // Transactions table uses 'walletid' and 'stationid'
+      const where = {
+        walletid: wallet_id,
+        stationid: req.stationId
+      };
 
       // Use findAll from models definition
       const transactions = await WalletTransaction.findAll({
