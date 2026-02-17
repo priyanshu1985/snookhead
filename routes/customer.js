@@ -112,7 +112,8 @@ router.post(
           externalid: external_id,
           createdby: req.user.id,
         },
-        req.stationId
+        req.stationId,
+        "station_id"
       );
 
       const customer = await Customer.create(customerData);
@@ -122,44 +123,44 @@ router.post(
         const { v4: uuidv4 } = await import("uuid");
         const walletId = uuidv4();
         const qrId = `WALLET-${walletId.slice(0, 8)}`;
-        
+
         // Simple QR payload
         const qrPayload = JSON.stringify({
-           type: "WALLET",
-           wallet_id: walletId,
-           customer_id: customer.id
+          type: "WALLET",
+          wallet_id: walletId,
+          customer_id: customer.id
         });
-        
+
         // We need QRCode here, let's dynamic import it or use a placeholder if not critical
         // But better to just import it at top if possible. 
         // For now, let's instantiate without QR code image or simple placeholder
         // or just import QRCode at the top of file if we want to be clean.
         // Actually, let's just create the wallet record. The wallet.js handles QR specific logic usually
         // but let's try to match it.
-        
+
         // Since we can't easily add imports to top without viewing whole file again or using multi replacer,
         // let's just CREATE the wallet record with empty QR for now, or just the necessary fields.
         // The Wallet model requires: id, customerid, stationid, etc.
-        
+
         const walletData = addStationToData({
-            id: walletId,
-            customerid: customer.id,
-            phoneno: phone,
-            qrid: qrId,
-            currency: "INR",
-            balance: 0,
-            creditlimit: 0,
-            reservedamount: 0,
-            // qrcode: ... // Optional? If column allows null.
-        }, req.stationId);
-        
+          id: walletId,
+          customerid: customer.id,
+          phoneno: phone,
+          qrid: qrId,
+          currency: "INR",
+          balance: 0,
+          creditlimit: 0,
+          reservedamount: 0,
+          // qrcode: ... // Optional? If column allows null.
+        }, req.stationId, "station_id");
+
         const { Wallet } = await import("../models/index.js");
         await Wallet.create(walletData);
-        
+
       } catch (walletErr) {
-          console.error("Failed to auto-create wallet:", walletErr);
-          // Don't fail the customer creation request just because wallet failed?
-          // Or maybe we should.
+        console.error("Failed to auto-create wallet:", walletErr);
+        // Don't fail the customer creation request just because wallet failed?
+        // Or maybe we should.
       }
 
       res.status(201).json(customer);

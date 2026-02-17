@@ -1,10 +1,39 @@
-import { getSupabase } from "../config/supabase.js";
+import { getSupabase as getDb } from "../config/supabase.js";
 
-// Helper function to get supabase instance
-const getDb = () => getSupabase();
+import walletTransactionModel from "./walletTransaction.js";
 
 // Supabase table helpers - simplified data access layer
 const models = {
+  WalletTransaction: {
+    tableName: "transactions",
+    async findAll(filter = {}) {
+      let query = getDb().from(this.tableName).select("*");
+      if (filter.where) {
+        Object.keys(filter.where).forEach((key) => {
+          query = query.eq(key, filter.where[key]);
+        });
+      }
+      if (filter.order) {
+        filter.order.forEach(([key, dir]) => {
+          query = query.order(key, { ascending: dir === "ASC" });
+        });
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+
+    async create(data) {
+      const { data: created, error } = await getDb()
+        .from(this.tableName)
+        .insert(data)
+        .select()
+        .single();
+      if (error) throw error;
+      return created;
+    },
+  },
+
   User: {
     tableName: "users",
     async findOne(filter) {
@@ -1231,6 +1260,7 @@ export const {
   Token,
   Expense,
   Shift,
+  WalletTransaction,
 } = models;
 
 export default models;
