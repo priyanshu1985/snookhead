@@ -115,10 +115,22 @@ router.post(
   authorize("admin", "owner", "staff"),
   async (req, res) => {
     try {
-      const { name, phone, email, address, external_id } = req.body;
+      const { name, phone, email, address, external_id, initial_balance } = req.body;
 
       if (!name || !phone) {
         return res.status(400).json({ error: "Name and phone are required" });
+      }
+
+      // Validate Phone (10 digits)
+      const phoneRegex = /^\d{10}$/;
+      if (!phoneRegex.test(phone)) {
+        return res.status(400).json({ error: "Phone number must be exactly 10 digits" });
+      }
+
+      // Validate Email (if provided)
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (email && !emailRegex.test(email)) {
+        return res.status(400).json({ error: "Invalid email format" });
       }
 
       const customerData = addStationToData(
@@ -131,7 +143,7 @@ router.post(
           createdby: req.user.id,
         },
         req.stationId,
-        "station_id"
+        "stationid"
       );
 
       const customer = await Customer.create(customerData);
@@ -166,14 +178,29 @@ router.post(
           phoneno: phone,
           qrid: qrId,
           currency: "INR",
-          balance: 0,
+          balance: initial_balance || 0,
           creditlimit: 0,
           reservedamount: 0,
           // qrcode: ... // Optional? If column allows null.
-        }, req.stationId, "station_id");
+        }, req.stationId, "stationid");
 
-        const { Wallet } = await import("../models/index.js");
-        await Wallet.create(walletData);
+        const { Wallet, WalletTransaction } = await import("../models/index.js");
+        const newWallet = await Wallet.create(walletData);
+
+        // Record Initial Transaction if balance > 0
+        if (initial_balance && initial_balance > 0) {
+          await WalletTransaction.create({
+            walletid: newWallet.id,
+            customerid: customer.id,
+            amount: initial_balance,
+            balancebefore: 0,
+            balanceafter: initial_balance,
+            type: 'TOPUP',
+            description: 'Opening Balance',
+            stationid: req.stationId,
+            createdAt: new Date()
+          });
+        }
 
       } catch (walletErr) {
         console.error("Failed to auto-create wallet:", walletErr);
