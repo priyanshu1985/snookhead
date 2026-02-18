@@ -1,5 +1,6 @@
 import express from "express";
 import { Customer } from "../models/index.js";
+import { getSupabase as getDb } from "../config/supabase.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
   stationContext,
@@ -24,22 +25,39 @@ router.get(
       if (req.needsStationSetup) {
         return res.json([]);
       }
+
+      const { search } = req.query;
       const where = addStationFilter({}, req.stationId);
-      const list = await Customer.findAll({
-        where,
-        attributes: [
-          "id",
-          "name",
-          "phone",
-          "email",
-          "email",
-          "externalid",
-          "isactive",
-          "createdAt",
-        ],
-      });
-      res.json(list);
+
+      // If search query is provided
+      // Select alias too
+      let query = getDb().from(Customer.tableName).select("id, name, phone, email, externalid, isactive, createdAt, alias").match(where);
+
+      if (search) {
+        // Use 'or' filter for name, phone, OR alias
+        // Supabase/PostgREST uses ilike for case-insensitive matching
+        const term = `%${search}%`;
+        query = query.or(`name.ilike.${term},phone.ilike.${term},alias.ilike.${term}`);
+
+        // LIMIT results for autocomplete performance
+        query = query.limit(10);
+      } else {
+        // Default limit if no search to prevent massive payloads
+        // or just let it be if it was returning all before. 
+        // Existing code returned ALL. Let's keep it but maybe safe to limit?
+        // Let's stick to existing behavior if no search, or maybe add a default limit if it gets too big.
+        // For now, keep as is for non-search to avoid breaking other lists.
+      }
+
+      // Order by name
+      query = query.order('name', { ascending: true });
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      res.json(data);
     } catch (err) {
+      console.error("Error fetching customers:", err);
       res.status(500).json({ error: err.message });
     }
   }
