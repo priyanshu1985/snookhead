@@ -321,7 +321,7 @@ router.delete(
 );
 
 // --------------------------------------------------
-// UPDATE STOCK (increase / decrease)
+// UPDATE STOCK (increase / decrease) with LOGGING
 // --------------------------------------------------
 router.patch(
   "/:id/stock",
@@ -330,7 +330,7 @@ router.patch(
   authorize("staff", "admin", "owner", "manager"),
   async (req, res) => {
     try {
-      const { quantity } = req.body;
+      const { quantity, reason } = req.body; // Added reason
 
       if (quantity == null) {
         return res.status(400).json({ error: "Quantity is required" });
@@ -346,18 +346,70 @@ router.patch(
 
       if (!item) return res.status(404).json({ error: "Menu item not found" });
 
-      // Update stock
-      const newStock = item.stock + Number(quantity);
+      const oldStock = Number(item.stock || 0);
+      const change = Number(quantity);
+      const newStock = oldStock + change;
       const finalStock = newStock < 0 ? 0 : newStock;
 
+      // Update MenuItem Stock
       await MenuItem.update(
         { stock: finalStock },
         { where: { id: req.params.id } },
       );
 
+      // --- SYNC with INVENTORY & LOGGING ---
+      try {
+        const { Inventory, InventoryLog } = await import("../models/index.js");
+
+        // 1. Log the change
+        await InventoryLog.create({
+          menu_item_id: item.id,
+          item_name: item.name,
+          category: item.category,
+          station_id: req.stationId,
+          action: change >= 0 ? 'ADD' : 'DEDUCT',
+          quantity_change: Math.abs(change),
+          previous_stock: oldStock,
+          new_stock: finalStock,
+          reason: reason || "Manual Update via Menu",
+          user_id: req.user ? req.user.id : null,
+          created_at: new Date()
+        });
+
+        // 2. Sync with Inventory Table (if matched by name)
+        // Find corresponding inventory item
+        if (Inventory) {
+          const invWhere = {
+            itemname: item.name.trim(),
+            isactive: true
+          };
+          if (req.stationId) invWhere.station_id = req.stationId;
+
+          const invItem = await Inventory.findOne({ where: invWhere });
+
+          if (invItem) {
+            // Update inventory item stock to match (or apply delta? Match is safer if Menu is source of truth for POS)
+            // Actually, let's apply DELTA to be safe if they are slightly out of sync but we want to track movement?
+            // OR set it to match?
+            // If we set it to match, we overwrite any separate changes.
+            // If we apply delta, we respect separate changes.
+            // Let's Set it to `finalStock` to ensure consistency.
+            await invItem.update({
+              currentquantity: finalStock,
+              lastrestocked: change > 0 ? new Date() : invItem.lastrestocked
+            });
+          }
+        }
+
+      } catch (logErr) {
+        console.error("Failed to log/sync inventory:", logErr);
+        // Don't fail the request, just log error
+      }
+      // -------------------------------------
+
       res.json({
         message: "Stock updated",
-        stock: item.stock,
+        stock: finalStock,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });

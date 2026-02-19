@@ -173,3 +173,18 @@
   "checkingAgainst": []
 }
 
+{
+  "body": {
+    "table_id": "45",
+    "game_id": 32,
+    "duration_minutes": 3,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "45",
+  "checkingAgainst": []
+}
+

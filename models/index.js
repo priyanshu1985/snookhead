@@ -1004,6 +1004,39 @@ const models = {
     },
   },
 
+  InventoryLog: {
+    tableName: "inventory_logs",
+    async findAll(filter = {}) {
+      let query = getDb().from(this.tableName).select("*");
+      if (filter.where) {
+        Object.keys(filter.where).forEach((key) => {
+          query = query.eq(key, filter.where[key]);
+        });
+      }
+      if (filter.order) {
+        filter.order.forEach(([key, dir]) => {
+          query = query.order(key, { ascending: dir === "ASC" });
+        });
+      }
+      if (filter.limit) {
+        query = query.limit(filter.limit);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+
+    async create(logData) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .insert(logData)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  },
+
   Inventory: {
     tableName: "inventory",
     async findAll(filter = {}) {
@@ -1261,6 +1294,7 @@ export const {
   Expense,
   Shift,
   WalletTransaction,
+  InventoryLog,
 } = models;
 
 export default models;
