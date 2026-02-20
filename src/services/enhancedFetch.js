@@ -128,7 +128,7 @@ const enhancedFetch = async (url, options = {}) => {
     if (response.status === 401) {
       let errorData;
       try {
-        errorData = await response.json();
+        errorData = await response.clone().json();
       } catch (parseError) {
         console.error('Error parsing 401 response:', parseError);
         throw new Error('Authentication failed');

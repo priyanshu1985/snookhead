@@ -4,43 +4,54 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Ionicons';
 
-import LoginScreen from '../screens/LoginScreen';
-import SignUpScreen from '../screens/SignUpScreen';
+import LoginScreen from '../screens/auth/LoginScreen';
+import SignUpScreen from '../screens/auth/SignUpScreen';
+
+// Forgot Password Flow
+import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
+import ResetPasswordScreen from '../screens/auth/ResetPasswordScreen';
+
 // Import screens
-import HomeScreen from '../screens/HomeScreen';
-import QueueScreen from '../screens/QueueScreen';
-import BillScreen from '../screens/BillScreen';
-import ScannerScreen from '../screens/ScannerScreen';
-import OrdersScreen from '../screens/OrdersScreen';
-import MenuScreen from '../screens/MenuScreen';
-import Member from '../screens/Member';
-import MemberDetails from '../screens/MemberDetails';
-import Notifications from '../screens/Notifications';
+import HomeScreen from '../screens/booking/HomeScreen';
+import QueueScreen from '../screens/queue/QueueScreen';
+import BillScreen from '../screens/bill/BillScreen';
+import ScannerScreen from '../screens/member/ScannerScreen';
+import OrdersScreen from '../screens/owners/OrdersScreen';
+import MenuScreen from '../screens/food/MenuScreen';
+import Member from '../screens/member/Member';
+import MemberDetails from '../screens/member/MemberDetails';
+import Notifications from '../screens/other/Notifications';
 
 // Import Menu bar related screens
-import OwnerPanel from '../screens/OwnerPanel';
-import OwnerDashboard from '../screens/OwnerDashboard';
-import OwnerPasswordSetup from '../screens/OwnerPasswordSetup';
+import OwnerPanel from '../screens/owners/OwnerPanel';
+import OwnerTabs from '../screens/owners/OwnerTabs';
+import OwnerPasswordSetup from '../screens/owners/OwnerPasswordSetup';
 
-import SetupMenu from '../screens/SetupMenu';
-import InventoryDashboard from '../screens/InventoryDashboard';
-import ServerStatusScreen from '../screens/ServerStatusScreen';
-import UpgradeSubscription from '../screens/UpgradeSubscription';
-import ReportBugs from '../screens/ReportBugs';
-import PrivacyPolicy from '../screens/PrivacyPolicy';
-import TableBookingScreen from '../screens/TableBookingScreen';
-import TableBookingOrders from '../components/TableBookingOrders';
-import PaymentGateway from '../screens/PaymentGateway';
-import AfterBooking from '../screens/AfterBooking';
+import SetupMenu from '../screens/setupmenu/SetupMenu';
+import InventoryDashboard from '../screens/inventory/InventoryDashboard';
+import ServerStatusScreen from '../screens/other/ServerStatusScreen';
+import UpgradeSubscription from '../screens/subscription/UpgradeSubscription';
+import ReportBugs from '../screens/bugs/ReportBugs';
+import PrivacyPolicy from '../screens/subscription/PrivacyPolicy';
+import TableBookingScreen from '../screens/booking/TableBookingScreen';
+import TableBookingOrders from '../components/orders/TableBookingOrders';
+import PaymentGateway from '../screens/bill/PaymentGateway';
+import AfterBooking from '../screens/booking/AfterBooking';
 
 // Import role-based screens
+import OtpVerificationScreen from '../screens/auth/OtpVerificationScreen';
 import AdminDashboard from '../screens/admin/AdminDashboard';
 import StaffMember from '../screens/staff/StaffMember';
 
+// Import Reservation Screens
+import ReservationsListScreen from '../screens/reservation/ReservationsListScreen';
+import NewReservationScreen from '../screens/reservation/NewReservationScreen';
+import PaymentConfirmScreen from '../screens/reservation/PaymentConfirmScreen';
+
 // Import AuthContext and AuthChecker
 import { AuthProvider } from '../context/AuthContext';
-import AuthChecker from '../components/AuthChecker';
-import GlobalBillManager from '../components/GlobalBillManager';
+import AuthChecker from '../components/auth/AuthChecker';
+import GlobalBillManager from '../components/bill/GlobalBillManager';
 
 const Tab = createBottomTabNavigator(); // Creates bottom tabs
 const Stack = createNativeStackNavigator(); // Creates stack navigation
@@ -168,6 +179,19 @@ export default function AppNavigator() {
           <Stack.Screen name="AuthChecker" component={AuthChecker} />
           <Stack.Screen name="LoginScreen" component={LoginScreen} />
           <Stack.Screen name="SignUpScreen" component={SignUpScreen} />
+          <Stack.Screen
+            name="ForgotPasswordScreen"
+            component={ForgotPasswordScreen}
+          />
+          <Stack.Screen
+            name="ResetPasswordScreen"
+            component={ResetPasswordScreen}
+          />
+
+          <Stack.Screen
+            name="OtpVerificationScreen"
+            component={OtpVerificationScreen}
+          />
           <Stack.Screen name="MainTabs" component={BottomTabs} />
 
           {/* Role-based screens */}
@@ -184,7 +208,7 @@ export default function AppNavigator() {
             }}
           />
           <Stack.Screen name="OwnerPanel" component={OwnerPanel} />
-          <Stack.Screen name="OwnerDashboard" component={OwnerDashboard} />
+          <Stack.Screen name="OwnerTabs" component={OwnerTabs} />
           <Stack.Screen
             name="OwnerPasswordSetup"
             component={OwnerPasswordSetup}
@@ -215,6 +239,18 @@ export default function AppNavigator() {
           <Stack.Screen name="AfterBooking" component={AfterBooking} />
           <Stack.Screen name="PaymentGateway" component={PaymentGateway} />
           <Stack.Screen name="ScannerScreen" component={ScannerScreen} />
+          <Stack.Screen
+            name="ReservationsListScreen"
+            component={ReservationsListScreen}
+          />
+          <Stack.Screen
+            name="NewReservation"
+            component={NewReservationScreen}
+          />
+          <Stack.Screen
+            name="PaymentConfirm"
+            component={PaymentConfirmScreen}
+          />
         </Stack.Navigator>
       </NavigationContainer>
     </AuthProvider>

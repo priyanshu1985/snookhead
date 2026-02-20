@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
-import Header from '../../components/Header';
-import DashboardCard from '../../components/DashboardCard';
+import Header from '../../components/common/Header';
+import DashboardCard from '../../components/tablebooking/DashboardCard';
 import { COLORS, SPACING } from '../../theme';
 import { ordersAPI } from '../../services/api';
 

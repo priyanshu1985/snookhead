@@ -19,13 +19,19 @@ const makeRequest = async (url, options = {}) => {
 
     if (!response.ok) {
       let errorMessage = `HTTP error! status: ${response.status}`;
+      let errorData = null;
       try {
-        const errorData = response.errorData || (await response.json());
+        errorData = response.errorData || (await response.json());
         errorMessage = errorData.error || errorData.message || errorMessage;
       } catch (parseError) {
         console.warn('Could not parse error response:', parseError);
       }
-      throw new Error(errorMessage);
+
+      // For special cases like BOOKING_WARNING, include full error data
+      const error = new Error(errorMessage);
+      error.status = response.status;
+      error.data = errorData;
+      throw error;
     }
 
     return response.json();
@@ -630,8 +636,8 @@ export const ownerAPI = {
   },
 
   // Dashboard - Get complete summary
-  getSummary: async () => {
-    return await makeRequest('/api/owner/dashboard/summary');
+  getSummary: async (period = 'day') => {
+    return await makeRequest(`/api/owner/dashboard/summary?period=${period}`);
   },
 };
 
@@ -640,6 +646,11 @@ export const walletAPI = {
   // Get wallet by customer ID
   getByCustomerId: async customerId => {
     return await makeRequest(`/api/wallets/customer/${customerId}`);
+  },
+
+  // Lookup wallet by phone/member_seq/alias (for payment flow)
+  lookup: async query => {
+    return await makeRequest(`/api/wallets/customer/${query}`);
   },
 
   // Get all wallets (admin/owner only)
@@ -671,11 +682,11 @@ export const walletAPI = {
     });
   },
 
-  // Deduct money by customer ID
-  deductMoney: async (customerId, amount) => {
+  // Deduct money by customer ID or identifier
+  deductMoney: async (identifier, amount) => {
     return await makeRequest('/api/wallets/deduct-money', {
       method: 'POST',
-      body: JSON.stringify({ customer_id: customerId, amount }),
+      body: JSON.stringify({ identifier, amount }),
     });
   },
 
@@ -845,5 +856,101 @@ export const healthAPI = {
   // Check server health status
   check: async () => {
     return await makeRequest('/api/health');
+  },
+};
+
+// Employees (Users) API
+export const employeeAPI = {
+  // Get all employees
+  getAll: async () => {
+    return await makeRequest('/api/users');
+  },
+
+  // Get single employee by ID
+  getById: async id => {
+    return await makeRequest(`/api/users/${id}`);
+  },
+
+  // Create new employee
+  create: async employeeData => {
+    return await makeRequest('/api/users', {
+      method: 'POST',
+      body: JSON.stringify(employeeData),
+    });
+  },
+
+  // Update employee
+  update: async (id, employeeData) => {
+    return await makeRequest(`/api/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(employeeData),
+    });
+  },
+
+  // Delete employee
+  delete: async id => {
+    return await makeRequest(`/api/users/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Change employee role
+  changeRole: async (id, role) => {
+    return await makeRequest(`/api/users/${id}/role`, {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    });
+  },
+};
+
+// Attendance API
+export const attendanceAPI = {
+  // Get active shift for user
+  getActive: async userId => {
+    return await makeRequest(`/api/attendance/active/${userId}`);
+  },
+
+  // Clock in
+  checkIn: async userId => {
+    return await makeRequest('/api/attendance/check-in', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId }),
+    });
+  },
+
+  // Clock out
+  checkOut: async (userId, attendanceId) => {
+    return await makeRequest('/api/attendance/check-out', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, attendance_id: attendanceId }),
+    });
+  },
+
+  // Get attendance history for user
+  getHistory: async userId => {
+    return await makeRequest(`/api/attendance/user/${userId}`);
+  },
+};
+
+// Expenses API
+export const expensesAPI = {
+  // Get all expenses
+  getAll: async () => {
+    return await makeRequest('/api/expenses');
+  },
+
+  // Create new expense
+  create: async expenseData => {
+    return await makeRequest('/api/expenses', {
+      method: 'POST',
+      body: JSON.stringify(expenseData),
+    });
+  },
+
+  // Delete expense
+  delete: async id => {
+    return await makeRequest(`/api/expenses/${id}`, {
+      method: 'DELETE',
+    });
   },
 };

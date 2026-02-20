@@ -16,8 +16,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // import { LineChart, PieChart, BarChart } from 'react-native-chart-kit';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
-import Header from '../../components/Header';
-import DashboardCard from '../../components/DashboardCard';
+import Header from '../../components/common/Header';
+import DashboardCard from '../../components/tablebooking/DashboardCard';
 import { COLORS, SPACING } from '../../theme';
 import { API_URL } from '../../config';
 import {

@@ -1,0 +1,3024 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  FlatList,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  ActivityIndicator,
+  Image,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../../config';
+
+// Move OUTSIDE component
+const getNextDates = () => {
+  const dates = [];
+  const today = new Date();
+
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + i);
+    const monthNames = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    dates.push({
+      id: i,
+      label:
+        i === 0 ? 'Today' : `${date.getDate()} ${monthNames[date.getMonth()]}`,
+      dateValue: date.toISOString().split('T')[0], // YYYY-MM-DD format
+      isToday: i === 0,
+    });
+  }
+  return dates;
+};
+
+export default function TableBookingScreen({ route, navigation }) {
+  // ===== ALL HOOKS AT THE TOP - MUST BE FIRST =====
+  const [selectedDate, setSelectedDate] = useState(0);
+  const [selectedTimeOption, setSelectedTimeOption] = useState('Set Time');
+  const [showInstructionModal, setShowInstructionModal] = useState(false);
+  const [foodInstructions, setFoodInstructions] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false); // New state for success modal
+  const [showTimeModal, setShowTimeModal] = useState(false);
+  const [selectedTime, setSelectedTime] = useState('12:00 PM');
+  const [timerDuration, setTimerDuration] = useState('60');
+  const [selectedFrame, setSelectedFrame] = useState('1');
+  const [isBooking, setIsBooking] = useState(false);
+  const [showPricingPreview, setShowPricingPreview] = useState(false);
+  const [estimatedCost, setEstimatedCost] = useState({
+    tableCharges: 0,
+    menuCharges: 0,
+    totalAmount: 0,
+  });
+
+  // Customer details for future reservations
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [customerDetails, setCustomerDetails] = useState({
+    name: '',
+    phone: '',
+  });
+
+  // Menu items state (similar to AfterBooking)
+  const [menuItems, setMenuItems] = useState([]);
+  
+  // Two-tier category state for matching OrdersScreen
+  const [selectedMainCategory, setSelectedMainCategory] = useState('prepared');
+  const [selectedSubCategory, setSelectedSubCategory] = useState('');
+  const [mainCategories, setMainCategories] = useState(['prepared', 'packed']);
+  const [subCategories, setSubCategories] = useState([]);
+
+  const [loading, setLoading] = useState(false);
+  const [billItems, setBillItems] = useState([]);
+
+  // Availability checking states
+  const [availabilityStatus, setAvailabilityStatus] = useState('unchecked'); // 'unchecked', 'checking', 'available', 'conflict'
+  const [conflictDetails, setConflictDetails] = useState(null);
+  const [alternativeTables, setAlternativeTables] = useState([]);
+  const [alternativeTimes, setAlternativeTimes] = useState([]);
+
+  // ===== DATA AND CONSTANTS AFTER HOOKS =====
+  const { table, gameType, color, selectedFoodItems } = route.params || {};
+  const dates = getNextDates();
+
+  // Add safety checks for undefined parameters
+  const safeTable = table || { name: 'Unknown Table', id: 'unknown' };
+  const safeGameType = gameType || 'Game';
+
+  // Update billItems when coming back from TableBookingOrders (backwards compatibility)
+  useEffect(() => {
+    if (selectedFoodItems && selectedFoodItems.length > 0) {
+      const converted = selectedFoodItems.map(item => ({
+        id: item.item?.id || item.id,
+        name: item.item?.name || item.name,
+        price: item.item?.price || item.price || 0,
+        quantity: item.qty || item.quantity || 1,
+        category: item.item?.category || item.category || 'Food',
+      }));
+      setBillItems(converted);
+    }
+  }, [selectedFoodItems]);
+
+  // Helper to parse categories from items
+  const parseCategories = (items) => {
+    // 1. Extract Main Categories (item_type)
+    const uniqueMainCats = Array.from(
+      new Set(
+        items.map(m => (m.item_type || 'prepared').toLowerCase()).filter(Boolean),
+      ),
+    );
+    if (uniqueMainCats.length) {
+      setMainCategories(uniqueMainCats);
+      // Don't auto-switch main category if one is already selected, unless it's invalid
+      if (!uniqueMainCats.includes(selectedMainCategory)) {
+         setSelectedMainCategory(uniqueMainCats[0]);
+      }
+    }
+
+    // 2. Extract Sub Categories (category) based on currently selected Main Category
+    const activeMainCat = uniqueMainCats.includes(selectedMainCategory) ? selectedMainCategory : (uniqueMainCats[0] || 'prepared');
+    
+    const relevantSubCats = Array.from(
+      new Set(
+        items
+          .filter(m => (m.item_type || 'prepared').toLowerCase() === activeMainCat)
+          .map(m => (m.category || '').toLowerCase())
+          .filter(Boolean),
+      ),
+    );
+    
+    setSubCategories(relevantSubCats);
+    if (relevantSubCats.length > 0 && !relevantSubCats.includes(selectedSubCategory)) {
+       setSelectedSubCategory(relevantSubCats[0]);
+    } else if (relevantSubCats.length === 0) {
+       setSelectedSubCategory('');
+    }
+  };
+
+  // Fetch menu items on mount
+  useEffect(() => {
+    fetchMenuItems();
+    // Pre-fill if this is a queue booking
+    if (safeTable.bookingType === 'queue' && safeTable.queueBooking) {
+      const q = safeTable.queueBooking;
+      console.log('Pre-filling from queue:', q);
+      setCustomerDetails({
+        name: q.customername || '',
+        phone: q.phone || '',
+      });
+
+      // Map backend booking_type to frontend options
+      if (q.booking_type === 'frame') {
+        setSelectedTimeOption('Select Frame');
+        if (q.frame_count) setSelectedFrame(String(q.frame_count));
+      } else if (q.booking_type === 'set') {
+        setSelectedTimeOption('Timer');
+      } else {
+        setSelectedTimeOption('Set Time');
+        if (q.duration_minutes) setTimerDuration(String(q.duration_minutes));
+      }
+    }
+  }, [selectedMainCategory]); // dependency array to re-parse subcategories on main category change
+
+  // Calculate cost on change
+  useEffect(() => {
+    calculateEstimatedCost();
+  }, [
+    billItems,
+    selectedTimeOption,
+    timerDuration,
+    selectedFrame,
+    selectedDate,
+  ]);
+
+  // Check availability when date, time, or duration changes (for future bookings)
+  useEffect(() => {
+    const selectedDateInfo = dates.find(d => d.id === selectedDate);
+    const isFutureBooking = !selectedDateInfo?.isToday;
+
+    if (isFutureBooking) {
+      checkAvailability();
+    } else {
+      setAvailabilityStatus('unchecked'); // Immediate bookings don't need pre-check
+    }
+  }, [selectedDate, selectedTime, timerDuration]);
+
+  // Fetch menu items from backend
+  const fetchMenuItems = async () => {
+    try {
+      setLoading(true);
+      const token = await AsyncStorage.getItem('authToken');
+
+      const response = await fetch(`${API_URL}/api/menu`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const items = Array.isArray(result) ? result : result.data || [];
+        setMenuItems(items);
+        parseCategories(items);
+      } else {
+        console.error('Failed to fetch menu items:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching menu items:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Check availability for selected date/time/table
+  const checkAvailability = async () => {
+    try {
+      setAvailabilityStatus('checking');
+      setConflictDetails(null);
+      setAlternativeTables([]);
+      setAlternativeTimes([]);
+
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) return;
+
+      // Get selected date info
+      const selectedDateInfo = dates.find(d => d.id === selectedDate);
+      if (!selectedDateInfo) return;
+
+      // Convert time to 24-hour format for comparison
+      const convertTo24Hour = time12h => {
+        const [time, modifier] = time12h.split(' ');
+        let [hours, minutes] = time.split(':');
+        if (hours === '12') hours = '00';
+        if (modifier === 'PM') hours = parseInt(hours, 10) + 12;
+        return `${hours.padStart(2, '0')}:${minutes}`;
+      };
+
+      const startTime24 = convertTo24Hour(selectedTime);
+      const startDateTime = new Date(
+        `${selectedDateInfo.dateValue}T${startTime24}:00`,
+      );
+      const duration = parseInt(timerDuration) || 60;
+      const endDateTime = new Date(startDateTime.getTime() + duration * 60000);
+
+      // Fetch all reservations
+      const response = await fetch(`${API_URL}/api/reservations`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to check availability');
+      }
+
+      const allReservations = await response.json();
+
+      // Filter for this table and check time conflicts
+      const tableReservations = allReservations.filter(
+        r =>
+          (r.tableId === safeTable.id || r.tableid === safeTable.id) &&
+          (r.status === 'pending' || r.status === 'active'),
+      );
+
+      let hasConflict = false;
+      let conflictingReservation = null;
+
+      for (const reservation of tableReservations) {
+        const resStart = new Date(
+          reservation.fromTime ||
+            reservation.fromtime ||
+            reservation.reservationtime,
+        );
+        const resDuration =
+          reservation.durationminutes || reservation.duration_minutes || 60;
+        const resEnd = reservation.toTime
+          ? new Date(reservation.toTime)
+          : new Date(resStart.getTime() + resDuration * 60000);
+
+        // Check overlap: newStart < existingEnd AND newEnd > existingStart
+        if (startDateTime < resEnd && endDateTime > resStart) {
+          hasConflict = true;
+          conflictingReservation = reservation;
+          break;
+        }
+      }
+
+      if (hasConflict) {
+        setAvailabilityStatus('conflict');
+        setConflictDetails(conflictingReservation);
+
+        // Find alternatives
+        await findAlternatives(
+          selectedDateInfo.dateValue,
+          startTime24,
+          duration,
+          conflictingReservation,
+        );
+      } else {
+        setAvailabilityStatus('available');
+      }
+    } catch (error) {
+      console.error('Error checking availability:', error);
+      setAvailabilityStatus('unchecked');
+    }
+  };
+
+  // Find alternative tables and times
+  const findAlternatives = async (date, time24, duration, conflictingRes) => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) return;
+
+      // Fetch all tables for the same game
+      const tablesResponse = await fetch(`${API_URL}/api/tables`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!tablesResponse.ok) return;
+
+      const allTables = await tablesResponse.json();
+      const gameTables = allTables.filter(
+        t =>
+          (t.gameid === safeTable.gameid || t.game_id === safeTable.game_id) &&
+          t.id !== safeTable.id,
+      );
+
+      // Fetch all reservations again to check other tables
+      const resResponse = await fetch(`${API_URL}/api/reservations`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!resResponse.ok) return;
+
+      const allReservations = await resResponse.json();
+
+      const startDateTime = new Date(`${date}T${time24}:00`);
+      const endDateTime = new Date(startDateTime.getTime() + duration * 60000);
+
+      // Check which tables are available at this time
+      const availableTables = gameTables.filter(tableOption => {
+        const tableRes = allReservations.filter(
+          r =>
+            (r.tableId === tableOption.id || r.tableid === tableOption.id) &&
+            (r.status === 'pending' || r.status === 'active'),
+        );
+
+        // Check if any reservation conflicts
+        for (const res of tableRes) {
+          const resStart = new Date(
+            res.fromTime || res.fromtime || res.reservationtime,
+          );
+          const resDuration = res.durationminutes || res.duration_minutes || 60;
+          const resEnd = res.toTime
+            ? new Date(res.toTime)
+            : new Date(resStart.getTime() + resDuration * 60000);
+
+          if (startDateTime < resEnd && endDateTime > resStart) {
+            return false; // Conflict found
+          }
+        }
+        return true; // No conflicts
+      });
+
+      setAlternativeTables(availableTables.slice(0, 3)); // Show max 3 alternatives
+
+      // Find alternative time slots (30-min intervals before/after)
+      const alternativeSlots = [];
+      const baseTime = new Date(`${date}T${time24}:00`);
+
+      // Try 30 min before, 1h before, 30 min after, 1h after, etc.
+      const offsets = [-30, -60, 30, 60, -90, 90, 120];
+
+      for (const offset of offsets) {
+        const altStart = new Date(baseTime.getTime() + offset * 60000);
+        const altEnd = new Date(altStart.getTime() + duration * 60000);
+
+        // Check if this time is available for the same table
+        const tableRes = allReservations.filter(
+          r =>
+            (r.tableId === safeTable.id || r.tableid === safeTable.id) &&
+            (r.status === 'pending' || r.status === 'active'),
+        );
+
+        let available = true;
+        for (const res of tableRes) {
+          const resStart = new Date(
+            res.fromTime || res.fromtime || res.reservationtime,
+          );
+          const resDuration = res.durationminutes || res.duration_minutes || 60;
+          const resEnd = res.toTime
+            ? new Date(res.toTime)
+            : new Date(resStart.getTime() + resDuration * 60000);
+
+          if (altStart < resEnd && altEnd > resStart) {
+            available = false;
+            break;
+          }
+        }
+
+        if (available && alternativeSlots.length < 3) {
+          alternativeSlots.push({
+            time: altStart.toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+            }),
+            offset,
+          });
+        }
+      }
+
+      setAlternativeTimes(alternativeSlots);
+    } catch (error) {
+      console.error('Error finding alternatives:', error);
+    }
+  };
+
+  // ===== HANDLERS =====
+  const handleAddInstructions = () => {
+    if (billItems.length === 0) {
+      Alert.alert('Info', 'Please select at least one food item first');
+      return;
+    }
+    setShowInstructionModal(true);
+  };
+
+  const handleSaveInstructions = () => {
+    setShowInstructionModal(false);
+  };
+
+  const handleTimeOptionSelect = option => {
+    setSelectedTimeOption(option);
+    if (option === 'Set Time' || option === 'Select Frame') {
+      // Only show modal for Set Time (Duration) or Select Frame
+      setShowTimeModal(true);
+    } else {
+      // Timer (Stopwatch) needs no input
+      setShowTimeModal(false);
+      calculateEstimatedCost();
+    }
+  };
+
+  const handleTimeConfirm = () => {
+    setShowTimeModal(false);
+    calculateEstimatedCost();
+  };
+
+  // Add item to bill
+  const handleAddToBill = menuItem => {
+    const existingItem = billItems.find(item => item.id === menuItem.id);
+
+    if (existingItem) {
+      setBillItems(prev =>
+        prev.map(item =>
+          item.id === menuItem.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item,
+        ),
+      );
+    } else {
+      setBillItems(prev => [
+        ...prev,
+        {
+          id: menuItem.id,
+          name: menuItem.name,
+          price: menuItem.price || 0,
+          quantity: 1,
+          category: menuItem.category || 'Food',
+        },
+      ]);
+    }
+  };
+
+  // Remove item from bill
+  const handleRemoveFromBill = itemId => {
+    setBillItems(prev => {
+      const existingItem = prev.find(item => item.id === itemId);
+      if (existingItem && existingItem.quantity > 1) {
+        return prev.map(item =>
+          item.id === itemId ? { ...item, quantity: item.quantity - 1 } : item,
+        );
+      } else {
+        return prev.filter(item => item.id !== itemId);
+      }
+    });
+  };
+
+  // Get filtered menu items by category
+  const getFilteredMenuItems = () => {
+    return menuItems.filter(item => {
+      const matchesMainCat = (item.item_type || 'prepared').toLowerCase() === selectedMainCategory.toLowerCase();
+      const matchesSubCat = !selectedSubCategory || (item.category || '').toLowerCase() === selectedSubCategory.toLowerCase();
+      return matchesMainCat && matchesSubCat;
+    });
+  };
+
+  // Helper to get full menu image URL
+  const getMenuImageUrl = imageKey => {
+    if (!imageKey) return null;
+    return `${API_URL}/static/menu-images/${encodeURIComponent(imageKey)}`;
+  };
+
+  // Calculate estimated cost based on selected options
+  const calculateEstimatedCost = () => {
+    let tableCharges = 0;
+    let menuCharges = 0;
+
+    // Calculate table charges based on selected time option
+    if (safeTable) {
+      const pricePerMin = parseFloat(
+        safeTable.pricePerMin || safeTable.price_per_min || 10,
+      );
+      const frameCharge = parseFloat(safeTable.frameCharge || 0);
+
+      if (selectedTimeOption === 'Timer') {
+        // Timer (Stopwatch) - Open ended, just estimate 60 mins for display
+        tableCharges = 60 * pricePerMin;
+      } else if (selectedTimeOption === 'Select Frame') {
+        const frames = parseInt(selectedFrame || 1);
+        // Use frameCharge as the price per frame
+        const pricePerFrame = parseFloat(
+          safeTable.frameCharge || safeTable.pricePerFrame || 100,
+        );
+        tableCharges = frames * pricePerFrame;
+      } else {
+        // Set Time (Countdown) - Exact duration
+        const duration = parseInt(timerDuration || 60);
+        tableCharges = duration * pricePerMin;
+      }
+    }
+
+    // Calculate menu charges from billItems
+    menuCharges = billItems.reduce((total, item) => {
+      return total + (item.quantity || 1) * (item.price || 0);
+    }, 0);
+
+    const totalAmount = tableCharges + menuCharges;
+
+    setEstimatedCost({
+      tableCharges,
+      menuCharges,
+      totalAmount,
+    });
+  };
+
+  // Show pricing preview before booking
+  const handleShowPricingPreview = () => {
+    calculateEstimatedCost();
+    setShowPricingPreview(true);
+  };
+
+  const getTimeDisplayText = () => {
+    switch (selectedTimeOption) {
+      case 'Set Time':
+        return `${timerDuration} min`; // Set Time = Duration
+      case 'Timer':
+        return 'Starts at 00:00'; // Timer = Stopwatch
+      case 'Select Frame':
+        return `${selectedFrame} frame(s)`;
+      default:
+        return selectedTimeOption;
+    }
+  };
+
+  const getTimeLabel = () => {
+    switch (selectedTimeOption) {
+      case 'Set Time':
+        return 'Duration (min)';
+      case 'Timer':
+        return 'Stopwatch';
+      case 'Select Frame':
+        return 'Frames';
+      default:
+        return 'Time';
+    }
+  };
+
+  const handleBook = async () => {
+    try {
+      setIsBooking(true);
+
+      // Validation
+      if (!safeTable.id) {
+        Alert.alert('Error', 'Invalid table selected');
+        return;
+      }
+
+      // Check if table appears to be occupied in frontend
+      // ALLOW if it is a queue booking (bookingType === 'queue')
+      const isQueueAssignment = safeTable.bookingType === 'queue';
+
+      if (
+        (safeTable.status === 'occupied' || safeTable.status === 'reserved') &&
+        !isQueueAssignment
+      ) {
+        Alert.alert(
+          'Table Occupied',
+          'This table is currently occupied. Would you like to join the waiting queue?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Join Queue',
+              onPress: () => {
+                setIsBooking(false);
+                // Navigate to Queue Screen with prefilled details
+                navigation.navigate('MainTabs', {
+                  screen: 'Queue',
+                  params: {
+                    prefillData: {
+                      customerName: customerDetails.name,
+                      customerPhone: customerDetails.phone,
+                      gameId: safeTable.game_id || safeTable.gameid,
+                      tableId: safeTable.id,
+                      autoOpen: true,
+                    },
+                  },
+                });
+              },
+            },
+          ],
+        );
+        return;
+      }
+
+      // Get auth token
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) {
+        Alert.alert('Error', 'Please login first');
+        return;
+      }
+
+      // Check if this is a future booking or immediate booking
+      const selectedDateInfo = dates.find(d => d.id === selectedDate);
+      const isFutureBooking = !selectedDateInfo?.isToday;
+
+      if (isFutureBooking) {
+        // Future booking - show customer details modal first
+        setIsBooking(false);
+        setShowCustomerModal(true);
+        return;
+      }
+
+      // Immediate booking - continue with existing logic
+      await processImmediateBooking(token);
+    } catch (error) {
+      console.error('Booking error:', error);
+      const errorMessage =
+        error.message || 'Could not book the table. Please try again.';
+
+      Alert.alert('Booking Failed', errorMessage, [
+        { text: 'OK' },
+        {
+          text: 'Go Back & Refresh',
+          onPress: () => {
+            navigation.goBack();
+          },
+        },
+      ]);
+    } finally {
+      setIsBooking(false);
+    }
+  };
+
+  const processImmediateBooking = async token => {
+    // Calculate duration in minutes and booking type based on selected time option
+    let durationMinutes = null;
+    let bookingType = 'set_time'; // default
+    let frameCount = null;
+
+    if (selectedTimeOption === 'Set Time') {
+      // Set Time = countdown timer with fixed duration (counts DOWN)
+      durationMinutes = parseInt(timerDuration) || 60;
+      bookingType = 'set_time';
+    } else if (selectedTimeOption === 'Timer') {
+      // Timer = stopwatch mode (counts UP from 0), manual bill generation
+      durationMinutes = null; // No fixed duration - counts up
+      bookingType = 'timer';
+    } else if (selectedTimeOption === 'Select Frame') {
+      // Frame = frame-based billing, no timer, manual bill generation
+      durationMinutes = null;
+      bookingType = 'frame';
+      frameCount = parseInt(selectedFrame) || 1;
+    }
+
+    // Prepare booking data
+    const bookingData = {
+      table_id: safeTable.id,
+      game_id: safeTable.game_id || safeTable.gameid || 1,
+      user_id: null,
+      duration_minutes: durationMinutes,
+      booking_type: bookingType,
+      frame_count: frameCount,
+      customer_name: customerDetails.name || 'Walk-in Customer',
+    };
+
+    console.log('Booking table with data:', bookingData);
+
+    // Start active table session
+    const response = await fetch(`${API_URL}/api/activeTables/start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(bookingData),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Booking failed');
+    }
+
+    // Show success modal instead of alert
+    setShowSuccessModal(true);
+  };
+
+  const processFutureReservation = async () => {
+    try {
+      setIsBooking(true);
+
+      // Validate customer details
+      if (!customerDetails.name.trim() || !customerDetails.phone.trim()) {
+        Alert.alert('Error', 'Please enter customer name and phone number');
+        return;
+      }
+
+      const token = await AsyncStorage.getItem('authToken');
+      const selectedDateInfo = dates.find(d => d.id === selectedDate);
+
+      // Calculate duration
+      let durationMinutes = parseInt(timerDuration) || 60; // Use the set duration
+
+      // If Timer (Stopwatch) was selected for a future booking, default to 60 or user input?
+      // But now we mapped Timer to have NO input. So for future, 'Set Time' is preferred.
+      // If they somehow selected Timer, we'll just use 60.
+      if (selectedTimeOption === 'Timer') {
+        durationMinutes = 60;
+      }
+
+      // Convert 12-hour time to 24-hour format for API
+      const convertTo24Hour = time12h => {
+        const [time, modifier] = time12h.split(' ');
+        let [hours, minutes] = time.split(':');
+        if (hours === '12') {
+          hours = '00';
+        }
+        if (modifier === 'PM') {
+          hours = parseInt(hours, 10) + 12;
+        }
+        return `${hours.padStart(2, '0')}:${minutes}:00`;
+      };
+
+      const reservationData = {
+        table_id: safeTable.id,
+        game_id: safeTable.game_id || safeTable.gameid || 1,
+        customer_name: customerDetails.name,
+        customer_phone: customerDetails.phone,
+        reservation_date: selectedDateInfo.dateValue,
+        start_time: convertTo24Hour(selectedTime),
+        duration_minutes: durationMinutes,
+        notes: `Table: ${safeTable.name}, Game: ${safeGameType}`,
+      };
+
+      console.log('Creating reservation with data:', reservationData);
+
+      const response = await fetch(`${API_URL}/api/reservations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(reservationData),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Reservation failed');
+      }
+
+      Alert.alert(
+        'Reservation Created!',
+        `Reservation has been created for ${customerDetails.name} on ${selectedDateInfo.label} at ${selectedTime}.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setShowCustomerModal(false);
+              setCustomerDetails({ name: '', phone: '' });
+              navigation.goBack();
+            },
+          },
+        ],
+      );
+    } catch (error) {
+      console.error('Reservation error:', error);
+      Alert.alert(
+        'Reservation Failed',
+        error.message || 'Could not create reservation. Please try again.',
+      );
+    } finally {
+      setIsBooking(false);
+    }
+  };
+
+  // ===== RENDER =====
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Icon name="chevron-back" size={28} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{safeGameType}</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+
+        {/* Queue Banner */}
+        {safeTable.bookingType === 'queue' && (
+          <View
+            style={{
+              backgroundColor: '#E3F2FD',
+              padding: 12,
+              borderRadius: 8,
+              marginBottom: 16,
+              borderWidth: 1,
+              borderColor: '#2196F3',
+            }}
+          >
+            <Text
+              style={{ color: '#0D47A1', fontWeight: 'bold', fontSize: 14 }}
+            >
+              <Icon name="people" size={16} /> Queue Assignment
+            </Text>
+            <Text style={{ color: '#1565C0', fontSize: 13, marginTop: 4 }}>
+              Reserved for {safeTable.bookedBy || 'Customer'}
+            </Text>
+          </View>
+        )}
+
+        {/* Customer Name */}
+        <Text style={styles.sectionTitle}>Customer Details</Text>
+        <View style={styles.customerInputContainer}>
+          <Icon name="person-outline" size={20} color="#666" style={styles.customerInputIcon} />
+          <TextInput
+            style={styles.customerNameInput}
+            placeholder="Enter Customer Name (Optional)"
+            placeholderTextColor="#999"
+            value={customerDetails.name}
+            onChangeText={(text) => setCustomerDetails({...customerDetails, name: text})}
+            returnKeyType="done"
+          />
+        </View>
+
+        {/* Time Selection */}
+        <Text style={styles.sectionTitle}>Select Time</Text>
+        <View style={styles.timeOptions}>
+          <TouchableOpacity
+            style={[
+              styles.timeOption,
+              selectedTimeOption === 'Set Time' && styles.timeOptionActive,
+            ]}
+            onPress={() => handleTimeOptionSelect('Set Time')}
+          >
+            <View
+              style={[
+                styles.radioCircle,
+                selectedTimeOption === 'Set Time' && styles.radioCircleActive,
+              ]}
+            />
+            <Text style={styles.timeOptionText}>Set Time</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.timeOption,
+              selectedTimeOption === 'Timer' && styles.timeOptionActive,
+            ]}
+            onPress={() => handleTimeOptionSelect('Timer')}
+          >
+            <View
+              style={[
+                styles.radioCircle,
+                selectedTimeOption === 'Timer' && styles.radioCircleActive,
+              ]}
+            />
+            <Text style={styles.timeOptionText}>Timer</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.timeOption,
+              selectedTimeOption === 'Select Frame' && styles.timeOptionActive,
+            ]}
+            onPress={() => handleTimeOptionSelect('Select Frame')}
+          >
+            <View
+              style={[
+                styles.radioCircle,
+                selectedTimeOption === 'Select Frame' &&
+                  styles.radioCircleActive,
+              ]}
+            />
+            <Text style={styles.timeOptionText}>Select Frame</Text>
+          </TouchableOpacity>
+        </View>
+
+        {selectedTimeOption && (
+          <View style={styles.timeDetailsContainer}>
+            <View style={styles.timeDetailsLeft}>
+              <Icon
+                name="time-outline"
+                size={18}
+                color="#FF8C42"
+                style={styles.timeDetailsIcon}
+              />
+              <Text style={styles.timeDetailsLabel}>{getTimeLabel()}</Text>
+            </View>
+            <View style={styles.timeDetailsRight}>
+              <Text style={styles.timeDetailsValue}>
+                {getTimeDisplayText()}
+              </Text>
+              <TouchableOpacity onPress={() => setShowTimeModal(true)}>
+                <Icon name="pencil" size={16} color="#FF8C42" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Availability Status - Only for future bookings */}
+        {!dates[selectedDate]?.isToday && (
+          <>
+            {availabilityStatus === 'checking' && (
+              <View style={styles.availabilityBanner}>
+                <ActivityIndicator size="small" color="#2196F3" />
+                <Text style={styles.availabilityText}>
+                  Checking availability...
+                </Text>
+              </View>
+            )}
+
+            {availabilityStatus === 'available' && (
+              <View
+                style={[styles.availabilityBanner, styles.availabilitySuccess]}
+              >
+                <Icon name="checkmark-circle" size={24} color="#4CAF50" />
+                <View style={styles.availabilityTextContainer}>
+                  <Text style={styles.availabilityTitle}>Available!</Text>
+                  <Text style={styles.availabilitySubtext}>
+                    This time slot is free
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {availabilityStatus === 'conflict' && conflictDetails && (
+              <View
+                style={[styles.availabilityBanner, styles.availabilityError]}
+              >
+                <Icon name="alert-circle" size={24} color="#F44336" />
+                <View style={styles.availabilityTextContainer}>
+                  <Text style={styles.availabilityTitle}>Time Conflict</Text>
+                  <Text style={styles.availabilitySubtext}>
+                    Table is reserved by{' '}
+                    {conflictDetails.customerName ||
+                      conflictDetails.customer_name ||
+                      'another customer'}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Alternative Tables */}
+            {availabilityStatus === 'conflict' &&
+              alternativeTables.length > 0 && (
+                <View style={styles.alternativesSection}>
+                  <Text style={styles.alternativesTitle}>
+                    <Icon name="swap-horizontal" size={18} /> Alternative Tables
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {alternativeTables.map(altTable => (
+                      <TouchableOpacity
+                        key={altTable.id}
+                        style={styles.alternativeCard}
+                        onPress={() => {
+                          // Navigate to booking screen with new table
+                          navigation.replace('TableBookingScreen', {
+                            table: altTable,
+                            gameType: safeGameType,
+                            color,
+                          });
+                        }}
+                      >
+                        <Icon
+                          name="game-controller-outline"
+                          size={20}
+                          color="#4CAF50"
+                        />
+                        <Text style={styles.alternativeText}>
+                          {altTable.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+            {/* Alternative Times */}
+            {availabilityStatus === 'conflict' &&
+              alternativeTimes.length > 0 && (
+                <View style={styles.alternativesSection}>
+                  <Text style={styles.alternativesTitle}>
+                    <Icon name="time" size={18} /> Alternative Times
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {alternativeTimes.map((altTime, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={styles.alternativeCard}
+                        onPress={() => {
+                          setSelectedTime(altTime.time);
+                          checkAvailability();
+                        }}
+                      >
+                        <Icon name="time-outline" size={20} color="#2196F3" />
+                        <Text style={styles.alternativeText}>
+                          {altTime.time}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+          </>
+        )}
+
+        {/* Food Section Header */}
+        <View style={styles.foodHeader}>
+          <Text style={styles.sectionTitle}>Add Food Items</Text>
+          {billItems.length > 0 && (
+            <TouchableOpacity onPress={handleAddInstructions}>
+              <Text style={styles.addInstructionLink}>+ Instructions</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Category Tabs */}
+        <View style={styles.categoriesSection}>
+          {/* Main Categories Row */}
+          {mainCategories.length > 0 && (
+            <View style={styles.mainCategoriesGrid}>
+              {mainCategories.map(cat => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[
+                    styles.mainCategoryButton,
+                    selectedMainCategory === cat && styles.mainCategoryButtonActive,
+                  ]}
+                  onPress={() => setSelectedMainCategory(cat)}
+                >
+                  <Text
+                    style={[
+                      styles.mainCategoryButtonText,
+                      selectedMainCategory === cat &&
+                        styles.mainCategoryButtonTextActive,
+                    ]}
+                  >
+                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {/* Sub Categories Row */}
+          {subCategories.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.subCategoriesScroll}
+              contentContainerStyle={styles.subCategoriesContent}
+            >
+              {subCategories.map(cat => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[
+                    styles.subCategoryButton,
+                    selectedSubCategory === cat && styles.subCategoryButtonActive,
+                  ]}
+                  onPress={() => setSelectedSubCategory(cat)}
+                >
+                  <Text
+                    style={[
+                      styles.subCategoryButtonText,
+                      selectedSubCategory === cat &&
+                        styles.subCategoryButtonTextActive,
+                    ]}
+                  >
+                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+
+        {/* Food Items Section */}
+        <View style={styles.foodItemsContainer}>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#FF8C42" />
+              <Text style={styles.loadingText}>Loading menu...</Text>
+            </View>
+          ) : getFilteredMenuItems().length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Icon name="restaurant-outline" size={48} color="#ccc" />
+              <Text style={styles.emptyText}>
+                No items in {selectedSubCategory || selectedMainCategory}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.foodListContainer}>
+              {getFilteredMenuItems().map((item, index) => {
+                const billItem = billItems.find(bi => bi.id === item.id);
+                const imageUrl = getMenuImageUrl(
+                  item.imageUrl || item.imageurl,
+                );
+                return (
+                  <View key={item.id || index} style={styles.foodCard}>
+                    {/* Food Image */}
+                    <View style={styles.foodImageContainer}>
+                      {imageUrl ? (
+                        <Image
+                          source={{ uri: imageUrl }}
+                          style={styles.foodImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.foodImagePlaceholder}>
+                          <Text style={styles.foodEmoji}>
+                            {item.category === 'Beverages'
+                              ? '🥤'
+                              : item.category === 'Fast Food'
+                              ? '🍔'
+                              : '🍽️'}
+                          </Text>
+                        </View>
+                      )}
+                      {/* Veg/Non-veg indicator */}
+                      <View
+                        style={[
+                          styles.vegIndicator,
+                          { borderColor: '#0F8A0F' },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.vegDot,
+                            { backgroundColor: '#0F8A0F' },
+                          ]}
+                        />
+                      </View>
+                    </View>
+
+                    {/* Food Details */}
+                    <View style={styles.foodCardContent}>
+                      <View style={styles.foodCardHeader}>
+                        <Text style={styles.foodCardName} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        {item.description && (
+                          <Text
+                            style={styles.foodCardDescription}
+                            numberOfLines={2}
+                          >
+                            {item.description}
+                          </Text>
+                        )}
+                      </View>
+
+                      <View style={styles.foodCardFooter}>
+                        <Text style={styles.foodCardPrice}>
+                          ₹{item.price || 0}
+                        </Text>
+
+                        {/* Add/Quantity Controls */}
+                        {billItem ? (
+                          <View style={styles.quantityControlsCompact}>
+                            <TouchableOpacity
+                              style={styles.quantityBtnCompact}
+                              onPress={() => handleRemoveFromBill(item.id)}
+                            >
+                              <Icon name="remove" size={16} color="#FFFFFF" />
+                            </TouchableOpacity>
+                            <Text style={styles.quantityTextCompact}>
+                              {billItem.quantity}
+                            </Text>
+                            <TouchableOpacity
+                              style={styles.quantityBtnCompact}
+                              onPress={() => handleAddToBill(item)}
+                            >
+                              <Icon name="add" size={16} color="#FFFFFF" />
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.addBtnCompact}
+                            onPress={() => handleAddToBill(item)}
+                          >
+                            <Text style={styles.addBtnText}>ADD</Text>
+                            <View style={styles.addBtnPlus}>
+                              <Icon name="add" size={12} color="#FF8C42" />
+                            </View>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        {/* Bill Summary */}
+        {billItems.length > 0 && (
+          <View style={styles.billSummaryContainer}>
+            <Text style={styles.billSummaryTitle}>Order Summary</Text>
+            {billItems.map((item, index) => (
+              <View key={item.id || index} style={styles.billItem}>
+                <Text style={styles.billItemName}>
+                  {item.name} × {item.quantity}
+                </Text>
+                <Text style={styles.billItemPrice}>
+                  ₹{(item.price * item.quantity).toFixed(2)}
+                </Text>
+              </View>
+            ))}
+            <View style={styles.billTotal}>
+              <Text style={styles.billTotalText}>
+                Menu Total: ₹{estimatedCost.menuCharges.toFixed(2)}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Instructions Preview */}
+        {foodInstructions !== '' && (
+          <View style={styles.instructionsPreview}>
+            <Text style={styles.instructionsLabel}>Special Instructions:</Text>
+            <Text style={styles.instructionsText}>{foodInstructions}</Text>
+            <TouchableOpacity
+              onPress={handleAddInstructions}
+              style={styles.editInstructionBtn}
+            >
+              <Icon name="pencil" size={16} color="#FF9500" />
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Fixed Bottom Buttons */}
+      <View style={styles.fixedBottomContainer}>
+        <TouchableOpacity
+          style={styles.viewPricingButton}
+          onPress={handleShowPricingPreview}
+          disabled={isBooking}
+        >
+          <Icon name="pricetag-outline" size={18} color="#FF8C42" />
+          <Text style={styles.viewPricingButtonText}>View Pricing</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.bookButton, isBooking && styles.bookButtonDisabled]}
+          onPress={handleShowPricingPreview}
+          disabled={isBooking}
+        >
+          {isBooking ? (
+            <View style={styles.bookButtonLoading}>
+              <ActivityIndicator size="small" color="#FFF" />
+              <Text style={[styles.bookButtonText, { marginLeft: 8 }]}>
+                Booking...
+              </Text>
+            </View>
+          ) : (
+            <>
+              <Icon
+                name="calendar-outline"
+                size={18}
+                color="#FFFFFF"
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.bookButtonText}>Book Table</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Food Instructions Modal - Replaced with Absolute View */}
+      {showInstructionModal && (
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalOverlay}
+          >
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Food Instructions</Text>
+                <TouchableOpacity
+                  onPress={() => setShowInstructionModal(false)}
+                >
+                  <Icon name="close" size={24} color="#333" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalSubtitle}>
+                Add any special instructions for your food order
+              </Text>
+
+              <TextInput
+                style={styles.textInput}
+                placeholder="E.g., Extra spicy, No onions, etc."
+                placeholderTextColor="#999"
+                multiline
+                numberOfLines={4}
+                value={foodInstructions}
+                onChangeText={setFoodInstructions}
+                autoFocus
+              />
+
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleSaveInstructions}
+              >
+                <Text style={styles.saveButtonText}>Save Instructions</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      )}
+
+      {/* Time Selection Modal - Replaced with Absolute View */}
+      {showTimeModal && (
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1, justifyContent: 'center' }}
+          >
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  {selectedTimeOption === 'Set Time' && 'Set Duration'}
+                  {selectedTimeOption === 'Timer' && 'Set Timer Duration'}
+                  {selectedTimeOption === 'Select Frame' &&
+                    'Select Frame Count'}
+                </Text>
+                <TouchableOpacity onPress={() => setShowTimeModal(false)}>
+                  <Icon name="close" size={24} color="#333" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                contentContainerStyle={{ paddingBottom: 20 }}
+                showsVerticalScrollIndicator={false}
+              >
+                {selectedTimeOption === 'Set Time' && (
+                  <View>
+                    {!dates.find(d => d.id === selectedDate)?.isToday && (
+                      <View>
+                        <Text style={styles.modalSubtitle}>
+                          Choose start time (Future Booking)
+                        </Text>
+                        <View style={styles.timePickerContainer}>
+                          {[
+                            '10:00 AM',
+                            '11:00 AM',
+                            '12:00 PM',
+                            '1:00 PM',
+                            '2:00 PM',
+                            '3:00 PM',
+                            '4:00 PM',
+                            '5:00 PM',
+                            '6:00 PM',
+                            '7:00 PM',
+                            '8:00 PM',
+                            '9:00 PM',
+                          ].map(time => (
+                            <TouchableOpacity
+                              key={time}
+                              style={[
+                                styles.timePickerButton,
+                                selectedTime === time &&
+                                  styles.timePickerButtonActive,
+                              ]}
+                              onPress={() => setSelectedTime(time)}
+                            >
+                              <Text
+                                style={[
+                                  styles.timePickerText,
+                                  selectedTime === time &&
+                                    styles.timePickerTextActive,
+                                ]}
+                              >
+                                {time}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+
+                    <Text style={styles.modalSubtitle}>
+                      Set duration (Auto-bill at 00:00)
+                    </Text>
+
+                    {/* Duration Input for Set Time */}
+                    <View style={styles.timerInputContainer}>
+                      <TextInput
+                        style={styles.timerInput}
+                        value={timerDuration}
+                        onChangeText={setTimerDuration}
+                        placeholder="60"
+                        keyboardType="numeric"
+                        placeholderTextColor="#999"
+                        selectTextOnFocus={true}
+                      />
+                      <Text style={styles.timerLabel}>minutes</Text>
+                    </View>
+
+                    {/* Quick Options */}
+                    <View style={styles.quickTimerOptions}>
+                      {['30', '60', '90', '120'].map(duration => (
+                        <TouchableOpacity
+                          key={duration}
+                          style={[
+                            styles.quickTimerButton,
+                            timerDuration === duration &&
+                              styles.quickTimerButtonActive,
+                          ]}
+                          onPress={() => setTimerDuration(duration)}
+                        >
+                          <Text
+                            style={[
+                              styles.quickTimerText,
+                              timerDuration === duration &&
+                                styles.quickTimerTextActive,
+                            ]}
+                          >
+                            {duration}m
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* Timer (Stopwatch) - No Modal Content Needed as it doesn't open */}
+
+                {selectedTimeOption === 'Select Frame' && (
+                  <View>
+                    <Text style={styles.modalSubtitle}>
+                      How many frames will you play?
+                    </Text>
+                    <View style={styles.frameOptionsContainer}>
+                      {['1', '3', '5', '7', '9', '11'].map(frame => (
+                        <TouchableOpacity
+                          key={frame}
+                          style={[
+                            styles.frameButton,
+                            selectedFrame === frame && styles.frameButtonActive,
+                          ]}
+                          onPress={() => setSelectedFrame(frame)}
+                        >
+                          <Text
+                            style={[
+                              styles.frameButtonText,
+                              selectedFrame === frame &&
+                                styles.frameButtonTextActive,
+                            ]}
+                          >
+                            {frame}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.saveButton, { marginTop: 10 }]}
+                  onPress={handleTimeConfirm}
+                >
+                  <Text style={styles.saveButtonText}>Confirm</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      )}
+
+      {/* Pricing Preview Modal - Replaced with Absolute View */}
+      {showPricingPreview && (
+        <View
+          style={[
+            styles.pricingModalOverlay,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+            },
+          ]}
+        >
+          <View style={styles.pricingPreviewModal}>
+            {/* Header */}
+            <View style={styles.pricingHeader}>
+              <Text style={styles.pricingHeaderTitle}>
+                Booking Summary & Pricing
+              </Text>
+              <TouchableOpacity
+                style={styles.pricingCloseBtn}
+                onPress={() => setShowPricingPreview(false)}
+              >
+                <Icon name="close" size={22} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Content */}
+            <View style={styles.pricingContent}>
+              {/* Table Information */}
+              <View style={styles.pricingSection}>
+                <Text style={styles.pricingSectionTitle}>
+                  Table Information
+                </Text>
+                <View style={styles.pricingRow}>
+                  <Text style={styles.pricingLabel}>Table:</Text>
+                  <Text style={styles.pricingValue}>{safeTable.name}</Text>
+                </View>
+                <View style={styles.pricingRow}>
+                  <Text style={styles.pricingLabel}>Game:</Text>
+                  <Text style={styles.pricingValue}>{safeGameType}</Text>
+                </View>
+                <View style={styles.pricingRow}>
+                  <Text style={styles.pricingLabel}>Duration:</Text>
+                  <Text style={styles.pricingValue}>
+                    {selectedTimeOption === 'Timer'
+                      ? 'Stopwatch (Counts Up)'
+                      : selectedTimeOption === 'Select Frame'
+                      ? `${selectedFrame} frame(s)`
+                      : `${timerDuration} min`}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Estimated Charges */}
+              <View style={styles.pricingSection}>
+                <Text style={styles.pricingSectionTitle}>
+                  Estimated Charges
+                </Text>
+                <View style={styles.pricingChargeRow}>
+                  <Text style={styles.pricingChargeName}>Table Charges</Text>
+                  <Text style={styles.pricingChargeAmount}>
+                    ₹{estimatedCost.tableCharges.toFixed(2)}
+                  </Text>
+                </View>
+
+                {billItems.length > 0 && (
+                  <>
+                    <Text style={styles.pricingMenuLabel}>Menu Items:</Text>
+                    {billItems.map((item, index) => (
+                      <View key={index} style={styles.pricingChargeRow}>
+                        <Text style={styles.pricingChargeName}>
+                          {item.name} × {item.quantity}
+                        </Text>
+                        <Text style={styles.pricingChargeAmount}>
+                          ₹{(item.quantity * item.price).toFixed(2)}
+                        </Text>
+                      </View>
+                    ))}
+                    <View style={styles.pricingChargeRow}>
+                      <Text style={styles.pricingChargeName}>
+                        Menu Subtotal
+                      </Text>
+                      <Text style={styles.pricingChargeAmount}>
+                        ₹{estimatedCost.menuCharges.toFixed(2)}
+                      </Text>
+                    </View>
+                  </>
+                )}
+              </View>
+
+              {/* Total */}
+              <View style={styles.pricingTotalBox}>
+                <Text style={styles.pricingTotalLabel}>Estimated Total</Text>
+                <Text style={styles.pricingTotalAmount}>
+                  ₹{estimatedCost.totalAmount.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+
+            {/* Actions */}
+            <View style={styles.pricingActions}>
+              <TouchableOpacity
+                style={styles.pricingCancelButton}
+                onPress={() => setShowPricingPreview(false)}
+              >
+                <Text style={styles.pricingCancelText}>Modify</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.pricingConfirmButton}
+                onPress={() => {
+                  setShowPricingPreview(false);
+                  handleBook();
+                }}
+                disabled={isBooking}
+              >
+                <Text style={styles.pricingConfirmText}>
+                  {isBooking ? 'Booking...' : 'Confirm & Book'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Customer Details Modal for Future Reservations - Replaced with Absolute View */}
+      {showCustomerModal && (
+        <View
+          style={[
+            styles.modalOverlay,
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              elevation: 10,
+            },
+          ]}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1, justifyContent: 'center' }}
+          >
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Customer Details</Text>
+                <TouchableOpacity onPress={() => setShowCustomerModal(false)}>
+                  <Icon name="close" size={24} color="#333" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalSubtitle}>
+                Enter customer details for the reservation
+              </Text>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Customer Name*</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Enter customer name"
+                  placeholderTextColor="#999"
+                  value={customerDetails.name}
+                  onChangeText={text =>
+                    setCustomerDetails(prev => ({ ...prev, name: text }))
+                  }
+                  autoFocus
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Phone Number*</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Enter phone number"
+                  placeholderTextColor="#999"
+                  value={customerDetails.phone}
+                  onChangeText={text =>
+                    setCustomerDetails(prev => ({ ...prev, phone: text }))
+                  }
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              <View style={styles.reservationSummary}>
+                <Text style={styles.summaryTitle}>Reservation Summary</Text>
+                <Text style={styles.summaryText}>Table: {safeTable.name}</Text>
+                <Text style={styles.summaryText}>Game: {safeGameType}</Text>
+                <Text style={styles.summaryText}>
+                  Date: {dates.find(d => d.id === selectedDate)?.label}
+                </Text>
+                <Text style={styles.summaryText}>Time: {selectedTime}</Text>
+                <Text style={styles.summaryText}>
+                  Duration:{' '}
+                  {selectedTimeOption === 'Timer'
+                    ? `${timerDuration} min`
+                    : '60 min'}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.saveButton,
+                  isBooking && styles.saveButtonDisabled,
+                ]}
+                onPress={processFutureReservation}
+                disabled={isBooking}
+              >
+                <Text style={styles.saveButtonText}>
+                  {isBooking ? 'Creating Reservation...' : 'Create Reservation'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      )}
+      {/* Custom Success Modal */}
+      {showSuccessModal && (
+        <View style={styles.successModalOverlay}>
+          <View style={styles.successModalContent}>
+            <View style={styles.successIconContainer}>
+              <Icon name="checkmark-circle" size={64} color="#4CAF50" />
+            </View>
+            <Text style={styles.successModalTitle}>Table Booked!</Text>
+            <Text style={styles.successModalMessage}>
+              Table has been booked successfully.
+            </Text>
+            <TouchableOpacity
+              style={styles.successConfirmButton}
+              onPress={() => {
+                setShowSuccessModal(false);
+                // User requested to go to Dashboard
+                navigation.navigate('MainTabs', { screen: 'Home' });
+              }}
+            >
+              <Text style={styles.successConfirmButtonText}>CONTINUE</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  // Main Container
+  container: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+  },
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    letterSpacing: 0.3,
+  },
+
+  // Content Area
+  content: {
+    padding: 20,
+    paddingBottom: 100,
+  },
+
+  // Customer Input
+  customerInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    marginBottom: 24,
+    borderWidth: 1.5,
+    borderColor: '#E8E8E8',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  customerInputIcon: {
+    marginRight: 10,
+  },
+  customerNameInput: {
+    flex: 1,
+    height: 48,
+    fontSize: 15,
+    color: '#333333',
+    fontWeight: '500',
+  },
+  tableName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+
+  // Section Titles
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666666',
+    marginBottom: 12,
+    marginTop: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+
+  // Date Selection
+  dateList: {
+    marginBottom: 20,
+  },
+  dateButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E8E8E8',
+    backgroundColor: '#FFFFFF',
+    marginRight: 10,
+    minWidth: 70,
+    alignItems: 'center',
+  },
+  dateButtonActive: {
+    backgroundColor: '#FF8C42',
+    borderColor: '#FF8C42',
+  },
+  dateText: {
+    fontSize: 13,
+    color: '#666666',
+    fontWeight: '600',
+  },
+  dateTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // Time Options
+  timeOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+  },
+  timeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  timeOptionActive: {},
+  radioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#D0D0D0',
+    backgroundColor: '#FFFFFF',
+    marginRight: 8,
+  },
+  radioCircleActive: {
+    borderColor: '#FF8C42',
+    backgroundColor: '#FF8C42',
+  },
+  timeOptionText: {
+    fontSize: 13,
+    color: '#333333',
+    fontWeight: '500',
+  },
+
+  // Time Details
+  timeDetailsContainer: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF8C42',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+  },
+  timeDetailsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  timeDetailsIcon: {
+    marginRight: 10,
+  },
+  timeDetailsLabel: {
+    fontSize: 14,
+    color: '#666666',
+    fontWeight: '500',
+  },
+  timeDetailsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  timeDetailsValue: {
+    fontSize: 16,
+    color: '#1A1A1A',
+    fontWeight: '700',
+  },
+
+  // Food Header
+  foodHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  addInstructionLink: {
+    color: '#FF8C42',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  // Categories (Swiggy Style Pills) - Two Tiered
+  categoriesSection: {
+    paddingHorizontal: 0,
+    backgroundColor: '#FFFFFF',
+    marginTop: 0,
+  },
+  
+  // Main Categories
+  mainCategoriesGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  mainCategoryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+    backgroundColor: '#FFFFFF',
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  mainCategoryButtonActive: {
+    backgroundColor: '#FF8C42',
+    borderColor: '#FF8C42',
+  },
+  mainCategoryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666666',
+  },
+  mainCategoryButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // Sub Categories
+  subCategoriesScroll: {
+    flexGrow: 0,
+    marginBottom: 16,
+  },
+  subCategoriesContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  subCategoryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+  },
+  subCategoryButtonActive: {
+    backgroundColor: '#FFF1E8', // Light orange background
+    borderWidth: 1,
+    borderColor: '#FF8C42',
+    paddingHorizontal: 15, // Adjust for border width
+    paddingVertical: 7,
+  },
+  subCategoryButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#666666',
+  },
+  subCategoryButtonTextActive: {
+    color: '#FF8C42',
+    fontWeight: '600',
+  },
+
+  // Food Items
+  foodItemsContainer: {
+    marginBottom: 20,
+  },
+  foodItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 12,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    borderWidth: 1,
+    borderColor: '#F5F5F5',
+  },
+  foodIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: '#FFF8F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+    elevation: 1,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  foodEmoji: {
+    fontSize: 28,
+  },
+  foodDetails: {
+    flex: 1,
+  },
+  foodName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 6,
+    letterSpacing: 0.3,
+  },
+  foodPrice: {
+    fontSize: 15,
+    color: '#FF8C42',
+    fontWeight: '800',
+    backgroundColor: '#FFF8F5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  quantityContainer: {},
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+  },
+  quantityButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FF8C42',
+    elevation: 1,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  quantityText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1A1A1A',
+    minWidth: 36,
+    textAlign: 'center',
+  },
+  addButton: {
+    backgroundColor: '#FF8C42',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  addButtonText: {
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+
+  // Food List Layout (Zomato/Swiggy Style)
+  foodListContainer: {
+    gap: 12,
+  },
+  foodCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+  },
+  foodImageContainer: {
+    position: 'relative',
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#F5F5F5',
+  },
+  foodImage: {
+    width: '100%',
+    height: '100%',
+  },
+  foodImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#FFF5EE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  foodEmoji: {
+    fontSize: 36,
+  },
+  vegIndicator: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 16,
+    height: 16,
+    borderWidth: 1.5,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vegDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  foodCardContent: {
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: 'space-between',
+  },
+  foodCardHeader: {
+    flex: 1,
+  },
+  foodCardName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1C1C1C',
+    marginBottom: 4,
+    letterSpacing: 0.2,
+  },
+  foodCardDescription: {
+    fontSize: 12,
+    color: '#93959F',
+    lineHeight: 16,
+  },
+  foodCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  foodCardPrice: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1C1C1C',
+  },
+  // Compact Add Button (Swiggy Style)
+  addBtnCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FF8C42',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    position: 'relative',
+  },
+  addBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FF8C42',
+    letterSpacing: 0.5,
+  },
+  addBtnPlus: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FF8C42',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Quantity Controls (Swiggy Style)
+  quantityControlsCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF8C42',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  quantityBtnCompact: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quantityTextCompact: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    minWidth: 24,
+    textAlign: 'center',
+  },
+
+  // Loading & Empty
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 50,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#F5F5F5',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 15,
+    color: '#666666',
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 50,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#F5F5F5',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 14,
+    fontWeight: '600',
+  },
+
+  // Bill Summary
+  billSummaryContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 22,
+    marginBottom: 20,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+  },
+  billSummaryTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1A1A1A',
+    marginBottom: 16,
+    textAlign: 'center',
+    letterSpacing: 0.3,
+  },
+  billItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8F8F8',
+  },
+  billItemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333333',
+    flex: 1,
+  },
+  billItemPrice: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FF8C42',
+  },
+  billTotal: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 2,
+    borderTopColor: '#FF8C42',
+  },
+  billTotalText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1A1A1A',
+    textAlign: 'center',
+  },
+
+  // Instructions Preview
+  instructionsPreview: {
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF8C42',
+    elevation: 1,
+  },
+  instructionsLabel: {
+    fontSize: 11,
+    color: '#888888',
+    marginBottom: 4,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  instructionsText: {
+    fontSize: 13,
+    color: '#333333',
+    paddingRight: 30,
+  },
+  editInstructionBtn: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+  },
+
+  // Fixed Bottom Container
+  fixedBottomContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    gap: 12,
+  },
+  viewPricingButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#FF8C42',
+    gap: 6,
+  },
+  viewPricingButtonText: {
+    color: '#FF8C42',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  bookButton: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#FF8C42',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+  },
+  bookButtonDisabled: {
+    backgroundColor: '#CCCCCC',
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  bookButtonLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bookButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  // Modal Overlay
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center', // Center vertically
+    padding: 20, // Add padding to prevent touching edges
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24, // Full rounded corners
+    padding: 24,
+    maxHeight: '85%', // Allow slightly more height
+    width: '100%',
+    maxWidth: 500, // Prevent becoming too wide on tablets
+    alignSelf: 'center',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: '#666666',
+    marginBottom: 20,
+  },
+  textInput: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 14,
+    padding: 16,
+    fontSize: 14,
+    color: '#333333',
+    height: 100,
+    textAlignVertical: 'top',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+  },
+  saveButton: {
+    backgroundColor: '#FF8C42',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  // Time Picker
+  timePickerContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 20,
+  },
+  timePickerButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E8E8E8',
+    backgroundColor: '#FFFFFF',
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  timePickerButtonActive: {
+    backgroundColor: '#FF8C42',
+    borderColor: '#FF8C42',
+  },
+  timePickerText: {
+    fontSize: 13,
+    color: '#333333',
+    fontWeight: '500',
+  },
+  timePickerTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // Timer Input
+  timerInputContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center', // Center content horizontally
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+  },
+  timerInput: {
+    minWidth: 60, // Use minWidth instead of flex: 1
+    fontSize: 24,
+    color: '#1A1A1A',
+    textAlign: 'center',
+    fontWeight: '700',
+    padding: 0,
+  },
+  timerLabel: {
+    fontSize: 16,
+    color: '#666666',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  quickTimerOptions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 20,
+  },
+  quickTimerButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E8E8E8',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+  },
+  quickTimerButtonActive: {
+    backgroundColor: '#FF8C42',
+    borderColor: '#FF8C42',
+  },
+  quickTimerText: {
+    fontSize: 14,
+    color: '#333333',
+    fontWeight: '600',
+  },
+  quickTimerTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // Frame Selection
+  frameOptionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 20,
+    justifyContent: 'center',
+  },
+  frameButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: '#E8E8E8',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
+  frameButtonActive: {
+    backgroundColor: '#FF8C42',
+    borderColor: '#FF8C42',
+  },
+  frameButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333333',
+  },
+  frameButtonTextActive: {
+    color: '#FFFFFF',
+  },
+
+  // Pricing Preview Modal
+  pricingModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  pricingPreviewModal: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  pricingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  pricingHeaderTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  pricingCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pricingContent: {
+    padding: 20,
+  },
+  pricingSection: {
+    marginBottom: 16,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 10,
+    padding: 14,
+  },
+  pricingSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8E8E8',
+  },
+  pricingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  pricingLabel: {
+    fontSize: 13,
+    color: '#888888',
+  },
+  pricingValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333333',
+  },
+  pricingChargeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  pricingChargeName: {
+    fontSize: 13,
+    color: '#555555',
+    flex: 1,
+  },
+  pricingChargeAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1A1A1A',
+  },
+  pricingMenuLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666666',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  pricingTotalBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
+  },
+  pricingTotalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333333',
+  },
+  pricingTotalAmount: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FF8C42',
+  },
+  pricingActions: {
+    flexDirection: 'row',
+    padding: 20,
+    paddingTop: 16,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  pricingCancelButton: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#D0D0D0',
+  },
+  pricingCancelText: {
+    fontSize: 14,
+    color: '#666666',
+    fontWeight: '600',
+  },
+  pricingConfirmButton: {
+    flex: 2,
+    backgroundColor: '#FF8C42',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#FF8C42',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  pricingConfirmText: {
+    fontSize: 15,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // Customer Details Modal Styles
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  reservationSummary: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 12,
+  },
+  summaryText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  saveButtonDisabled: {
+    backgroundColor: '#ccc',
+    opacity: 0.6,
+  },
+  // Success Modal Styles
+  successModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    zIndex: 9999,
+  },
+  successModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 320,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  successIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  successModalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1A1A1A',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  successModalMessage: {
+    fontSize: 15,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  successConfirmButton: {
+    width: '100%',
+    backgroundColor: '#953412',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#953412',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  successConfirmButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  // Availability Status Styles
+  availabilityBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginVertical: 12,
+    backgroundColor: '#E3F2FD',
+    borderWidth: 1,
+    borderColor: '#2196F3',
+    gap: 12,
+  },
+  availabilitySuccess: {
+    backgroundColor: '#E8F5E9',
+    borderColor: '#4CAF50',
+  },
+  availabilityError: {
+    backgroundColor: '#FFEBEE',
+    borderColor: '#F44336',
+  },
+  availabilityText: {
+    fontSize: 14,
+    color: '#2196F3',
+    fontWeight: '500',
+  },
+  availabilityTextContainer: {
+    flex: 1,
+  },
+  availabilityTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 2,
+  },
+  availabilitySubtext: {
+    fontSize: 13,
+    color: '#666',
+  },
+  alternativesSection: {
+    marginVertical: 12,
+  },
+  alternativesTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  alternativeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    gap: 8,
+  },
+  alternativeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+});
