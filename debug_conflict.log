@@ -188,3 +188,60 @@
   "checkingAgainst": []
 }
 
+{
+  "body": {
+    "table_id": 50,
+    "game_id": 35,
+    "user_id": null,
+    "duration_minutes": 30,
+    "booking_type": "set_time",
+    "frame_count": null,
+    "customer_name": "Walk-in Customer"
+  },
+  "tableId": 50,
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": 50,
+    "game_id": 35,
+    "user_id": null,
+    "duration_minutes": 1,
+    "booking_type": "set_time",
+    "frame_count": null,
+    "customer_name": "Walk-in Customer"
+  },
+  "tableId": 50,
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": 49,
+    "game_id": 35,
+    "user_id": null,
+    "duration_minutes": null,
+    "booking_type": "timer",
+    "frame_count": null,
+    "customer_name": "KIR"
+  },
+  "tableId": 49,
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "50",
+    "game_id": 35,
+    "duration_minutes": 30,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "50",
+  "checkingAgainst": []
+}
+

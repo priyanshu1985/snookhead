@@ -32,6 +32,8 @@ import ownerDashboardRoutes from "./routes/ownerDashboard.js";
 import ownerPanelRoutes from "./routes/ownerPanel.js";
 import stockImagesRoutes from "./routes/stockImages.js";
 import expensesRoutes from "./routes/expenses.js";
+import attendanceRoutes from "./routes/attendance.js";
+import uploadRoutes from "./routes/upload.js";
 
 const app = express();
 
@@ -47,8 +49,24 @@ process.on("unhandledRejection", (reason, promise) => {
 });
 
 // Middleware
-app.use(cors());
+// Configure CORS to accept requests from mobile devices
+app.use(
+  cors({
+    origin: "*", // Allow all origins (for development/testing)
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: false,
+    optionsSuccessStatus: 200,
+  }),
+);
 app.use(express.json());
+
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`📥 ${req.method} ${req.path} from ${req.ip}`);
+  next();
+});
+
 // Serve static files from public directory
 app.use("/static", express.static("public"));
 
@@ -77,14 +95,23 @@ app.use("/api/owner/dashboard", ownerDashboardRoutes);
 app.use("/api/owner/panel", ownerPanelRoutes);
 app.use("/api/stock-images", stockImagesRoutes);
 app.use("/api/expenses", expensesRoutes);
-import attendanceRoutes from "./routes/attendance.js";
 app.use("/api/attendance", attendanceRoutes);
-import uploadRoutes from "./routes/upload.js";
 app.use("/api/upload", uploadRoutes);
 
 // Basic health check endpoint
 app.get("/health", (req, res) => {
   res.json({ status: "Server is running" });
+});
+
+// Mobile connectivity test endpoint (no auth required)
+app.get("/api/test", (req, res) => {
+  res.json({
+    status: "OK",
+    message: "Server is accessible",
+    timestamp: new Date().toISOString(),
+    ip: req.ip,
+    headers: req.headers,
+  });
 });
 
 // Start server with proper async handling
@@ -99,11 +126,14 @@ async function startServer() {
 
     const PORT = process.env.PORT || 4000; // Use port 4000 to match frontend config
 
-    const server = app.listen(PORT, () => {
-      console.log(`✅ Server running on http://localhost:${PORT}`);
-      console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
-      console.log(`👥 Users API: http://localhost:${PORT}/api/users`);
-      console.log("🎯 Server is ready and listening for requests");
+    const server = app.listen(PORT, "0.0.0.0", () => {
+      console.log(`✅ Server running on http://0.0.0.0:${PORT}`);
+      console.log(`📱 Mobile access: http://10.210.127.54:${PORT}`);
+      console.log(`📊 Health check: http://10.210.127.54:${PORT}/api/health`);
+      console.log(`👥 Users API: http://10.210.127.54:${PORT}/api/users`);
+      console.log(
+        "🎯 Server is ready and listening for requests on all network interfaces",
+      );
     });
 
     // Keep the server alive
@@ -142,4 +172,3 @@ async function startServer() {
 }
 
 startServer();
-

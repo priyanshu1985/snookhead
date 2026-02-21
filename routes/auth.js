@@ -45,13 +45,15 @@ router.post("/login", async (req, res) => {
     // Check for user
     const user = await User.findOne({ where: { email } });
     if (!user) {
-      return res.status(401).json({ error: "Invalid credentials" });
+      console.log(`❌ Login failed: User not found for email '${email}'`);
+      return res.status(401).json({ error: "Debug: User not found" });
     }
 
     // Check password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
-      return res.status(401).json({ error: "Invalid credentials" });
+      console.log(`❌ Login failed: Password mismatch for user '${email}'`);
+      return res.status(401).json({ error: "Debug: Password mismatch" });
     }
 
     // Check if email is verified
@@ -114,6 +116,7 @@ router.post("/login", async (req, res) => {
     const { passwordHash: _, ...userWithoutPassword } = freshUser;
 
     res.json({
+      success: true,
       accessToken,
       refreshToken,
       user: userWithoutPassword,
@@ -486,12 +489,12 @@ router.get("/debug-station", auth, async (req, res) => {
       jwt_payload: req.user,
       user_from_db: user
         ? {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          station_id: user.stationid,
-          email_verified: user.email_verified,
-        }
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            station_id: user.stationid,
+            email_verified: user.email_verified,
+          }
         : null,
       user_station: userStation,
       all_stations: allStations.map((s) => ({
@@ -533,13 +536,13 @@ router.post("/forgot-password", async (req, res) => {
         .json({ error: "No user found with this email address" });
     }
 
-    // Generate a secure reset token (valid for 1 hour)
-    const resetToken = crypto.randomBytes(32).toString("hex");
-    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+    // Generate a 4-digit reset code (easier for mobile users)
+    const resetToken = Math.floor(1000 + Math.random() * 9000).toString();
+    const resetTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now (fixes timezone offset issues)
 
-    console.log("🔍 Forgot password - Generating token:", {
+    console.log("🔍 Forgot password - Generating code:", {
       email,
-      tokenGenerated: resetToken.substring(0, 10) + "...",
+      code: resetToken,
       expiryTime: resetTokenExpiry.toISOString(),
     });
 
@@ -560,16 +563,12 @@ router.post("/forgot-password", async (req, res) => {
     // Verify the token was saved
     const verifyUser = await User.findOne({ where: { email } });
     console.log("🔍 Token verification:", {
-      tokenInDB: verifyUser.reset_token?.substring(0, 10) + "...",
+      tokenInDB: verifyUser.reset_token,
       expiryInDB: verifyUser.reset_token_expiry,
       tokensMatch: verifyUser.reset_token === resetToken,
     });
 
-    // Create reset link
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
-
-    // Send email with reset link
+    // Send email with reset code
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -586,19 +585,18 @@ router.post("/forgot-password", async (req, res) => {
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
           <h2>Password Reset Request</h2>
           <p>Hello ${user.name},</p>
-          <p>You requested to reset your password. Click the button below to set a new password:</p>
+          <p>You requested to reset your password. Use the code below to reset it:</p>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${resetLink}" style="background-color: #F08626; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Reset Password</a>
+            <h1 style="background-color: #F08626; color: white; padding: 10px 20px; display: inline-block; border-radius: 5px; letter-spacing: 5px;">${resetToken}</h1>
           </div>
-          <p>Or copy and paste this link into your browser:</p>
-          <p style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; word-break: break-all;">${resetLink}</p>
-          <p><strong>Important:</strong> This link will expire in 1 hour for security reasons.</p>
-          <p>If you didn't request this password reset, please ignore this email or contact support if you have concerns.</p>
+          <p>Enter this code in the app to reset your password.</p>
+          <p><strong>Important:</strong> This code will expire in 24 hours.</p>
+          <p>If you didn't request this password reset, please ignore this email.</p>
           <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
-          <p style="font-size: 12px; color: #666;">This is an automated message from Snookhead. Please do not reply to this email.</p>
+          <p style="font-size: 12px; color: #666;">This is an automated message from Snookhead.</p>
         </div>
       `,
-      text: `Hello ${user.name},\n\nYou requested to reset your password. Click the link below to set a new password:\n\n${resetLink}\n\nThis link will expire in 1 hour.\n\nIf you didn't request this password reset, please ignore this email.`,
+      text: `Hello ${user.name},\n\nYour password reset code is: ${resetToken}\n\nEnter this code in the app to reset your password.\n\nThis code will expire in 24 hours.`,
     };
 
     await transporter.sendMail(mailOptions);
@@ -675,20 +673,11 @@ router.post("/reset-password", async (req, res) => {
     }
 
     const now = new Date();
-
-    // Handle potential timezone issues with string dates from DB
-    let expiryString = user.reset_token_expiry;
-    // If it's a string and looks like ISO but missing Z at end, append it to force UTC
-    if (typeof expiryString === 'string' && !expiryString.endsWith('Z') && !expiryString.includes('+')) {
-      expiryString += 'Z';
-    }
-
-    const expiry = new Date(expiryString);
+    const expiry = new Date(user.reset_token_expiry);
 
     console.log("🔍 Token expiry check:", {
       now: now.toISOString(),
-      expiryRaw: user.reset_token_expiry,
-      expiryParsed: expiry.toISOString(),
+      expiry: expiry.toISOString(),
       isExpired: now > expiry,
     });
 
