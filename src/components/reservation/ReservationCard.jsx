@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Clock, AlertCircle, User, Calendar, FileText, Pencil, XCircle, UserMinus } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -7,7 +8,6 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 
 const ReservationCard = ({
   reservation,
@@ -218,7 +218,7 @@ const ReservationCard = ({
       {/* Time Until Start (for starting soon) */}
       {timeStatus === 'starting-soon' && minutesUntilStart !== null && (
         <View style={styles.timeAlert}>
-          <Icon name="time-outline" size={16} color="#FF8C42" />
+          <Clock size={16} color="#FF8C42" />
           <Text style={styles.timeAlertText}>
             Starting in {minutesUntilStart} minute
             {minutesUntilStart !== 1 ? 's' : ''}
@@ -229,7 +229,7 @@ const ReservationCard = ({
       {/* Overdue Info */}
       {timeStatus === 'overdue' && (
         <View style={[styles.timeAlert, { backgroundColor: '#FFEBEE' }]}>
-          <Icon name="alert-circle-outline" size={16} color="#F44336" />
+          <AlertCircle size={16} color="#F44336" />
           <Text style={[styles.timeAlertText, { color: '#F44336' }]}>
             Started {Math.abs(minutesUntilStart)} minutes ago
           </Text>
@@ -240,7 +240,7 @@ const ReservationCard = ({
       <View style={styles.content}>
         {/* Customer Info */}
         <View style={styles.row}>
-          <Icon name="person-outline" size={20} color="#333" />
+          <User size={20} color="#333" />
           <View style={styles.infoColumn}>
             <Text style={styles.customerName}>
               {reservation.customerName ||
@@ -273,7 +273,7 @@ const ReservationCard = ({
 
         {/* Date & Time */}
         <View style={styles.row}>
-          <Icon name="calendar-outline" size={20} color="#333" />
+          <Calendar size={20} color="#333" />
           <View style={styles.infoColumn}>
             <Text style={styles.infoText}>
               {formatDate(startTime)} • {formatTime(startTime)}
@@ -285,7 +285,7 @@ const ReservationCard = ({
         {/* Booking Details */}
         {reservation.booking_type && (
           <View style={styles.row}>
-            <Icon name="time-outline" size={20} color="#333" />
+            <Clock size={20} color="#333" />
             <Text style={styles.infoText}>
               {reservation.booking_type === 'timer'
                 ? `Timer Mode (${duration} min)`
@@ -301,7 +301,7 @@ const ReservationCard = ({
         {/* Notes */}
         {reservation.notes && (
           <View style={styles.notesContainer}>
-            <Icon name="document-text-outline" size={16} color="#666" />
+            <FileText size={16} color="#666" />
             <Text style={styles.notesText}>{reservation.notes}</Text>
           </View>
         )}
@@ -315,7 +315,7 @@ const ReservationCard = ({
             style={[styles.actionButton, styles.secondaryButton]}
             onPress={() => onEdit(reservation)}
           >
-            <Icon name="create-outline" size={18} color="#4CAF50" />
+            <Pencil size={18} color="#4CAF50" />
             <Text style={styles.secondaryButtonText}>Edit</Text>
           </TouchableOpacity>
         )}
@@ -325,7 +325,7 @@ const ReservationCard = ({
           style={[styles.actionButton, styles.dangerButton]}
           onPress={handleCancel}
         >
-          <Icon name="close-circle-outline" size={18} color="#F44336" />
+          <XCircle size={18} color="#F44336" />
           <Text style={styles.dangerButtonText}>Cancel</Text>
         </TouchableOpacity>
 
@@ -335,7 +335,7 @@ const ReservationCard = ({
             style={[styles.actionButton, styles.warningButton]}
             onPress={handleMarkNoShow}
           >
-            <Icon name="person-remove-outline" size={18} color="#FF9800" />
+            <UserMinus size={18} color="#FF9800" />
             <Text style={styles.warningButtonText}>No-Show</Text>
           </TouchableOpacity>
         )}

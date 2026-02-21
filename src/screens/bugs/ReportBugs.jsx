@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ArrowLeft, Send } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -11,7 +12,6 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { bugsAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -93,7 +93,7 @@ export default function ReportBugs({ navigation }) {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back" size={24} color="#333" />
+            <ArrowLeft size={24} color="#333" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Report a Bug</Text>
           <View style={{ width: 24 }} />
@@ -196,7 +196,7 @@ export default function ReportBugs({ navigation }) {
             {isSubmitting ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Icon name="send" size={20} color="#fff" />
+              <Send size={20} color="#fff" />
             )}
             <Text style={styles.submitBtnText}>
               {isSubmitting ? 'Submitting...' : 'Submit Report'}

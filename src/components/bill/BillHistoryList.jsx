@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ChevronRight, ChevronLeft, Search, Calendar, XCircle, AlertCircle, RefreshCw, Receipt } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -11,7 +12,6 @@ import {
   Modal,
   Platform,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -281,7 +281,7 @@ export default function BillHistoryList({
 
       {/* Tap indicator */}
       <View style={styles.tapIndicator}>
-        <Icon name="chevron-forward" size={16} color="#CCCCCC" />
+        <ChevronRight size={16} color="#CCCCCC" />
       </View>
     </TouchableOpacity>
   );
@@ -294,7 +294,7 @@ export default function BillHistoryList({
           style={styles.headerBackButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="chevron-back" size={24} color="#333" />
+          <ChevronLeft size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Bill Management</Text>
         <TouchableOpacity
@@ -325,7 +325,7 @@ export default function BillHistoryList({
       {/* Search Bar & Date Selector */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
-          <Icon name="search" size={20} color="#999" />
+          <Search size={20} color="#999" />
           <TextInput
             style={styles.searchInput}
             placeholder="Search"
@@ -342,8 +342,7 @@ export default function BillHistoryList({
           ]}
           onPress={() => setShowDatePicker(true)}
         >
-          <Icon
-            name="calendar-outline"
+          <Calendar
             size={18}
             color={filterByDate ? '#FF8C42' : '#999'}
           />
@@ -362,7 +361,7 @@ export default function BillHistoryList({
               onPress={clearDateFilter}
               style={styles.clearDateButton}
             >
-              <Icon name="close-circle" size={16} color="#FF8C42" />
+              <XCircle size={16} color="#FF8C42" />
             </TouchableOpacity>
           )}
         </TouchableOpacity>
@@ -411,7 +410,7 @@ export default function BillHistoryList({
       ) : error ? (
         <View style={styles.centerContainer}>
           <View style={styles.errorIcon}>
-            <Icon name="alert-circle-outline" size={40} color="#D32F2F" />
+            <AlertCircle size={40} color="#D32F2F" />
           </View>
           <Text style={styles.errorText}>Something went wrong</Text>
           <Text style={styles.errorSubText}>{error}</Text>
@@ -419,14 +418,14 @@ export default function BillHistoryList({
             style={styles.retryButton}
             onPress={fetchBillHistory}
           >
-            <Icon name="refresh" size={16} color="#FFFFFF" />
+            <RefreshCw size={16} color="#FFFFFF" />
             <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
         </View>
       ) : filteredBills.length === 0 ? (
         <View style={styles.centerContainer}>
           <View style={styles.emptyIcon}>
-            <Icon name="receipt-outline" size={40} color="#FF8C42" />
+            <Receipt size={40} color="#FF8C42" />
           </View>
           <Text style={styles.emptyText}>
             {filterByDate || searchText

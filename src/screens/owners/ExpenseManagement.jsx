@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Trash2, Wallet, Receipt, X, Plus } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -14,7 +15,6 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { expensesAPI } from '../../services/api';
 
 const CATEGORIES = [
@@ -243,7 +243,7 @@ export default function ExpenseManagement({ navigation }) {
             style={styles.deleteIconButton}
             onPress={() => handleDelete(item.id)}
           >
-            <Icon name="trash-outline" size={18} color="#FF5252" />
+            <Trash2 size={18} color="#FF5252" />
           </TouchableOpacity>
         </View>
       </View>
@@ -255,7 +255,7 @@ export default function ExpenseManagement({ navigation }) {
       {/* Total Summary */}
       <View style={styles.summaryCard}>
         <View style={styles.summaryContent}>
-          <Icon name="wallet-outline" size={32} color="#FF8C42" />
+          <Wallet size={32} color="#FF8C42" />
           <View style={styles.summaryText}>
             <Text style={styles.summaryLabel}>Total Expenses</Text>
             <Text style={styles.summaryAmount}>
@@ -286,7 +286,7 @@ export default function ExpenseManagement({ navigation }) {
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Icon name="receipt-outline" size={64} color="#CCCCCC" />
+              <Receipt size={64} color="#CCCCCC" />
               <Text style={styles.emptyText}>No expenses recorded</Text>
               <Text style={styles.emptySubtext}>
                 Tap the Add button to record your first expense
@@ -316,7 +316,7 @@ export default function ExpenseManagement({ navigation }) {
                   resetForm();
                 }}
               >
-                <Icon name="close" size={24} color="#666" />
+                <X size={24} color="#666" />
               </TouchableOpacity>
             </View>
 
@@ -453,7 +453,7 @@ export default function ExpenseManagement({ navigation }) {
 
       {/* Floating Action Button */}
       <TouchableOpacity style={styles.fab} onPress={openAddModal}>
-        <Icon name="add" size={28} color="#FFFFFF" />
+        <Plus size={28} color="#FFFFFF" />
       </TouchableOpacity>
     </View>
   );

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Pencil, Trash2, ChevronRight, ArrowLeft, PlusCircle, X, AlertTriangle } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -12,7 +13,6 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../config';
 import ImageSelector from '../../components/ImageSelector';
@@ -477,7 +477,7 @@ export default function GamesAndTables() {
                     handleEditGame(g);
                   }}
                 >
-                  <Icon name="create-outline" size={20} color="#FF8C42" />
+                  <Pencil size={20} color="#FF8C42" />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.enhancedDeleteBtn}
@@ -486,10 +486,10 @@ export default function GamesAndTables() {
                     handleDeleteGame(g);
                   }}
                 >
-                  <Icon name="trash-outline" size={20} color="#FF4444" />
+                  <Trash2 size={20} color="#FF4444" />
                 </TouchableOpacity>
               </View>
-              <Icon name="chevron-forward" size={20} color="#999" />
+              <ChevronRight size={20} color="#999" />
             </TouchableOpacity>
           ))
         )}
@@ -548,7 +548,7 @@ export default function GamesAndTables() {
               setSelectedGameId(null);
             }}
           >
-            <Icon name="arrow-back" size={24} color="#333" />
+            <ArrowLeft size={24} color="#333" />
           </TouchableOpacity>
           <View style={styles.tablesHeaderInfo}>
             <Text style={styles.tablesHeaderTitle}>
@@ -603,13 +603,13 @@ export default function GamesAndTables() {
                     style={styles.editTableBtn}
                     onPress={() => handleEditTable(item)}
                   >
-                    <Icon name="create-outline" size={18} color="#FF8C42" />
+                    <Pencil size={18} color="#FF8C42" />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.deleteTableBtn}
                     onPress={() => handleDeleteTable(item)}
                   >
-                    <Icon name="trash-outline" size={18} color="#FF4444" />
+                    <Trash2 size={18} color="#FF4444" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -638,7 +638,7 @@ export default function GamesAndTables() {
             setAddTableModal(true);
           }}
         >
-          <Icon name="add-circle-outline" size={22} color="#FFF" />
+          <PlusCircle size={22} color="#FFF" />
           <Text style={styles.enhancedAddBtnText}>Add New Table</Text>
         </TouchableOpacity>
       </>
@@ -663,7 +663,7 @@ export default function GamesAndTables() {
           style={styles.fixedAddBtn}
           onPress={() => setAddGameModal(true)}
         >
-          <Icon name="add-circle-outline" size={22} color="#FFF" />
+          <PlusCircle size={22} color="#FFF" />
           <Text style={styles.addBtnText}>Add New Game</Text>
         </TouchableOpacity>
       )}
@@ -675,7 +675,7 @@ export default function GamesAndTables() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add New Game</Text>
               <TouchableOpacity onPress={() => setAddGameModal(false)}>
-                <Icon name="close" size={24} color="#666" />
+                <X size={24} color="#666" />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalContent}>
@@ -751,7 +751,7 @@ export default function GamesAndTables() {
                   setEditGameForm({ game_id: null, name: '', image_key: '' });
                 }}
               >
-                <Icon name="close" size={24} color="#666" />
+                <X size={24} color="#666" />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalContent}>
@@ -801,7 +801,7 @@ export default function GamesAndTables() {
         <View style={styles.modalOverlay}>
           <View style={styles.confirmModalContainer}>
             <View style={styles.confirmIconContainer}>
-              <Icon name="warning" size={48} color="#FF4444" />
+              <AlertTriangle size={48} color="#FF4444" />
             </View>
             <Text style={styles.confirmTitle}>Delete Game?</Text>
             <Text style={styles.confirmMessage}>
@@ -837,7 +837,7 @@ export default function GamesAndTables() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add New Table</Text>
               <TouchableOpacity onPress={() => setAddTableModal(false)}>
-                <Icon name="close" size={24} color="#666" />
+                <X size={24} color="#666" />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalContent}>
@@ -957,7 +957,7 @@ export default function GamesAndTables() {
                   });
                 }}
               >
-                <Icon name="close" size={24} color="#666" />
+                <X size={24} color="#666" />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalContent}>
@@ -1092,7 +1092,7 @@ export default function GamesAndTables() {
         <View style={styles.modalOverlay}>
           <View style={styles.confirmModalContainer}>
             <View style={styles.confirmIconContainer}>
-              <Icon name="warning" size={48} color="#FF4444" />
+              <AlertTriangle size={48} color="#FF4444" />
             </View>
             <Text style={styles.confirmTitle}>Delete Table?</Text>
             <Text style={styles.confirmMessage}>

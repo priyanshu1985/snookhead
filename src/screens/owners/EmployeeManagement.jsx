@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Pencil, Users, X, Trash2, XCircle, Plus, Calendar } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -13,8 +14,6 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { employeeAPI, attendanceAPI } from '../../services/api';
 
 export default function EmployeeManagement({ navigation }) {
@@ -307,7 +306,7 @@ export default function EmployeeManagement({ navigation }) {
             openEditModal(item);
           }}
         >
-          <Icon name="pencil" size={20} color="#FF8C42" />
+          <Pencil size={20} color="#FF8C42" />
         </TouchableOpacity>
       </TouchableOpacity>
     );
@@ -336,7 +335,7 @@ export default function EmployeeManagement({ navigation }) {
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Icon name="people-outline" size={64} color="#CCCCCC" />
+              <Users size={64} color="#CCCCCC" />
               <Text style={styles.emptyText}>No employees found</Text>
               <Text style={styles.emptySubtext}>
                 Tap the Add button to create your first employee
@@ -368,7 +367,7 @@ export default function EmployeeManagement({ navigation }) {
                   resetForm();
                 }}
               >
-                <Icon name="close" size={24} color="#666" />
+                <X size={24} color="#666" />
               </TouchableOpacity>
             </View>
 
@@ -551,7 +550,7 @@ export default function EmployeeManagement({ navigation }) {
                     handleDelete(selectedEmployee.id);
                   }}
                 >
-                  <Icon name="trash-outline" size={20} color="#FF5252" />
+                  <Trash2 size={20} color="#FF5252" />
                   <Text style={styles.deleteButtonText}>Delete Employee</Text>
                 </TouchableOpacity>
               )}
@@ -608,7 +607,7 @@ export default function EmployeeManagement({ navigation }) {
                   setActiveShift(null);
                 }}
               >
-                <Icon name="close-circle" size={28} color="#666" />
+                <XCircle size={28} color="#666" />
               </TouchableOpacity>
             </View>
 
@@ -670,8 +669,7 @@ export default function EmployeeManagement({ navigation }) {
                       </View>
 
                       <View style={styles.shiftDetailRow}>
-                        <MaterialCommunityIcons
-                          name="calendar"
+                        <Calendar
                           size={20}
                           color="#666"
                         />
@@ -750,7 +748,7 @@ export default function EmployeeManagement({ navigation }) {
 
       {/* Floating Action Button */}
       <TouchableOpacity style={styles.fab} onPress={openAddModal}>
-        <Icon name="add" size={28} color="#FFFFFF" />
+        <Plus size={28} color="#FFFFFF" />
       </TouchableOpacity>
     </View>
   );

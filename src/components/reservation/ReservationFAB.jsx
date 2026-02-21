@@ -1,7 +1,7 @@
 import React from 'react';
+import { Calendar, PlayCircle } from 'lucide-react-native';
 import { TouchableOpacity, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
 
 /**
  * Floating Action Button for Quick Reservation
@@ -29,7 +29,7 @@ export default function ReservationFAB({ position = 'bottomRight', showLabel = f
         style={[styles.fab, styles.fabSecondary]}
         onPress={() => navigation.navigate('NewReservation', { bookingMode: 'advance' })}
       >
-        <Icon name="calendar-outline" size={24} color="#fff" />
+        <Calendar size={24} color="#fff" />
         {showLabel && <Text style={styles.fabLabel}>Reservation</Text>}
       </TouchableOpacity>
 
@@ -38,7 +38,7 @@ export default function ReservationFAB({ position = 'bottomRight', showLabel = f
         style={[styles.fab, styles.fabPrimary]}
         onPress={() => navigation.navigate('NewReservation', { bookingMode: 'immediate' })}
       >
-        <Icon name="play-circle-outline" size={24} color="#fff" />
+        <PlayCircle size={24} color="#fff" />
         {showLabel && <Text style={styles.fabLabel}>Book Now</Text>}
       </TouchableOpacity>
     </View>

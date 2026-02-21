@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { ArrowLeft, UserCircle, Wallet, PlusCircle, Receipt, X } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -13,7 +14,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../config';
 
@@ -255,7 +255,7 @@ export default function MemberDetails({ route, navigation }) {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-back" size={24} color="#333" />
+          <ArrowLeft size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Member Details</Text>
         <View style={styles.placeholder} />
@@ -265,7 +265,7 @@ export default function MemberDetails({ route, navigation }) {
         {/* Member Information Card */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Icon name="person-circle-outline" size={40} color="#ff8c1a" />
+            <UserCircle size={40} color="#ff8c1a" />
             <View style={styles.memberInfo}>
               <Text style={styles.memberName}>{member.name}</Text>
               <Text style={styles.memberPhone}>{member.phone}</Text>
@@ -290,7 +290,7 @@ export default function MemberDetails({ route, navigation }) {
         {/* Wallet Information */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>
-            <Icon name="wallet-outline" size={20} color="#ff8c1a" /> Wallet
+            <Wallet size={20} color="#ff8c1a" /> Wallet
             Information
           </Text>
 
@@ -303,7 +303,7 @@ export default function MemberDetails({ route, navigation }) {
             </View>
           ) : error ? (
             <View style={styles.errorContainer}>
-              <Icon name="wallet-outline" size={48} color="#ccc" />
+              <Wallet size={48} color="#ccc" />
               <Text style={styles.errorText}>{error}</Text>
               <TouchableOpacity
                 style={styles.createWalletButton}
@@ -323,7 +323,7 @@ export default function MemberDetails({ route, navigation }) {
                   style={styles.addAmountButton}
                   onPress={() => setShowAddAmountModal(true)}
                 >
-                  <Icon name="add-circle" size={18} color="#fff" />
+                  <PlusCircle size={18} color="#fff" />
                   <Text style={styles.addAmountButtonText}>Add Amount</Text>
                 </TouchableOpacity>
               </View>
@@ -378,7 +378,7 @@ export default function MemberDetails({ route, navigation }) {
         {wallet && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
-              <Icon name="receipt-outline" size={20} color="#ff8c1a" />{' '}
+              <Receipt size={20} color="#ff8c1a" />{' '}
               Transaction History
             </Text>
 
@@ -389,7 +389,7 @@ export default function MemberDetails({ route, navigation }) {
               </View>
             ) : transactions.length === 0 ? (
               <View style={styles.emptyTransactionsContainer}>
-                <Icon name="receipt-outline" size={48} color="#ccc" />
+                <Receipt size={48} color="#ccc" />
                 <Text style={styles.emptyTransactionsText}>
                   No transactions yet
                 </Text>
@@ -496,7 +496,7 @@ export default function MemberDetails({ route, navigation }) {
                   }}
                   style={styles.closeButton}
                 >
-                  <Icon name="close" size={24} color="#666" />
+                  <X size={24} color="#666" />
                 </TouchableOpacity>
               </View>
 

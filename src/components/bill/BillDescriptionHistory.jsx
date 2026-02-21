@@ -1,4 +1,5 @@
 import React from 'react';
+import { ChevronLeft, CheckCircle2 } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -6,7 +7,6 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 
 export default function BillDescriptionHistory({ bill, onBack }) {
   if (!bill) return null;
@@ -42,12 +42,11 @@ export default function BillDescriptionHistory({ bill, onBack }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBackButton} onPress={onBack}>
-          <Icon name="chevron-back" size={24} color="#333" />
+          <ChevronLeft size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Bill Details</Text>
         <View style={styles.statusBadgeCompleted}>
-          <Icon
-            name="checkmark-circle"
+          <CheckCircle2
             size={14}
             color="#4CAF50"
             style={{ marginRight: 4 }}

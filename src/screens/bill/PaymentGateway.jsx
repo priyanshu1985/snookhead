@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ChevronLeft } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -9,7 +10,6 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import PaymentModal from '../../components/bill/PaymentModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../config';
@@ -52,24 +52,16 @@ export default function PaymentGateway({ route, navigation }) {
     try {
       const token = await getAuthToken();
 
+      // Map frontend method to backend-supported ENUM
+      const backendMethod = paymentData.method === 'Cash' ? 'offline' : 'online';
+
       // Build payload for backend
       const body = {
         personName: personName || 'Guest',
-        paymentMethod: paymentData.method, // 'online' | 'offline' | 'hybrid'
+        paymentMethod: backendMethod, // 'offline' or 'online'
         orderTotal: grandTotal,
-        cashAmount:
-          paymentData.method === 'offline' || paymentData.method === 'hybrid'
-            ? Number(paymentData.cashAmount || paymentData.amount || 0)
-            : 0,
-        onlineAmount:
-          paymentData.method === 'online'
-            ? Number(paymentData.amount || grandTotal)
-            : paymentData.method === 'hybrid'
-            ? Number(
-                paymentData.onlineAmount ||
-                  grandTotal - (paymentData.cashAmount || 0),
-              )
-            : 0,
+        cashAmount: paymentData.method === 'Cash' ? grandTotal : 0,
+        onlineAmount: paymentData.method !== 'Cash' ? grandTotal : 0,
         cart, // same structure you already have: [{ item, qty }]
         date: dateStr,
       };
@@ -91,26 +83,12 @@ export default function PaymentGateway({ route, navigation }) {
         return;
       }
 
-      // Success UI based on method (same messages you used)
-      if (paymentData.method === 'online') {
-        Alert.alert(
-          'Success',
-          `Online payment of ₹${body.onlineAmount} processed!`,
-          [{ text: 'OK', onPress: () => navigation.navigate('Orders') }],
-        );
-      } else if (paymentData.method === 'offline') {
-        Alert.alert(
-          'Success',
-          `Offline payment of ₹${body.cashAmount} recorded!`,
-          [{ text: 'OK', onPress: () => navigation.navigate('Orders') }],
-        );
-      } else if (paymentData.method === 'hybrid') {
-        Alert.alert(
-          'Success',
-          `Hybrid payment: Cash ₹${body.cashAmount} + Online ₹${body.onlineAmount} processed!`,
-          [{ text: 'OK', onPress: () => navigation.navigate('Orders') }],
-        );
-      }
+      // Success UI
+      Alert.alert(
+        'Success',
+        `${paymentData.method} payment of ₹${grandTotal} processed!`,
+        [{ text: 'OK', onPress: () => navigation.navigate('Orders') }],
+      );
 
       setShowPaymentModal(false);
     } catch (err) {
@@ -142,7 +120,7 @@ export default function PaymentGateway({ route, navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="chevron-back" size={24} color="#333" />
+          <ChevronLeft size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Bill Description</Text>
         <View style={{ width: 24 }} />

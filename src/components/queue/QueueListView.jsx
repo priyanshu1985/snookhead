@@ -1,4 +1,5 @@
 import React from 'react';
+import { XCircle, ChevronLeft, RefreshCw, Users, AlertCircle, PlusCircle } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -8,7 +9,6 @@ import {
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 
 export default function QueueListView({
   queueData,
@@ -46,7 +46,7 @@ export default function QueueListView({
         style={styles.removeButton}
         onPress={() => onRemovePress(item)}
       >
-        <Icon name="close-circle-outline" size={22} color="#FF6B6B" />
+        <XCircle size={22} color="#FF6B6B" />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -62,7 +62,7 @@ export default function QueueListView({
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}
         >
-          <Icon name="chevron-back" size={22} color="#1A1A1A" />
+          <ChevronLeft size={22} color="#1A1A1A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Queue Management</Text>
         <TouchableOpacity
@@ -70,14 +70,14 @@ export default function QueueListView({
           onPress={onRefresh}
           activeOpacity={0.7}
         >
-          <Icon name="refresh-outline" size={22} color="#FF8C42" />
+          <RefreshCw size={22} color="#FF8C42" />
         </TouchableOpacity>
       </View>
 
       {/* Queue Count */}
       <View style={styles.countContainer}>
         <View style={styles.countBadge}>
-          <Icon name="people-outline" size={18} color="#FF8C42" />
+          <Users size={18} color="#FF8C42" />
           <Text style={styles.countText}>{queueData.length} in queue</Text>
         </View>
         <Text style={styles.hintText}>Long press to remove</Text>
@@ -95,7 +95,7 @@ export default function QueueListView({
         ) : error ? (
           <View style={styles.centerContainer}>
             <View style={styles.errorIcon}>
-              <Icon name="alert-circle-outline" size={48} color="#D32F2F" />
+              <AlertCircle size={48} color="#D32F2F" />
             </View>
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity
@@ -109,7 +109,7 @@ export default function QueueListView({
         ) : queueData.length === 0 ? (
           <View style={styles.centerContainer}>
             <View style={styles.emptyIcon}>
-              <Icon name="people-outline" size={48} color="#FF8C42" />
+              <Users size={48} color="#FF8C42" />
             </View>
             <Text style={styles.emptyText}>Queue is Empty</Text>
             <Text style={styles.emptySubText}>
@@ -138,8 +138,7 @@ export default function QueueListView({
           onPress={onAddPress}
           activeOpacity={0.7}
         >
-          <Icon
-            name="add-circle-outline"
+          <PlusCircle
             size={22}
             color="#FFFFFF"
             style={{ marginRight: 8 }}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Package2, Phone, ArrowLeft, Search, Package, X } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -14,7 +15,6 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import { menuAPI } from '../../services/api';
 import { Picker } from '@react-native-picker/picker';
@@ -149,7 +149,7 @@ const InventoryDashboard = ({ navigation }) => {
   const InventoryItemCard = ({ item }) => (
     <View style={styles.itemCard}>
       <View style={styles.itemImageContainer}>
-        <Icon name="inventory-2" size={30} color="#FF8C42" />
+        <Package2 size={30} color="#FF8C42" />
       </View>
 
       <View style={styles.itemDetails}>
@@ -177,7 +177,7 @@ const InventoryDashboard = ({ navigation }) => {
             style={styles.callButton}
             onPress={() => callSupplier(item.supplier_contact)}
           >
-            <Icon name="call" size={16} color="#fff" />
+            <Phone size={16} color="#fff" />
             <Text style={styles.callButtonText}>Call supplier</Text>
           </TouchableOpacity>
         </View>
@@ -191,7 +191,7 @@ const InventoryDashboard = ({ navigation }) => {
         <StatusBar backgroundColor="#fff" barStyle="dark-content" />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back" size={24} color="#333" />
+            <ArrowLeft size={24} color="#333" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Inventory tracking</Text>
         </View>
@@ -211,15 +211,14 @@ const InventoryDashboard = ({ navigation }) => {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back" size={24} color="#333" />
+            <ArrowLeft size={24} color="#333" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Inventory tracking</Text>
         </View>
 
         {/* Search Bar */}
         <View style={styles.searchContainer}>
-          <Icon
-            name="search"
+          <Search
             size={20}
             color="#999"
             style={styles.searchIcon}
@@ -272,7 +271,7 @@ const InventoryDashboard = ({ navigation }) => {
 
           {filteredItems.length === 0 && (
             <View style={styles.emptyContainer}>
-              <Icon name="inventory" size={60} color="#ccc" />
+              <Package size={60} color="#ccc" />
               <Text style={styles.emptyText}>No items found</Text>
             </View>
           )}
@@ -298,7 +297,7 @@ const InventoryDashboard = ({ navigation }) => {
                     resetQuantityForm();
                   }}
                 >
-                  <Icon name="close" size={24} color="#2c3e50" />
+                  <X size={24} color="#2c3e50" />
                 </TouchableOpacity>
               </View>
 

@@ -1,0 +1,37 @@
+﻿diff --git a/src/components/common/Header.jsx b/src/components/common/Header.jsx
+index 64bdaf5..4ea5f9f 100644
+--- a/src/components/common/Header.jsx
++++ b/src/components/common/Header.jsx
+@@ -1,4 +1,5 @@
+ import React from 'react';
++import { Bell, Menu } from 'lucide-react-native';
+ import {
+   View,
+   Text,
+@@ -8,7 +9,6 @@ import {
+   StatusBar,
+ } from 'react-native';
+ import { useSafeAreaInsets } from 'react-native-safe-area-context';
+-import Icon from 'react-native-vector-icons/Ionicons';
+ 
+ export default function Header({ navigation }) {
+   const insets = useSafeAreaInsets();
+@@ -35,7 +35,7 @@ export default function Header({ navigation }) {
+           onPress={() => navigation.navigate('Notifications')}
+         >
+           <View style={styles.iconWrapper}>
+-            <Icon name="notifications-outline" size={22} color="#F08626" />
++            <Bell size={22} color="#F08626" />
+             {/* Notification badge */}
+         {/* <View style={styles.notificationBadge} />
+           </View>
+@@ -47,7 +47,7 @@ export default function Header({ navigation }) {
+           activeOpacity={0.7}
+           onPress={() => navigation.navigate('Menu')}
+         >
+-          <Icon name="menu" size={24} color="#1A1A1A" />
++          <Menu size={24} color="#1A1A1A" />
+         </TouchableOpacity>
+       </View>
+     </View>
+

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Calendar, PlusCircle, ArrowLeft, SlidersHorizontal, Search, XCircle, X, CheckCircle2, Plus } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -12,7 +13,6 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { reservationsAPI, activeTables } from '../../services/api';
 import { API_URL } from '../../config';
@@ -380,7 +380,7 @@ const ReservationsListScreen = ({ navigation }) => {
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Icon name="calendar-outline" size={80} color="#CCC" />
+      <Calendar size={80} color="#CCC" />
       <Text style={styles.emptyTitle}>No Reservations</Text>
       <Text style={styles.emptyText}>
         {searchQuery || selectedFilter !== 'all'
@@ -389,7 +389,7 @@ const ReservationsListScreen = ({ navigation }) => {
       </Text>
       {!searchQuery && selectedFilter === 'all' && (
         <TouchableOpacity style={styles.createButton} onPress={handleCreateNew}>
-          <Icon name="add-circle-outline" size={24} color="#FFF" />
+          <PlusCircle size={24} color="#FFF" />
           <Text style={styles.createButtonText}>Create Reservation</Text>
         </TouchableOpacity>
       )}
@@ -415,7 +415,7 @@ const ReservationsListScreen = ({ navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-back" size={24} color="#333" />
+          <ArrowLeft size={24} color="#333" />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>Reservations</Text>
@@ -428,13 +428,13 @@ const ReservationsListScreen = ({ navigation }) => {
           style={styles.filterButton}
           onPress={() => setShowFilterModal(true)}
         >
-          <Icon name="options-outline" size={24} color="#333" />
+          <SlidersHorizontal size={24} color="#333" />
         </TouchableOpacity>
       </View>
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <Icon name="search-outline" size={20} color="#666" />
+        <Search size={20} color="#666" />
         <TextInput
           style={styles.searchInput}
           placeholder="Search by name or phone..."
@@ -444,7 +444,7 @@ const ReservationsListScreen = ({ navigation }) => {
         />
         {searchQuery ? (
           <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Icon name="close-circle" size={20} color="#666" />
+            <XCircle size={20} color="#666" />
           </TouchableOpacity>
         ) : null}
       </View>
@@ -497,7 +497,7 @@ const ReservationsListScreen = ({ navigation }) => {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Filter Options</Text>
               <TouchableOpacity onPress={() => setShowFilterModal(false)}>
-                <Icon name="close" size={24} color="#333" />
+                <X size={24} color="#333" />
               </TouchableOpacity>
             </View>
 
@@ -524,7 +524,7 @@ const ReservationsListScreen = ({ navigation }) => {
                   All Games
                 </Text>
                 {selectedGameFilter === 'all' && (
-                  <Icon name="checkmark-circle" size={24} color="#4CAF50" />
+                  <CheckCircle2 size={24} color="#4CAF50" />
                 )}
               </TouchableOpacity>
               {getUniqueGames().map(game => (
@@ -549,7 +549,7 @@ const ReservationsListScreen = ({ navigation }) => {
                     {game}
                   </Text>
                   {selectedGameFilter === game && (
-                    <Icon name="checkmark-circle" size={24} color="#4CAF50" />
+                    <CheckCircle2 size={24} color="#4CAF50" />
                   )}
                 </TouchableOpacity>
               ))}
@@ -584,7 +584,7 @@ const ReservationsListScreen = ({ navigation }) => {
         onPress={handleCreateNew}
         activeOpacity={0.7}
       >
-        <Icon name="add" size={30} color="#FFF" />
+        <Plus size={30} color="#FFF" />
       </TouchableOpacity>
     </SafeAreaView>
   );

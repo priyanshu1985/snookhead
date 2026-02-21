@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ArrowLeft, Key, Lock } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -13,7 +14,6 @@ import {
   SafeAreaView,
   ScrollView,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { API_URL } from '../../config';
 
 const ORANGE = '#F08626';
@@ -91,12 +91,12 @@ export default function ResetPasswordScreen({ route, navigation }) {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Icon name="arrow-back" size={24} color={DARK_BLUE} />
+            <ArrowLeft size={24} color={DARK_BLUE} />
           </TouchableOpacity>
 
           <View style={styles.headerSection}>
             <View style={styles.iconContainer}>
-              <Icon name="key-outline" size={40} color={ORANGE} />
+              <Key size={40} color={ORANGE} />
             </View>
             <Text style={styles.title}>Reset Password</Text>
             <Text style={styles.subtitle}>
@@ -127,8 +127,7 @@ export default function ResetPasswordScreen({ route, navigation }) {
             {/* New Password */}
             <Text style={styles.label}>New Password</Text>
             <View style={styles.inputWrapper}>
-              <Icon
-                name="lock-closed-outline"
+              <Lock
                 size={20}
                 color="#999"
                 style={styles.inputIcon}
@@ -154,8 +153,7 @@ export default function ResetPasswordScreen({ route, navigation }) {
             {/* Confirm Password */}
             <Text style={styles.label}>Confirm Password</Text>
             <View style={styles.inputWrapper}>
-              <Icon
-                name="lock-closed-outline"
+              <Lock
                 size={20}
                 color="#999"
                 style={styles.inputIcon}

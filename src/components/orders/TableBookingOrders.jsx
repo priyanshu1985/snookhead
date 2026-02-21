@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { ChevronLeft, Search, Filter, Plus, Trash2 } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -11,7 +12,6 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { API_URL } from '../../config';
@@ -149,7 +149,7 @@ export default function TableOrder({ route, navigation }) {
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation?.goBack()}>
-            <Icon name="chevron-back" size={24} color="#333" />
+            <ChevronLeft size={24} color="#333" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Food</Text>
           <View style={{ width: 24 }} />
@@ -167,7 +167,7 @@ export default function TableOrder({ route, navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation?.goBack()}>
-          <Icon name="chevron-back" size={24} color="#333" />
+          <ChevronLeft size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Food</Text>
         <View style={{ width: 24 }} />
@@ -176,7 +176,7 @@ export default function TableOrder({ route, navigation }) {
       {/* Search Bar */}
       <View style={styles.searchRow}>
         <View style={styles.searchContainer}>
-          <Icon name="search" size={18} color="#999" />
+          <Search size={18} color="#999" />
           <TextInput
             style={styles.searchInput}
             placeholder="Search"
@@ -186,7 +186,7 @@ export default function TableOrder({ route, navigation }) {
           />
         </View>
         <TouchableOpacity style={styles.filterButton}>
-          <Icon name="filter" size={18} color="#FF8C42" />
+          <Filter size={18} color="#FF8C42" />
         </TouchableOpacity>
       </View>
 
@@ -243,7 +243,7 @@ export default function TableOrder({ route, navigation }) {
               style={styles.addButton}
               onPress={() => handleAddFood(item)}
             >
-              <Icon name="add" size={18} color="#FF8C42" />
+              <Plus size={18} color="#FF8C42" />
             </TouchableOpacity>
           </TouchableOpacity>
         )}
@@ -290,7 +290,7 @@ export default function TableOrder({ route, navigation }) {
                   <TouchableOpacity
                     onPress={() => handleRemoveFromCart(ci.item.id)}
                   >
-                    <Icon name="trash-outline" size={18} color="#FF4D4F" />
+                    <Trash2 size={18} color="#FF4D4F" />
                   </TouchableOpacity>
                 </View>
               ))}

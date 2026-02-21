@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ArrowLeft, Unlock } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -12,7 +13,6 @@ import {
   Platform,
   SafeAreaView,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { API_URL } from '../../config';
 
 const ORANGE = '#F08626';
@@ -79,12 +79,12 @@ export default function ForgotPasswordScreen({ navigation }) {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Icon name="arrow-back" size={24} color={DARK_BLUE} />
+            <ArrowLeft size={24} color={DARK_BLUE} />
           </TouchableOpacity>
 
           <View style={styles.headerSection}>
             <View style={styles.iconContainer}>
-              <Icon name="lock-open-outline" size={40} color={ORANGE} />
+              <Unlock size={40} color={ORANGE} />
             </View>
             <Text style={styles.title}>Forgot Password?</Text>
             <Text style={styles.subtitle}>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { QrCode, AlertCircle, AlertTriangle, ArrowLeft, CheckCircle2 } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -10,7 +11,6 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { createAdvanceReservation } from '../../services/reservationService';
 
 const PAYMENT_MODES = {
@@ -265,8 +265,7 @@ export default function PaymentConfirmScreen({ navigation, route }) {
             ]}
             onPress={() => setPaymentMode(PAYMENT_MODES.UPI)}
           >
-            <Icon
-              name="qr-code"
+            <QrCode
               size={24}
               color={paymentMode === PAYMENT_MODES.UPI ? '#FF8C42' : '#666'}
             />
@@ -377,7 +376,7 @@ export default function PaymentConfirmScreen({ navigation, route }) {
 
           {walletChecked && !walletInfo && (
             <View style={styles.walletNotFound}>
-              <Icon name="alert-circle" size={24} color="#f44336" />
+              <AlertCircle size={24} color="#f44336" />
               <Text style={styles.walletNotFoundText}>Wallet not found</Text>
             </View>
           )}
@@ -395,7 +394,7 @@ export default function PaymentConfirmScreen({ navigation, route }) {
     >
       <View style={styles.modalOverlay}>
         <View style={styles.conflictModal}>
-          <Icon name="warning" size={48} color="#FF8C42" />
+          <AlertTriangle size={48} color="#FF8C42" />
           <Text style={styles.conflictTitle}>Table Reserved</Text>
           <Text style={styles.conflictMessage}>
             {conflictData?.error ||
@@ -429,7 +428,7 @@ export default function PaymentConfirmScreen({ navigation, route }) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back" size={24} color="#333" />
+          <ArrowLeft size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Payment Details</Text>
         <View style={{ width: 24 }} />
@@ -511,8 +510,7 @@ export default function PaymentConfirmScreen({ navigation, route }) {
               ]}
               onPress={() => setPaymentMode(PAYMENT_MODES.UPI)}
             >
-              <Icon
-                name="qr-code"
+              <QrCode
                 size={32}
                 color={paymentMode === PAYMENT_MODES.UPI ? '#FF8C42' : '#666'}
               />
@@ -581,7 +579,7 @@ export default function PaymentConfirmScreen({ navigation, route }) {
             <ActivityIndicator size="small" color="#fff" />
           ) : (
             <>
-              <Icon name="checkmark-circle" size={24} color="#fff" />
+              <CheckCircle2 size={24} color="#fff" />
               <Text style={styles.confirmButtonText}>Confirm Payment</Text>
             </>
           )}

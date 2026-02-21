@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PlusCircle, XCircle, Pencil, Trash2, Utensils, Plus, X, AlertTriangle } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -13,7 +14,6 @@ import {
   Alert,
   Switch,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../config';
 import ImageSelector from '../../components/ImageSelector';
@@ -446,7 +446,7 @@ export default function MenuManagement() {
               style={styles.addSubcategoryBtn}
               onPress={() => setAddSubcategoryModal(true)}
             >
-              <Icon name="add-circle-outline" size={18} color="#FF8C42" />
+              <PlusCircle size={18} color="#FF8C42" />
               <Text style={styles.addSubcategoryBtnText}>Add Subcategory</Text>
             </TouchableOpacity>
           </View>
@@ -513,7 +513,7 @@ export default function MenuManagement() {
             style={styles.addFirstSubcategoryBtn}
             onPress={() => setAddSubcategoryModal(true)}
           >
-            <Icon name="add-circle-outline" size={20} color="#FFF" />
+            <PlusCircle size={20} color="#FFF" />
             <Text style={styles.addFirstSubcategoryBtnText}>
               Add First Subcategory
             </Text>
@@ -565,8 +565,7 @@ export default function MenuManagement() {
                         />
                         {!isAvailable && (
                           <View style={styles.imageOverlay}>
-                            <Icon
-                              name="close-circle"
+                            <XCircle
                               size={20}
                               color="#FF4444"
                             />
@@ -678,13 +677,13 @@ export default function MenuManagement() {
                         style={styles.enhancedMenuEditBtn}
                         onPress={() => handleEditMenu(item)}
                       >
-                        <Icon name="pencil-outline" size={18} color="#FF8C42" />
+                        <Pencil size={18} color="#FF8C42" />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.enhancedMenuDeleteBtn}
                         onPress={() => handleDeleteMenu(item)}
                       >
-                        <Icon name="trash-outline" size={18} color="#FF4444" />
+                        <Trash2 size={18} color="#FF4444" />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -695,7 +694,7 @@ export default function MenuManagement() {
             ListEmptyComponent={
               <View style={styles.enhancedMenuEmptyState}>
                 <View style={styles.menuEmptyIconContainer}>
-                  <Icon name="restaurant-outline" size={64} color="#E8E8E8" />
+                  <Utensils size={64} color="#E8E8E8" />
                 </View>
                 <Text style={styles.menuEmptyTitle}>
                   No Items
@@ -718,7 +717,7 @@ export default function MenuManagement() {
                       setAddMenuModal(true);
                     }}
                   >
-                    <Icon name="add" size={20} color="#FF8C42" />
+                    <Plus size={20} color="#FF8C42" />
                     <Text style={styles.menuEmptyActionButtonText}>
                       Add Item
                     </Text>
@@ -758,8 +757,7 @@ export default function MenuManagement() {
           setAddMenuModal(true);
         }}
       >
-        <Icon
-          name="add-circle-outline"
+        <PlusCircle
           size={22}
           color="#FFF"
           style={{ marginRight: 8 }}
@@ -783,7 +781,7 @@ export default function MenuManagement() {
                   setSubcategoryName('');
                 }}
               >
-                <Icon name="close" size={24} color="#666" />
+                <X size={24} color="#666" />
               </TouchableOpacity>
             </View>
             <View style={styles.modalContent}>
@@ -858,7 +856,7 @@ export default function MenuManagement() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add Menu Item</Text>
               <TouchableOpacity onPress={() => setAddMenuModal(false)}>
-                <Icon name="close" size={24} color="#666" />
+                <X size={24} color="#666" />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalContent}>
@@ -1025,7 +1023,7 @@ export default function MenuManagement() {
                   });
                 }}
               >
-                <Icon name="close" size={24} color="#666" />
+                <X size={24} color="#666" />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalContent}>
@@ -1159,7 +1157,7 @@ export default function MenuManagement() {
         <View style={styles.modalOverlay}>
           <View style={styles.confirmModalContainer}>
             <View style={styles.confirmIconContainer}>
-              <Icon name="warning" size={48} color="#FF4444" />
+              <AlertTriangle size={48} color="#FF4444" />
             </View>
             <Text style={styles.confirmTitle}>Delete Menu Item?</Text>
             <Text style={styles.confirmMessage}>

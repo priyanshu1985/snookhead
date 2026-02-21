@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ChevronLeft } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -7,7 +8,6 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import GamesAndTables from './GamesAndTables';
 import MenuManagement from './MenuManagement';
 
@@ -36,7 +36,7 @@ export default function SetupMenu({ navigation }) {
           <TouchableOpacity
             onPress={() => navigation.goBack && navigation.goBack()}
           >
-            <Icon name="chevron-back" size={26} color="#333" />
+            <ChevronLeft size={26} color="#333" />
           </TouchableOpacity>
           <Text style={styles.title}>Set up menu</Text>
           <View style={{ width: 26 }} />

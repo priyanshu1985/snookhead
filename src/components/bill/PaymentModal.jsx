@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
+import { X } from 'lucide-react-native';
 import {
   View,
   Text,
   StyleSheet,
   Modal,
   TouchableOpacity,
-  TextInput,
   Alert,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 
 export default function PaymentModal({
   visible,
@@ -18,92 +17,28 @@ export default function PaymentModal({
   onPaymentComplete,
 }) {
   const [paymentMethod, setPaymentMethod] = useState(null);
-  const [cashAmount, setCashAmount] = useState('');
-  const [onlineAmount, setOnlineAmount] = useState('');
 
-  const handleOfflinePayment = () => {
-    if (!cashAmount.trim()) {
-      Alert.alert('Error', 'Please enter cash amount');
-      return;
-    }
-    const amount = parseFloat(cashAmount);
-    if (amount <= 0 || isNaN(amount)) {
-      Alert.alert('Error', 'Please enter a valid amount');
-      return;
-    }
+  const PAYMENT_OPTIONS = [
+    { id: 'Cash', title: 'Cash', icon: 'cash-outline', desc: `Pay ₹${grandTotal.toFixed(2)} in cash` },
+    { id: 'UPI', title: 'UPI', icon: 'qr-code-outline', desc: `Pay ₹${grandTotal.toFixed(2)} via UPI` },
+    { id: 'Wallet', title: 'Wallet', icon: 'wallet-outline', desc: `Pay ₹${grandTotal.toFixed(2)} using Wallet` },
+    { id: 'Credit', title: 'Credit', icon: 'card-outline', desc: `Pay ₹${grandTotal.toFixed(2)} using Credit Card` },
+  ];
+
+  const handlePayment = () => {
+    if (!paymentMethod) return;
+    const selectedOption = PAYMENT_OPTIONS.find(opt => opt.id === paymentMethod);
+
     Alert.alert(
-      'Offline Payment',
-      `Cash payment of ₹${amount} recorded for ${personName}`,
+      `${selectedOption.title} Payment`,
+      `Processing payment of ₹${grandTotal} for ${personName}...`,
       [
         {
           text: 'OK',
           onPress: () => {
             onPaymentComplete({
-              method: 'offline',
-              amount,
-              personName,
-            });
-            resetModal();
-            onClose();
-          },
-        },
-      ],
-    );
-  };
-
-  const handleOnlinePayment = () => {
-    Alert.alert(
-      'Online Payment',
-      `Processing online payment of ₹${grandTotal} for ${personName}...`,
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            onPaymentComplete({
-              method: 'online',
+              method: selectedOption.id,
               amount: grandTotal,
-              personName,
-            });
-            resetModal();
-            onClose();
-          },
-        },
-      ],
-    );
-  };
-
-  const handleHybridPayment = () => {
-    if (!cashAmount.trim() || !onlineAmount.trim()) {
-      Alert.alert('Error', 'Please enter both cash and online amounts');
-      return;
-    }
-    const cash = parseFloat(cashAmount);
-    const online = parseFloat(onlineAmount);
-    const total = cash + online;
-
-    if (isNaN(cash) || isNaN(online) || cash < 0 || online < 0) {
-      Alert.alert('Error', 'Please enter valid amounts');
-      return;
-    }
-    if (Math.abs(total - grandTotal) > 0.01) {
-      Alert.alert(
-        'Error',
-        `Total should be ₹${grandTotal}. You entered ₹${total.toFixed(2)}`,
-      );
-      return;
-    }
-    Alert.alert(
-      'Hybrid Payment',
-      `Cash: ₹${cash} + Online: ₹${online} = ₹${total} for ${personName}`,
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            onPaymentComplete({
-              method: 'hybrid',
-              cashAmount: cash,
-              onlineAmount: online,
-              total: total,
               personName,
             });
             resetModal();
@@ -116,8 +51,6 @@ export default function PaymentModal({
 
   const resetModal = () => {
     setPaymentMethod(null);
-    setCashAmount('');
-    setOnlineAmount('');
   };
 
   return (
@@ -133,7 +66,7 @@ export default function PaymentModal({
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Select Payment Method</Text>
             <TouchableOpacity onPress={onClose}>
-              <Icon name="close" size={24} color="#333" />
+              <X size={24} color="#333" />
             </TouchableOpacity>
           </View>
 
@@ -145,164 +78,51 @@ export default function PaymentModal({
 
           {/* Payment Methods */}
           <View style={styles.methodsContainer}>
-            {/* OFFLINE - Cash Payment */}
-            <TouchableOpacity
-              style={[
-                styles.methodCard,
-                paymentMethod === 'offline' && styles.methodCardActive,
-              ]}
-              onPress={() => setPaymentMethod('offline')}
-            >
-              <View style={styles.methodHeader}>
-                <Icon
-                  name="cash"
-                  size={24}
-                  color={paymentMethod === 'offline' ? '#FF8C42' : '#999'}
-                />
-                <Text
-                  style={[
-                    styles.methodTitle,
-                    paymentMethod === 'offline' && styles.methodTitleActive,
-                  ]}
-                >
-                  Offline (Cash)
-                </Text>
-              </View>
-              <Text style={styles.methodDesc}>Enter cash amount manually</Text>
-            </TouchableOpacity>
-
-            {/* Offline Input */}
-            {paymentMethod === 'offline' && (
-              <View style={styles.inputSection}>
-                <Text style={styles.inputLabel}>Enter Cash Amount:</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter amount"
-                  placeholderTextColor="#999"
-                  keyboardType="decimal-pad"
-                  value={cashAmount}
-                  onChangeText={setCashAmount}
-                />
+            {PAYMENT_OPTIONS.map((option) => (
+              <React.Fragment key={option.id}>
                 <TouchableOpacity
-                  style={styles.confirmBtn}
-                  onPress={handleOfflinePayment}
-                >
-                  <Text style={styles.confirmBtnText}>
-                    Confirm Offline Payment
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* ONLINE - Auto Payment */}
-            <TouchableOpacity
-              style={[
-                styles.methodCard,
-                paymentMethod === 'online' && styles.methodCardActive,
-              ]}
-              onPress={() => setPaymentMethod('online')}
-            >
-              <View style={styles.methodHeader}>
-                <Icon
-                  name="card"
-                  size={24}
-                  color={paymentMethod === 'online' ? '#FF8C42' : '#999'}
-                />
-                <Text
                   style={[
-                    styles.methodTitle,
-                    paymentMethod === 'online' && styles.methodTitleActive,
+                    styles.methodCard,
+                    paymentMethod === option.id && styles.methodCardActive,
                   ]}
+                  onPress={() => setPaymentMethod(option.id)}
                 >
-                  Online Payment
-                </Text>
-              </View>
-              <Text style={styles.methodDesc}>
-                Auto-book order (₹{grandTotal.toFixed(2)})
-              </Text>
-            </TouchableOpacity>
-
-            {/* Online Confirm */}
-            {paymentMethod === 'online' && (
-              <View style={styles.inputSection}>
-                <Text style={styles.confirmText}>
-                  Process ₹{grandTotal.toFixed(2)} online payment?
-                </Text>
-                <TouchableOpacity
-                  style={styles.confirmBtn}
-                  onPress={handleOnlinePayment}
-                >
-                  <Text style={styles.confirmBtnText}>
-                    Proceed Online Payment
-                  </Text>
+                  <View style={styles.methodHeader}>
+                    <Icon
+                      name={option.icon}
+                      size={24}
+                      color={paymentMethod === option.id ? '#FF8C42' : '#999'}
+                    />
+                    <Text
+                      style={[
+                        styles.methodTitle,
+                        paymentMethod === option.id && styles.methodTitleActive,
+                      ]}
+                    >
+                      {option.title}
+                    </Text>
+                  </View>
+                  <Text style={styles.methodDesc}>{option.desc}</Text>
                 </TouchableOpacity>
-              </View>
-            )}
 
-            {/* HYBRID - Cash + Online */}
-            <TouchableOpacity
-              style={[
-                styles.methodCard,
-                paymentMethod === 'hybrid' && styles.methodCardActive,
-              ]}
-              onPress={() => setPaymentMethod('hybrid')}
-            >
-              <View style={styles.methodHeader}>
-                <Icon
-                  name="swap-horizontal"
-                  size={24}
-                  color={paymentMethod === 'hybrid' ? '#FF8C42' : '#999'}
-                />
-                <Text
-                  style={[
-                    styles.methodTitle,
-                    paymentMethod === 'hybrid' && styles.methodTitleActive,
-                  ]}
-                >
-                  Hybrid (Cash + Online)
-                </Text>
-              </View>
-              <Text style={styles.methodDesc}>
-                50% cash + 50% online payment
-              </Text>
-            </TouchableOpacity>
-
-            {/* Hybrid Input */}
-            {paymentMethod === 'hybrid' && (
-              <View style={styles.inputSection}>
-                <Text style={styles.inputLabel}>Enter Cash Amount:</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter cash amount"
-                  placeholderTextColor="#999"
-                  keyboardType="decimal-pad"
-                  value={cashAmount}
-                  onChangeText={setCashAmount}
-                />
-                <Text style={styles.inputLabel}>Enter Online Amount:</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter online amount"
-                  placeholderTextColor="#999"
-                  keyboardType="decimal-pad"
-                  value={onlineAmount}
-                  onChangeText={setOnlineAmount}
-                />
-                <Text style={styles.totalText}>
-                  Total: ₹
-                  {(parseFloat(cashAmount) || 0) +
-                    (parseFloat(onlineAmount) || 0)}
-                </Text>
-                <TouchableOpacity
-                  style={styles.confirmBtn}
-                  onPress={handleHybridPayment}
-                >
-                  <Text style={styles.confirmBtnText}>
-                    Confirm Hybrid Payment
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
+                {/* Confirm Section */}
+                {paymentMethod === option.id && (
+                  <View style={styles.inputSection}>
+                    <Text style={styles.confirmText}>
+                      Process ₹{grandTotal.toFixed(2)} using {option.title}?
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.confirmBtn}
+                      onPress={handlePayment}
+                    >
+                      <Text style={styles.confirmBtnText}>
+                        Proceed with {option.title}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </React.Fragment>
+            ))}
           </View>
 
           {/* Cancel Button */}
@@ -397,41 +217,17 @@ const styles = StyleSheet.create({
     marginLeft: 34,
   },
   inputSection: {
-    marginTop: 12,
+    marginTop: 2,
     padding: 12,
     backgroundColor: '#F5F5F5',
     borderRadius: 10,
     marginBottom: 10,
-  },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 6,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#333',
-    marginBottom: 10,
-    backgroundColor: '#fff',
   },
   confirmText: {
     fontSize: 13,
     color: '#555',
     marginBottom: 12,
     textAlign: 'center',
-  },
-  totalText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#FF8C42',
-    marginBottom: 10,
-    textAlign: 'right',
   },
   confirmBtn: {
     backgroundColor: '#FF8C42',

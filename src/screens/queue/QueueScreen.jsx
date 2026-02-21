@@ -1,5 +1,6 @@
 // QueueScreen.js
 import React, { useState, useEffect } from 'react';
+import { X } from 'lucide-react-native';
 import {
   View,
   StyleSheet,
@@ -14,7 +15,6 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import QueueListView from '../../components/queue/QueueListView';
 import Header from '../../components/common/Header';
 import { API_URL } from '../../config';
@@ -335,7 +335,7 @@ export default function QueueScreen({ navigation, route }) {
                     onPress={() => setShowAddModal(false)}
                     style={styles.modalCloseButton}
                   >
-                    <Icon name="close" size={24} color="#333" />
+                    <X size={24} color="#333" />
                   </TouchableOpacity>
                 </View>
 

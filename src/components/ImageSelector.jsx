@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CheckCircle2, AlertCircle, Image, Link } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -11,7 +12,6 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { API_URL } from '../config';
@@ -208,7 +208,7 @@ export default function ImageSelector({
         />
         {isSelected && (
           <View style={styles.selectedOverlay}>
-            <Icon name="checkmark-circle" size={28} color="#FFFFFF" />
+            <CheckCircle2 size={28} color="#FFFFFF" />
           </View>
         )}
       </TouchableOpacity>
@@ -233,7 +233,7 @@ export default function ImageSelector({
   if (error) {
     return (
       <View style={[styles.container, styles.centerContent, style]}>
-        <Icon name="alert-circle-outline" size={40} color="#FF6B6B" />
+        <AlertCircle size={40} color="#FF6B6B" />
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={fetchStockImages}>
           <Text style={styles.retryText}>Retry</Text>
@@ -246,7 +246,7 @@ export default function ImageSelector({
     const folderName = imageType === 'menu' ? 'menu-images' : 'game-images';
     return (
       <View style={[styles.container, styles.centerContent, style]}>
-        <Icon name="images-outline" size={40} color="#CCCCCC" />
+        <Image size={40} color="#CCCCCC" />
         <Text style={styles.emptyText}>No images available</Text>
         <Text style={styles.emptySubtext}>
           Add images to the {folderName} folder on the server
@@ -275,7 +275,7 @@ export default function ImageSelector({
     if (error) {
       return (
         <View style={[styles.centerContent, { paddingVertical: 40 }]}>
-          <Icon name="alert-circle-outline" size={40} color="#FF6B6B" />
+          <AlertCircle size={40} color="#FF6B6B" />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity
             style={styles.retryButton}
@@ -291,7 +291,7 @@ export default function ImageSelector({
       const folderName = imageType === 'menu' ? 'menu-images' : 'game-images';
       return (
         <View style={[styles.centerContent, { paddingVertical: 40 }]}>
-          <Icon name="images-outline" size={40} color="#CCCCCC" />
+          <Image size={40} color="#CCCCCC" />
           <Text style={styles.emptyText}>No images available</Text>
           <Text style={styles.emptySubtext}>
             Upload images using the other tabs to get started
@@ -331,7 +331,7 @@ export default function ImageSelector({
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
             <>
-              <Icon name="images-outline" size={20} color="#FFFFFF" />
+              <Image size={20} color="#FFFFFF" />
               <Text style={styles.uploadButtonText}>Choose from Gallery</Text>
             </>
           )}
@@ -346,7 +346,7 @@ export default function ImageSelector({
   const renderUrlTab = () => {
     return (
       <View style={styles.uploadSection}>
-        <Icon name="link-outline" size={60} color="#FF8C42" />
+        <Link size={60} color="#FF8C42" />
         <Text style={styles.uploadTitle}>Add from URL</Text>
         <Text style={styles.uploadSubtitle}>
           Enter the URL of an image to download and add to stock
@@ -433,8 +433,7 @@ export default function ImageSelector({
           style={[styles.tab, activeTab === 'url' && styles.tabActive]}
           onPress={() => setActiveTab('url')}
         >
-          <Icon
-            name="link-outline"
+          <Link
             size={18}
             color={activeTab === 'url' ? '#FF8C42' : '#999'}
           />

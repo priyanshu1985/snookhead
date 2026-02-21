@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ChevronLeft, LayoutGrid, Minus, Plus, Timer, Users, Utensils, CreditCard, CheckCircle2, Hourglass, Clock, X } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -13,7 +14,6 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../config';
 import {
@@ -1099,7 +1099,7 @@ export default function AfterBooking({ route, navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="chevron-back" size={24} color="#333" />
+          <ChevronLeft size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{gameType || 'Snooker'}</Text>
         <View style={{ width: 24 }} />
@@ -1126,7 +1126,7 @@ export default function AfterBooking({ route, navigation }) {
               </Text>
             </View>
             <View style={styles.timerStatus}>
-              <Icon name="apps-outline" size={12} color="#4CAF50" />
+              <LayoutGrid size={12} color="#4CAF50" />
               <Text style={[styles.timerStatusText, { color: '#4CAF50' }]}>
                 Manual billing when done
               </Text>
@@ -1136,13 +1136,13 @@ export default function AfterBooking({ route, navigation }) {
                 style={styles.frameControlBtn}
                 onPress={() => setFrameCount(prev => Math.max(1, prev - 1))}
               >
-                <Icon name="remove" size={20} color="#FF8C42" />
+                <Minus size={20} color="#FF8C42" />
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.frameControlBtn}
                 onPress={() => setFrameCount(prev => prev + 1)}
               >
-                <Icon name="add" size={20} color="#FF8C42" />
+                <Plus size={20} color="#FF8C42" />
               </TouchableOpacity>
             </View>
             <Text style={styles.frameHint}>
@@ -1157,7 +1157,7 @@ export default function AfterBooking({ route, navigation }) {
               {formatCountdownTime(elapsedSeconds)}
             </Text>
             <View style={styles.timerStatus}>
-              <Icon name="stopwatch-outline" size={12} color="#2196F3" />
+              <Timer size={12} color="#2196F3" />
               <Text style={[styles.timerStatusText, { color: '#2196F3' }]}>
                 Running - Generate bill when done
               </Text>
@@ -1251,7 +1251,7 @@ export default function AfterBooking({ route, navigation }) {
                 mins
               </Text>
             </View>
-            <Icon name="people-circle" size={32} color="#2196F3" />
+            <Users size={32} color="#2196F3" />
           </View>
         )}
 
@@ -1289,7 +1289,7 @@ export default function AfterBooking({ route, navigation }) {
             </View>
           ) : getFilteredMenuItems().length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Icon name="restaurant-outline" size={48} color="#ccc" />
+              <Utensils size={48} color="#ccc" />
               <Text style={styles.emptyText}>
                 No items found in {selectedCategory}
               </Text>
@@ -1369,7 +1369,7 @@ export default function AfterBooking({ route, navigation }) {
                               style={styles.quantityBtnCompact}
                               onPress={() => handleRemoveFromBill(item.id)}
                             >
-                              <Icon name="remove" size={16} color="#FFFFFF" />
+                              <Minus size={16} color="#FFFFFF" />
                             </TouchableOpacity>
                             <Text style={styles.quantityTextCompact}>
                               {billItem.quantity}
@@ -1378,7 +1378,7 @@ export default function AfterBooking({ route, navigation }) {
                               style={styles.quantityBtnCompact}
                               onPress={() => handleAddToBill(item)}
                             >
-                              <Icon name="add" size={16} color="#FFFFFF" />
+                              <Plus size={16} color="#FFFFFF" />
                             </TouchableOpacity>
                           </View>
                         ) : (
@@ -1388,7 +1388,7 @@ export default function AfterBooking({ route, navigation }) {
                           >
                             <Text style={styles.addBtnText}>ADD</Text>
                             <View style={styles.addBtnPlus}>
-                              <Icon name="add" size={12} color="#FF8C42" />
+                              <Plus size={12} color="#FF8C42" />
                             </View>
                           </TouchableOpacity>
                         )}
@@ -1405,13 +1405,13 @@ export default function AfterBooking({ route, navigation }) {
         {reservationPayment && (
           <View style={styles.paymentStatusContainer}>
             <View style={styles.paymentStatusHeader}>
-              <Icon name="card-outline" size={20} color="#FF8C42" />
+              <CreditCard size={20} color="#FF8C42" />
               <Text style={styles.paymentStatusTitle}>Reservation Payment</Text>
             </View>
             {reservationPayment.paymentType === 'pay_now' &&
             reservationPayment.advancePayment > 0 ? (
               <View style={styles.paymentStatusCard}>
-                <Icon name="checkmark-circle" size={24} color="#4CAF50" />
+                <CheckCircle2 size={24} color="#4CAF50" />
                 <View style={styles.paymentStatusContent}>
                   <Text style={styles.paymentStatusLabel}>Fully Paid</Text>
                   <Text style={styles.paymentStatusAmount}>
@@ -1425,7 +1425,7 @@ export default function AfterBooking({ route, navigation }) {
             ) : reservationPayment.paymentType === 'pay_half' &&
               reservationPayment.advancePayment > 0 ? (
               <View style={styles.paymentStatusCard}>
-                <Icon name="hourglass-outline" size={24} color="#FF9800" />
+                <Hourglass size={24} color="#FF9800" />
                 <View style={styles.paymentStatusContent}>
                   <Text style={styles.paymentStatusLabel}>
                     Half Payment Received
@@ -1440,7 +1440,7 @@ export default function AfterBooking({ route, navigation }) {
               </View>
             ) : (
               <View style={styles.paymentStatusCard}>
-                <Icon name="time-outline" size={24} color="#666" />
+                <Clock size={24} color="#666" />
                 <View style={styles.paymentStatusContent}>
                   <Text style={styles.paymentStatusLabel}>Payment Pending</Text>
                   <Text style={styles.paymentStatusNote}>
@@ -1591,7 +1591,7 @@ export default function AfterBooking({ route, navigation }) {
             <View style={styles.billPreviewHeader}>
               <Text style={styles.billPreviewTitle}>Final Bill Preview</Text>
               <TouchableOpacity onPress={() => setShowBillPreview(false)}>
-                <Icon name="close" size={24} color="#333" />
+                <X size={24} color="#333" />
               </TouchableOpacity>
             </View>
 

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { User, ChevronDown, Lock, X, CheckCircle2 } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -12,7 +13,6 @@ import {
   Image,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { API_URL } from '../../config';
 import { useAuth } from '../../context/AuthContext';
 
@@ -179,8 +179,7 @@ export default function SignUpScreen({ navigation }) {
         {/* Name Input */}
         <Text style={styles.label}>Full Name</Text>
         <View style={styles.inputWrapper}>
-          <Icon
-            name="person-outline"
+          <User
             size={16}
             color="#999"
             style={styles.inputIcon}
@@ -211,8 +210,7 @@ export default function SignUpScreen({ navigation }) {
             {roleOptions.find(option => option.value === role)?.label ||
               'Select Role'}
           </Text>
-          <Icon
-            name="chevron-down-outline"
+          <ChevronDown
             size={16}
             color="#999"
             style={styles.dropdownIcon}
@@ -241,8 +239,7 @@ export default function SignUpScreen({ navigation }) {
         {/* Password Input */}
         <Text style={styles.label}>Password</Text>
         <View style={styles.inputWrapper}>
-          <Icon
-            name="lock-closed-outline"
+          <Lock
             size={16}
             color="#999"
             style={styles.inputIcon}
@@ -271,8 +268,7 @@ export default function SignUpScreen({ navigation }) {
         {/* Confirm Password Input */}
         <Text style={styles.label}>Confirm Password</Text>
         <View style={styles.inputWrapper}>
-          <Icon
-            name="lock-closed-outline"
+          <Lock
             size={16}
             color="#999"
             style={styles.inputIcon}
@@ -342,7 +338,7 @@ export default function SignUpScreen({ navigation }) {
                   onPress={() => setShowRoleModal(false)}
                   style={styles.closeButton}
                 >
-                  <Icon name="close" size={24} color="#666" />
+                  <X size={24} color="#666" />
                 </TouchableOpacity>
               </View>
 
@@ -378,7 +374,7 @@ export default function SignUpScreen({ navigation }) {
                     {option.label}
                   </Text>
                   {role === option.value && (
-                    <Icon name="checkmark-circle" size={20} color={ORANGE} />
+                    <CheckCircle2 size={20} color={ORANGE} />
                   )}
                 </TouchableOpacity>
               ))}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ArrowLeft, ShieldCheck } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -14,7 +15,6 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { ownerAPI } from '../../services/api';
 
 export default function OwnerPasswordSetup({ navigation }) {
@@ -94,7 +94,7 @@ export default function OwnerPasswordSetup({ navigation }) {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back" size={24} color="#333" />
+            <ArrowLeft size={24} color="#333" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Set Up Owner Password</Text>
           <View style={{ width: 24 }} />
@@ -104,7 +104,7 @@ export default function OwnerPasswordSetup({ navigation }) {
         <View style={styles.content}>
           {/* Icon and Welcome Text */}
           <View style={styles.welcomeSection}>
-            <Icon name="shield-checkmark" size={80} color="#FF8C42" />
+            <ShieldCheck size={80} color="#FF8C42" />
             <Text style={styles.title}>Secure Your Owner Panel</Text>
             <Text style={styles.description}>
               As this is your first time accessing the owner panel, please set
@@ -197,7 +197,7 @@ export default function OwnerPasswordSetup({ navigation }) {
               <ActivityIndicator color="#fff" size="small" />
             ) : (
               <>
-                <Icon name="shield-checkmark" size={20} color="#fff" />
+                <ShieldCheck size={20} color="#fff" />
                 <Text style={styles.setupButtonText}>Set Up Password</Text>
               </>
             )}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, MailUnread } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -13,7 +14,6 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { API_URL } from '../../config';
 import { useAuth } from '../../context/AuthContext';
 
@@ -179,12 +179,12 @@ export default function OtpVerificationScreen({ route, navigation }) {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Icon name="arrow-back" size={24} color={DARK_BLUE} />
+            <ArrowLeft size={24} color={DARK_BLUE} />
           </TouchableOpacity>
 
           <View style={styles.headerSection}>
             <View style={styles.iconContainer}>
-              <Icon name="mail-unread-outline" size={40} color={ORANGE} />
+              <MailUnread size={40} color={ORANGE} />
             </View>
             <Text style={styles.title}>Verification</Text>
             <Text style={styles.subtitle}>

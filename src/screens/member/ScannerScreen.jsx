@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Camera, ArrowLeft, Pencil, QrCode, Settings, X, Clipboard } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -12,7 +13,6 @@ import {
   StatusBar,
   Linking,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { Camera } from 'react-native-camera-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
@@ -128,22 +128,26 @@ export default function ScannerScreen({ navigation, route }) {
       }
 
       // Validate QR code with backend
+      let scanPayload = {
+        qr_data: qrData,
+      };
+      // If payment mode, include amount for deduction
+      if (isPaymentMode && paymentContext) {
+        scanPayload.amount = parseFloat(paymentContext.amount);
+      }
       const response = await fetch(`${API_URL}/api/wallets/scan`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          qr_data: qrData,
-        }),
+        body: JSON.stringify(scanPayload),
       });
-
       const result = await response.json();
 
       if (response.ok && result.wallet && result.customer) {
         // Check if customer is active
-        if (!result.customer.is_active) {
+        if (!result.customer.isactive) {
           Alert.alert(
             'Wallet Deactivated',
             'Owner has deactivated your wallet. Please contact the owner to activate your account.',
@@ -361,7 +365,7 @@ export default function ScannerScreen({ navigation, route }) {
       <View style={styles.container}>
         <Header navigation={navigation} />
         <View style={styles.centerContainer}>
-          <Icon name="camera" size={80} color="#666" />
+          <Camera size={80} color="#666" />
           <Text style={styles.messageText}>
             Requesting camera permission...
           </Text>
@@ -391,7 +395,7 @@ export default function ScannerScreen({ navigation, route }) {
             style={styles.backButton}
             onPress={() => setIsScanning(false)}
           >
-            <Icon name="arrow-back" size={24} color="#fff" />
+            <ArrowLeft size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.scanningTitle}>Scanning QR Code</Text>
           <View style={styles.placeholder} />
@@ -410,7 +414,7 @@ export default function ScannerScreen({ navigation, route }) {
               setShowManualEntry(true);
             }}
           >
-            <Icon name="create-outline" size={24} color="#fff" />
+            <Pencil size={24} color="#fff" />
             <Text style={styles.buttonText}>Manual Entry</Text>
           </TouchableOpacity>
         </View>
@@ -425,7 +429,7 @@ export default function ScannerScreen({ navigation, route }) {
       <View style={styles.content}>
         {/* Scanner Icon */}
         <View style={styles.iconContainer}>
-          <Icon name="qr-code" size={100} color="#FF8C42" />
+          <QrCode size={100} color="#FF8C42" />
         </View>
 
         {/* Title and Description */}
@@ -462,7 +466,7 @@ export default function ScannerScreen({ navigation, route }) {
           onPress={handleStartScanning}
           disabled={hasPermission === false}
         >
-          <Icon name="camera" size={24} color="#fff" />
+          <Camera size={24} color="#fff" />
           <Text style={styles.scanButtonText}>
             {hasPermission === false
               ? 'Camera Access Required'
@@ -474,7 +478,7 @@ export default function ScannerScreen({ navigation, route }) {
           style={styles.manualButton}
           onPress={() => setShowManualEntry(true)}
         >
-          <Icon name="create" size={24} color="#FF8C42" />
+          <Pencil size={24} color="#FF8C42" />
           <Text style={styles.manualButtonText}>Manual Entry</Text>
         </TouchableOpacity>
 
@@ -484,7 +488,7 @@ export default function ScannerScreen({ navigation, route }) {
             style={styles.cancelPaymentButton}
             onPress={() => navigation.goBack()}
           >
-            <Icon name="arrow-back" size={24} color="#666" />
+            <ArrowLeft size={24} color="#666" />
             <Text style={styles.cancelPaymentButtonText}>Back to Bill</Text>
           </TouchableOpacity>
         )}
@@ -494,7 +498,7 @@ export default function ScannerScreen({ navigation, route }) {
             style={styles.permissionButton}
             onPress={requestCameraPermission}
           >
-            <Icon name="settings" size={20} color="#FF8C42" />
+            <Settings size={20} color="#FF8C42" />
             <Text style={styles.permissionButtonText}>
               Grant Camera Permission
             </Text>
@@ -526,7 +530,7 @@ export default function ScannerScreen({ navigation, route }) {
                   onPress={() => setShowManualEntry(false)}
                   style={styles.closeButton}
                 >
-                  <Icon name="close" size={24} color="#666" />
+                  <X size={24} color="#666" />
                 </TouchableOpacity>
               </View>
 
@@ -538,7 +542,7 @@ export default function ScannerScreen({ navigation, route }) {
                 style={styles.testDataButton}
                 onPress={() => setManualInput(generateTestQRData())}
               >
-                <Icon name="clipboard" size={16} color="#1a237e" />
+                <Clipboard size={16} color="#1a237e" />
                 <Text style={styles.testDataButtonText}>Use Test QR Data</Text>
               </TouchableOpacity>
 

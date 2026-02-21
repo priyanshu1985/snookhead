@@ -1,4 +1,5 @@
 import React from 'react';
+import { ArrowLeft, CheckCircle2 } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -9,7 +10,6 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 
 export default function UpgradeSubscription({ navigation }) {
   const plans = [
@@ -78,7 +78,7 @@ export default function UpgradeSubscription({ navigation }) {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back" size={24} color="#333" />
+            <ArrowLeft size={24} color="#333" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Upgrade Plan</Text>
           <View style={{ width: 24 }} />
@@ -121,7 +121,7 @@ export default function UpgradeSubscription({ navigation }) {
               {/* Features */}
               {plan.features.map((feature, idx) => (
                 <View key={idx} style={styles.featureRow}>
-                  <Icon name="checkmark-circle" size={16} color={plan.color} />
+                  <CheckCircle2 size={16} color={plan.color} />
                   <Text style={styles.featureText}>{feature}</Text>
                 </View>
               ))}

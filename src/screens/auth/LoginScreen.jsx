@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { ArrowLeft } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -15,7 +16,6 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { API_URL } from '../../config';
 import { useAuth } from '../../context/AuthContext';
 
@@ -135,7 +135,7 @@ export default function LoginScreen({ navigation }) {
               onPress={navigateBack}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Icon name="arrow-back" size={24} color={DARK_BLUE} />
+              <ArrowLeft size={24} color={DARK_BLUE} />
             </TouchableOpacity>
           </View>
 

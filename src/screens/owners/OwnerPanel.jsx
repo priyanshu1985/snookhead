@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Lock } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -10,7 +11,6 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { ownerAPI } from '../../services/api';
 
 export default function OwnerPanel({ navigation }) {
@@ -143,7 +143,7 @@ export default function OwnerPanel({ navigation }) {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back" size={24} color="#333" />
+            <ArrowLeft size={24} color="#333" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Owner's Panel</Text>
           <View style={{ width: 24 }} />
@@ -151,7 +151,7 @@ export default function OwnerPanel({ navigation }) {
 
         {/* Content */}
         <View style={styles.content}>
-          <Icon name="lock-closed-outline" size={60} color="#FF8C42" />
+          <Lock size={60} color="#FF8C42" />
           <Text style={styles.title}>Secure Access</Text>
           <Text style={styles.description}>
             Enter your owner panel password to access the analytics dashboard

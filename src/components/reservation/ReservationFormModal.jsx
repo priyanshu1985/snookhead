@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Square, Timer, Clock, Grid, Minus, Plus, CheckCircle2, AlertCircle, ArrowRightLeft, Banknote, Wallet } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -12,7 +13,6 @@ import {
   FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { API_URL } from '../../config';
@@ -885,7 +885,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
                     </View>
                   ) : filteredTables.length === 0 ? (
                     <View style={styles.emptyState}>
-                      <Icon name="square-outline" size={40} color="#CCC" />
+                      <Square size={40} color="#CCC" />
                       <Text style={styles.emptyText}>
                         No tables available for this game
                       </Text>
@@ -1082,8 +1082,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
                         setAmount('0');
                       }}
                     >
-                      <Icon
-                        name="timer-outline"
+                      <Timer
                         size={24}
                         color={bookingType === 'timer' ? '#FF8C42' : '#666'}
                       />
@@ -1118,8 +1117,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
                         }
                       }}
                     >
-                      <Icon
-                        name="time-outline"
+                      <Clock
                         size={24}
                         color={bookingType === 'set_time' ? '#FF8C42' : '#666'}
                       />
@@ -1154,8 +1152,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
                         }
                       }}
                     >
-                      <Icon
-                        name="grid-outline"
+                      <Grid
                         size={24}
                         color={bookingType === 'frame' ? '#FF8C42' : '#666'}
                       />
@@ -1195,7 +1192,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
                           }
                         }}
                       >
-                        <Icon name="remove" size={20} color="#666" />
+                        <Minus size={20} color="#666" />
                       </TouchableOpacity>
                       <View style={styles.durationDisplay}>
                         <Text style={styles.durationValue}>{duration}</Text>
@@ -1218,7 +1215,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
                           }
                         }}
                       >
-                        <Icon name="add" size={20} color="#666" />
+                        <Plus size={20} color="#666" />
                       </TouchableOpacity>
                     </View>
                     {errors.duration && (
@@ -1244,7 +1241,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
                       styles.availabilitySuccess,
                     ]}
                   >
-                    <Icon name="checkmark-circle" size={24} color="#4CAF50" />
+                    <CheckCircle2 size={24} color="#4CAF50" />
                     <Text style={styles.availabilitySuccessText}>
                       Available!
                     </Text>
@@ -1260,7 +1257,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
                         styles.availabilityError,
                       ]}
                     >
-                      <Icon name="alert-circle" size={24} color="#F44336" />
+                      <AlertCircle size={24} color="#F44336" />
                       <View>
                         <Text style={styles.availabilityErrorText}>
                           Time Conflict
@@ -1289,8 +1286,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
                               setAvailabilityStatus('unchecked');
                             }}
                           >
-                            <Icon
-                              name="swap-horizontal"
+                            <ArrowRightLeft
                               size={20}
                               color="#4CAF50"
                             />
@@ -1406,8 +1402,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
                           setAmount('');
                         }}
                       >
-                        <Icon
-                          name="checkmark-circle-outline"
+                        <CheckCircle2
                           size={24}
                           color={paymentType === 'pay_now' ? '#4CAF50' : '#666'}
                         />
@@ -1467,8 +1462,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
                       setAmount('');
                     }}
                   >
-                    <Icon
-                      name="time-outline"
+                    <Clock
                       size={24}
                       color={paymentType === 'pay_later' ? '#4CAF50' : '#666'}
                     />
@@ -1497,8 +1491,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
                       ]}
                       onPress={() => setPaymentMode('cash')}
                     >
-                      <Icon
-                        name="cash-outline"
+                      <Banknote
                         size={24}
                         color={paymentMode === 'cash' ? '#4CAF50' : '#666'}
                       />
@@ -1543,8 +1536,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
                       ]}
                       onPress={() => setPaymentMode('wallet')}
                     >
-                      <Icon
-                        name="wallet-outline"
+                      <Wallet
                         size={24}
                         color={paymentMode === 'wallet' ? '#4CAF50' : '#666'}
                       />
@@ -1571,8 +1563,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
                       : 'Full Amount'}
                   </Text>
                   <View style={styles.inputContainer}>
-                    <Icon
-                      name="cash-outline"
+                    <Banknote
                       size={20}
                       color="#666"
                       style={styles.inputIcon}
@@ -1636,7 +1627,7 @@ const ReservationFormModal = ({ visible, onClose, onSuccess }) => {
               <ActivityIndicator size="small" color="#FFF" />
             ) : (
               <>
-                <Icon name="checkmark-circle" size={24} color="#FFF" />
+                <CheckCircle2 size={24} color="#FFF" />
                 <Text style={styles.createButtonText}>
                   {showPaymentStep ? 'Confirm Payment' : 'Create Reservation'}
                 </Text>

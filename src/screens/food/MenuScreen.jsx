@@ -1,4 +1,5 @@
 import React from 'react';
+import { User } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -7,7 +8,6 @@ import {
   Dimensions,
   Alert,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -119,7 +119,7 @@ export default function MenuScreen({ navigation }) {
         {/* Profile Section */}
         <View style={styles.profile}>
           <View style={styles.avatar}>
-            <Icon name="person-outline" size={36} color="#fff" />
+            <User size={36} color="#fff" />
           </View>
           <Text style={styles.staffId}>{user?.name || 'User'}</Text>
           <Text style={styles.email}>{user?.email || 'user@example.com'}</Text>

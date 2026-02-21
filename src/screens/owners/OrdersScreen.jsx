@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Search, Plus, Trash2 } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -10,7 +11,6 @@ import {
   ScrollView,
   Modal,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   CommonActions,
@@ -307,7 +307,7 @@ export default function OrdersScreen({ navigation }) {
         <>
           {/* Food Search */}
           <View style={styles.searchContainer}>
-            <Icon name="search" size={18} color="#999" />
+            <Search size={18} color="#999" />
             <TextInput
               style={styles.searchInput}
               placeholder="Search food items..."
@@ -413,7 +413,7 @@ export default function OrdersScreen({ navigation }) {
                   style={styles.addButton}
                   onPress={() => handleAddFood(item)}
                 >
-                  <Icon name="add" size={18} color="#FF8C42" />
+                  <Plus size={18} color="#FF8C42" />
                 </TouchableOpacity>
               </TouchableOpacity>
             )}
@@ -423,7 +423,7 @@ export default function OrdersScreen({ navigation }) {
         <>
           {/* Active Orders Search */}
           <View style={styles.searchContainer}>
-            <Icon name="search" size={18} color="#999" />
+            <Search size={18} color="#999" />
             <TextInput
               style={styles.searchInput}
               placeholder="Search by customer name..."
@@ -484,7 +484,7 @@ export default function OrdersScreen({ navigation }) {
                     <TouchableOpacity
                       onPress={() => handleRemoveFromCart(ci.item.id)}
                     >
-                      <Icon name="trash-outline" size={18} color="#FF4D4F" />
+                      <Trash2 size={18} color="#FF4D4F" />
                     </TouchableOpacity>
                   </View>
                 ))}

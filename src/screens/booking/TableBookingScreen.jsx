@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ChevronLeft, Users, User, Clock, Pencil, CheckCircle2, AlertCircle, ArrowRightLeft, Utensils, Minus, Plus, Tag, Calendar, X } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -15,7 +16,6 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../config';
 
@@ -836,7 +836,7 @@ export default function TableBookingScreen({ route, navigation }) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="chevron-back" size={28} color="#333" />
+          <ChevronLeft size={28} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{safeGameType}</Text>
         <View style={{ width: 24 }} />
@@ -862,7 +862,7 @@ export default function TableBookingScreen({ route, navigation }) {
             <Text
               style={{ color: '#0D47A1', fontWeight: 'bold', fontSize: 14 }}
             >
-              <Icon name="people" size={16} /> Queue Assignment
+              <Users size={16} /> Queue Assignment
             </Text>
             <Text style={{ color: '#1565C0', fontSize: 13, marginTop: 4 }}>
               Reserved for {safeTable.bookedBy || 'Customer'}
@@ -873,7 +873,7 @@ export default function TableBookingScreen({ route, navigation }) {
         {/* Customer Name */}
         <Text style={styles.sectionTitle}>Customer Details</Text>
         <View style={styles.customerInputContainer}>
-          <Icon name="person-outline" size={20} color="#666" style={styles.customerInputIcon} />
+          <User size={20} color="#666" style={styles.customerInputIcon} />
           <TextInput
             style={styles.customerNameInput}
             placeholder="Enter Customer Name (Optional)"
@@ -940,8 +940,7 @@ export default function TableBookingScreen({ route, navigation }) {
         {selectedTimeOption && (
           <View style={styles.timeDetailsContainer}>
             <View style={styles.timeDetailsLeft}>
-              <Icon
-                name="time-outline"
+              <Clock
                 size={18}
                 color="#FF8C42"
                 style={styles.timeDetailsIcon}
@@ -953,7 +952,7 @@ export default function TableBookingScreen({ route, navigation }) {
                 {getTimeDisplayText()}
               </Text>
               <TouchableOpacity onPress={() => setShowTimeModal(true)}>
-                <Icon name="pencil" size={16} color="#FF8C42" />
+                <Pencil size={16} color="#FF8C42" />
               </TouchableOpacity>
             </View>
           </View>
@@ -975,7 +974,7 @@ export default function TableBookingScreen({ route, navigation }) {
               <View
                 style={[styles.availabilityBanner, styles.availabilitySuccess]}
               >
-                <Icon name="checkmark-circle" size={24} color="#4CAF50" />
+                <CheckCircle2 size={24} color="#4CAF50" />
                 <View style={styles.availabilityTextContainer}>
                   <Text style={styles.availabilityTitle}>Available!</Text>
                   <Text style={styles.availabilitySubtext}>
@@ -989,7 +988,7 @@ export default function TableBookingScreen({ route, navigation }) {
               <View
                 style={[styles.availabilityBanner, styles.availabilityError]}
               >
-                <Icon name="alert-circle" size={24} color="#F44336" />
+                <AlertCircle size={24} color="#F44336" />
                 <View style={styles.availabilityTextContainer}>
                   <Text style={styles.availabilityTitle}>Time Conflict</Text>
                   <Text style={styles.availabilitySubtext}>
@@ -1007,7 +1006,7 @@ export default function TableBookingScreen({ route, navigation }) {
               alternativeTables.length > 0 && (
                 <View style={styles.alternativesSection}>
                   <Text style={styles.alternativesTitle}>
-                    <Icon name="swap-horizontal" size={18} /> Alternative Tables
+                    <ArrowRightLeft size={18} /> Alternative Tables
                   </Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     {alternativeTables.map(altTable => (
@@ -1042,7 +1041,7 @@ export default function TableBookingScreen({ route, navigation }) {
               alternativeTimes.length > 0 && (
                 <View style={styles.alternativesSection}>
                   <Text style={styles.alternativesTitle}>
-                    <Icon name="time" size={18} /> Alternative Times
+                    <Clock size={18} /> Alternative Times
                   </Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     {alternativeTimes.map((altTime, index) => (
@@ -1054,7 +1053,7 @@ export default function TableBookingScreen({ route, navigation }) {
                           checkAvailability();
                         }}
                       >
-                        <Icon name="time-outline" size={20} color="#2196F3" />
+                        <Clock size={20} color="#2196F3" />
                         <Text style={styles.alternativeText}>
                           {altTime.time}
                         </Text>
@@ -1145,7 +1144,7 @@ export default function TableBookingScreen({ route, navigation }) {
             </View>
           ) : getFilteredMenuItems().length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Icon name="restaurant-outline" size={48} color="#ccc" />
+              <Utensils size={48} color="#ccc" />
               <Text style={styles.emptyText}>
                 No items in {selectedSubCategory || selectedMainCategory}
               </Text>
@@ -1222,7 +1221,7 @@ export default function TableBookingScreen({ route, navigation }) {
                               style={styles.quantityBtnCompact}
                               onPress={() => handleRemoveFromBill(item.id)}
                             >
-                              <Icon name="remove" size={16} color="#FFFFFF" />
+                              <Minus size={16} color="#FFFFFF" />
                             </TouchableOpacity>
                             <Text style={styles.quantityTextCompact}>
                               {billItem.quantity}
@@ -1231,7 +1230,7 @@ export default function TableBookingScreen({ route, navigation }) {
                               style={styles.quantityBtnCompact}
                               onPress={() => handleAddToBill(item)}
                             >
-                              <Icon name="add" size={16} color="#FFFFFF" />
+                              <Plus size={16} color="#FFFFFF" />
                             </TouchableOpacity>
                           </View>
                         ) : (
@@ -1241,7 +1240,7 @@ export default function TableBookingScreen({ route, navigation }) {
                           >
                             <Text style={styles.addBtnText}>ADD</Text>
                             <View style={styles.addBtnPlus}>
-                              <Icon name="add" size={12} color="#FF8C42" />
+                              <Plus size={12} color="#FF8C42" />
                             </View>
                           </TouchableOpacity>
                         )}
@@ -1285,7 +1284,7 @@ export default function TableBookingScreen({ route, navigation }) {
               onPress={handleAddInstructions}
               style={styles.editInstructionBtn}
             >
-              <Icon name="pencil" size={16} color="#FF9500" />
+              <Pencil size={16} color="#FF9500" />
             </TouchableOpacity>
           </View>
         )}
@@ -1298,7 +1297,7 @@ export default function TableBookingScreen({ route, navigation }) {
           onPress={handleShowPricingPreview}
           disabled={isBooking}
         >
-          <Icon name="pricetag-outline" size={18} color="#FF8C42" />
+          <Tag size={18} color="#FF8C42" />
           <Text style={styles.viewPricingButtonText}>View Pricing</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -1315,8 +1314,7 @@ export default function TableBookingScreen({ route, navigation }) {
             </View>
           ) : (
             <>
-              <Icon
-                name="calendar-outline"
+              <Calendar
                 size={18}
                 color="#FFFFFF"
                 style={{ marginRight: 8 }}
@@ -1353,7 +1351,7 @@ export default function TableBookingScreen({ route, navigation }) {
                 <TouchableOpacity
                   onPress={() => setShowInstructionModal(false)}
                 >
-                  <Icon name="close" size={24} color="#333" />
+                  <X size={24} color="#333" />
                 </TouchableOpacity>
               </View>
 
@@ -1412,7 +1410,7 @@ export default function TableBookingScreen({ route, navigation }) {
                     'Select Frame Count'}
                 </Text>
                 <TouchableOpacity onPress={() => setShowTimeModal(false)}>
-                  <Icon name="close" size={24} color="#333" />
+                  <X size={24} color="#333" />
                 </TouchableOpacity>
               </View>
 
@@ -1580,7 +1578,7 @@ export default function TableBookingScreen({ route, navigation }) {
                 style={styles.pricingCloseBtn}
                 onPress={() => setShowPricingPreview(false)}
               >
-                <Icon name="close" size={22} color="#666" />
+                <X size={22} color="#666" />
               </TouchableOpacity>
             </View>
 
@@ -1706,7 +1704,7 @@ export default function TableBookingScreen({ route, navigation }) {
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Customer Details</Text>
                 <TouchableOpacity onPress={() => setShowCustomerModal(false)}>
-                  <Icon name="close" size={24} color="#333" />
+                  <X size={24} color="#333" />
                 </TouchableOpacity>
               </View>
 
@@ -1779,7 +1777,7 @@ export default function TableBookingScreen({ route, navigation }) {
         <View style={styles.successModalOverlay}>
           <View style={styles.successModalContent}>
             <View style={styles.successIconContainer}>
-              <Icon name="checkmark-circle" size={64} color="#4CAF50" />
+              <CheckCircle2 size={64} color="#4CAF50" />
             </View>
             <Text style={styles.successModalTitle}>Table Booked!</Text>
             <Text style={styles.successModalMessage}>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Calendar, Layers, Bell, Menu } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -12,8 +13,6 @@ import {
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { ownerAPI } from '../../services/api';
 
 const { width } = Dimensions.get('window');
@@ -343,7 +342,7 @@ export default function OwnerDashboard({ navigation, inTabbedView = false }) {
             {/* Date and Period Selector */}
             <View style={styles.dateSection}>
               <View style={styles.dateContainer}>
-                <Icon name="calendar-outline" size={20} color="#999" />
+                <Calendar size={20} color="#999" />
                 <Text style={styles.dateText}>
                   {currentDate || 'Loading...'}
                 </Text>
@@ -655,15 +654,15 @@ export default function OwnerDashboard({ navigation, inTabbedView = false }) {
         {!inTabbedView && (
           <View style={styles.header}>
             <View style={styles.headerLeft}>
-              <Icon name="layers-outline" size={28} color="#1E3A5F" />
+              <Layers size={28} color="#1E3A5F" />
               <Text style={styles.headerTitle}>SNOKEHEAD</Text>
             </View>
             <View style={styles.headerRight}>
               <TouchableOpacity>
-                <Icon name="notifications-outline" size={24} color="#FF8C42" />
+                <Bell size={24} color="#FF8C42" />
               </TouchableOpacity>
               <TouchableOpacity>
-                <Icon name="menu" size={28} color="#333" />
+                <Menu size={28} color="#333" />
               </TouchableOpacity>
             </View>
           </View>
@@ -690,7 +689,7 @@ export default function OwnerDashboard({ navigation, inTabbedView = false }) {
               {/* Date and Period Selector */}
               <View style={styles.dateSection}>
                 <View style={styles.dateContainer}>
-                  <Icon name="calendar-outline" size={20} color="#999" />
+                  <Calendar size={20} color="#999" />
                   <Text style={styles.dateText}>
                     {currentDate || 'Loading...'}
                   </Text>

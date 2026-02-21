@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Calendar, Clock, CheckCircle2 } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -12,7 +13,6 @@ import {
   FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { gamesAPI, tablesAPI } from '../../services/api';
 import {
@@ -163,7 +163,7 @@ export default function NewReservationScreen({ navigation, route }) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back" size={24} color="#333" />
+          <ArrowLeft size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
           {bookingMode === 'advance' ? 'New Reservation' : 'Immediate Booking'}
@@ -226,7 +226,7 @@ export default function NewReservationScreen({ navigation, route }) {
                 style={styles.dateTimeButton}
                 onPress={() => setShowDatePicker(true)}
               >
-                <Icon name="calendar-outline" size={20} color="#666" />
+                <Calendar size={20} color="#666" />
                 <Text style={styles.dateTimeText}>
                   {selectedDate.toLocaleDateString()}
                 </Text>
@@ -236,7 +236,7 @@ export default function NewReservationScreen({ navigation, route }) {
                 style={styles.dateTimeButton}
                 onPress={() => setShowTimePicker(true)}
               >
-                <Icon name="time-outline" size={20} color="#666" />
+                <Clock size={20} color="#666" />
                 <Text style={styles.dateTimeText}>
                   {selectedTime.toLocaleTimeString([], {
                     hour: '2-digit',
@@ -318,7 +318,7 @@ export default function NewReservationScreen({ navigation, route }) {
           style={styles.proceedButton}
           onPress={handleProceedToPayment}
         >
-          <Icon name="checkmark-circle" size={24} color="#fff" />
+          <CheckCircle2 size={24} color="#fff" />
           <Text style={styles.proceedButtonText}>Create Reservation</Text>
         </TouchableOpacity>
       </View>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ArrowLeft, Layers, MoreVertical } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -8,7 +9,6 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import OwnerDashboard from './OwnerDashboard';
 import EmployeeManagement from './EmployeeManagement';
 import ExpenseManagement from './ExpenseManagement';
@@ -62,14 +62,14 @@ export default function OwnerTabs({ navigation }) {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Icon name="arrow-back" size={24} color="#333" />
+            <ArrowLeft size={24} color="#333" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Icon name="layers-outline" size={24} color="#1E3A5F" />
+            <Layers size={24} color="#1E3A5F" />
             <Text style={styles.headerTitle}>Owner Panel</Text>
           </View>
           <TouchableOpacity style={styles.menuButton}>
-            <Icon name="ellipsis-vertical" size={24} color="#333" />
+            <MoreVertical size={24} color="#333" />
           </TouchableOpacity>
         </View>
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { X, XCircle, Timer, CheckCircle2, Receipt, RefreshCw, Pencil } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -10,7 +11,6 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../config';
 
@@ -278,7 +278,7 @@ export default function ActiveOrders({ refreshKey, searchQuery = '' }) {
                 style={styles.modalCloseBtn}
                 onPress={closePreviewModal}
               >
-                <Icon name="close" size={24} color="#666" />
+                <X size={24} color="#666" />
               </TouchableOpacity>
             </View>
 
@@ -355,7 +355,7 @@ export default function ActiveOrders({ refreshKey, searchQuery = '' }) {
                   handleCancelOrder(selectedOrder.id);
                 }}
               >
-                <Icon name="close-circle-outline" size={18} color="#FF4444" />
+                <XCircle size={18} color="#FF4444" />
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
 
@@ -366,7 +366,7 @@ export default function ActiveOrders({ refreshKey, searchQuery = '' }) {
                   handleMarkReady(selectedOrder.id);
                 }}
               >
-                <Icon name="timer-outline" size={18} color="#FF9800" />
+                <Timer size={18} color="#FF9800" />
                 <Text style={styles.readyBtnText}>Ready</Text>
               </TouchableOpacity>
 
@@ -377,8 +377,7 @@ export default function ActiveOrders({ refreshKey, searchQuery = '' }) {
                   handleMarkDelivered(selectedOrder.id);
                 }}
               >
-                <Icon
-                  name="checkmark-circle-outline"
+                <CheckCircle2
                   size={18}
                   color="#4CAF50"
                 />
@@ -406,7 +405,7 @@ export default function ActiveOrders({ refreshKey, searchQuery = '' }) {
     return (
       <View style={styles.activeOrdersContainer}>
         <View style={styles.emptyContainer}>
-          <Icon name="receipt-outline" size={60} color="#DDD" />
+          <Receipt size={60} color="#DDD" />
           <Text style={styles.infoText}>
             {searchQuery
               ? 'No orders found matching your search.'
@@ -416,7 +415,7 @@ export default function ActiveOrders({ refreshKey, searchQuery = '' }) {
             style={styles.refreshButton}
             onPress={fetchActiveOrders}
           >
-            <Icon name="refresh-outline" size={18} color="#fff" />
+            <RefreshCw size={18} color="#fff" />
             <Text style={styles.refreshButtonText}>Refresh Orders</Text>
           </TouchableOpacity>
         </View>
@@ -488,7 +487,7 @@ export default function ActiveOrders({ refreshKey, searchQuery = '' }) {
                         handleEditOrder(order);
                       }}
                     >
-                      <Icon name="create-outline" size={16} color="#2196F3" />
+                      <Pencil size={16} color="#2196F3" />
                       <Text style={styles.actionBtnTextEdit}>Edit</Text>
                     </TouchableOpacity>
 
@@ -499,7 +498,7 @@ export default function ActiveOrders({ refreshKey, searchQuery = '' }) {
                         handleMarkReady(order.id);
                       }}
                     >
-                      <Icon name="timer-outline" size={16} color="#FF9800" />
+                      <Timer size={16} color="#FF9800" />
                       <Text style={styles.actionBtnTextReady}>Ready</Text>
                     </TouchableOpacity>
 
@@ -510,8 +509,7 @@ export default function ActiveOrders({ refreshKey, searchQuery = '' }) {
                         handleCancelOrder(order.id);
                       }}
                     >
-                      <Icon
-                        name="close-circle-outline"
+                      <XCircle
                         size={16}
                         color="#FF4444"
                       />
@@ -525,8 +523,7 @@ export default function ActiveOrders({ refreshKey, searchQuery = '' }) {
                         handleMarkDelivered(order.id);
                       }}
                     >
-                      <Icon
-                        name="checkmark-circle-outline"
+                      <CheckCircle2
                         size={16}
                         color="#4CAF50"
                       />

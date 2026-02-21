@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ArrowLeft, RefreshCw, Package } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -8,7 +9,6 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import { API_URL } from '../../config';
 
 const ServerStatusScreen = ({ navigation }) => {
@@ -180,11 +180,11 @@ const ServerStatusScreen = ({ navigation }) => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back" size={24} color="#fff" />
+          <ArrowLeft size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.title}>Server Status</Text>
         <TouchableOpacity onPress={testConnection} disabled={testing}>
-          <Icon name="refresh" size={24} color={testing ? '#95a5a6' : '#fff'} />
+          <RefreshCw size={24} color={testing ? '#95a5a6' : '#fff'} />
         </TouchableOpacity>
       </View>
 
@@ -230,7 +230,7 @@ const ServerStatusScreen = ({ navigation }) => {
             {testing ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Icon name="refresh" size={20} color="#fff" />
+              <RefreshCw size={20} color="#fff" />
             )}
             <Text style={styles.actionButtonText}>
               {testing ? 'Testing...' : 'Test Connection'}
@@ -255,7 +255,7 @@ const ServerStatusScreen = ({ navigation }) => {
             onPress={navigateToInventory}
             disabled={!serverStatus.inventory?.success}
           >
-            <Icon name="inventory" size={20} color="#fff" />
+            <Package size={20} color="#fff" />
             <Text style={styles.actionButtonText}>Go to Inventory</Text>
           </TouchableOpacity>
         </View>

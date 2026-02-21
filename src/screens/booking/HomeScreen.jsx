@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { AlertCircle, Clock, User, Grid, Calendar, Settings } from 'lucide-react-native';
 import {
   View,
   FlatList,
@@ -11,7 +12,6 @@ import {
   Modal,
   ScrollView,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import Header from '../../components/common/Header';
@@ -893,7 +893,7 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.centerContainer}>
           <View style={styles.errorContainer}>
             <View style={styles.errorIcon}>
-              <Icon name="alert-circle-outline" size={28} color="#D32F2F" />
+              <AlertCircle size={28} color="#D32F2F" />
             </View>
             <Text style={styles.errorText}>{error}</Text>
             <Text style={styles.errorSubText}>
@@ -1002,7 +1002,7 @@ export default function HomeScreen({ navigation }) {
               <>
                 {/* Countdown Header */}
                 <View style={styles.countdownHeader}>
-                  <Icon name="time-outline" size={20} color="#FF9800" />
+                  <Clock size={20} color="#FF9800" />
                   <Text style={styles.countdownText}>
                     {(() => {
                       const scheduledTime = new Date(
@@ -1036,7 +1036,7 @@ export default function HomeScreen({ navigation }) {
                 <View style={styles.reservationInfo}>
                   {/* Customer Info */}
                   <View style={styles.infoRow}>
-                    <Icon name="person-outline" size={20} color="#333" />
+                    <User size={20} color="#333" />
                     <View style={styles.infoContent}>
                       <Text style={styles.customerName}>
                         {selectedReservation.customer_name ||
@@ -1051,7 +1051,7 @@ export default function HomeScreen({ navigation }) {
 
                   {/* Table Info */}
                   <View style={styles.infoRow}>
-                    <Icon name="grid-outline" size={20} color="#333" />
+                    <Grid size={20} color="#333" />
                     <Text style={styles.infoText}>
                       Table{' '}
                       {selectedReservation.table_id ||
@@ -1061,7 +1061,7 @@ export default function HomeScreen({ navigation }) {
 
                   {/* Date & Time */}
                   <View style={styles.infoRow}>
-                    <Icon name="calendar-outline" size={20} color="#333" />
+                    <Calendar size={20} color="#333" />
                     <View style={styles.infoContent}>
                       <Text style={styles.infoText}>
                         {(() => {
@@ -1112,7 +1112,7 @@ export default function HomeScreen({ navigation }) {
                   {(selectedReservation.duration_minutes ||
                     selectedReservation.durationminutes) && (
                     <View style={styles.infoRow}>
-                      <Icon name="time-outline" size={20} color="#333" />
+                      <Clock size={20} color="#333" />
                       <Text style={styles.infoText}>
                         Duration:{' '}
                         {selectedReservation.duration_minutes ||
@@ -1124,7 +1124,7 @@ export default function HomeScreen({ navigation }) {
 
                   {/* Booking Type */}
                   <View style={styles.infoRow}>
-                    <Icon name="settings-outline" size={20} color="#333" />
+                    <Settings size={20} color="#333" />
                     <Text style={styles.infoText}>
                       {selectedReservation.booking_type === 'timer'
                         ? 'Timer Mode'

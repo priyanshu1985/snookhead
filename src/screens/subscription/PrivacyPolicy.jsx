@@ -1,4 +1,5 @@
 import React from 'react';
+import { ArrowLeft, CheckCircle2 } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -8,7 +9,6 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 
 export default function PrivacyPolicy({ navigation }) {
   return (
@@ -18,7 +18,7 @@ export default function PrivacyPolicy({ navigation }) {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back" size={24} color="#333" />
+            <ArrowLeft size={24} color="#333" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Privacy Policy</Text>
           <View style={{ width: 24 }} />
@@ -78,7 +78,7 @@ export default function PrivacyPolicy({ navigation }) {
           </Section>
 
           <View style={styles.footer}>
-            <Icon name="checkmark-circle" size={24} color="#4CAF50" />
+            <CheckCircle2 size={24} color="#4CAF50" />
             <Text style={styles.footerText}>
               You're protected with Game Zone
             </Text>

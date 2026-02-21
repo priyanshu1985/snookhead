@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ChevronRight, ChevronLeft, RefreshCw, Search, XCircle, Calendar, AlertCircle, Receipt } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -11,7 +12,6 @@ import {
   Modal,
   Platform,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -268,7 +268,7 @@ export default function ActiveBillsList({
 
       {/* Tap indicator */}
       <View style={styles.tapIndicator}>
-        <Icon name="chevron-forward" size={16} color="#CCCCCC" />
+        <ChevronRight size={16} color="#CCCCCC" />
       </View>
     </TouchableOpacity>
   );
@@ -282,7 +282,7 @@ export default function ActiveBillsList({
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}
         >
-          <Icon name="chevron-back" size={22} color="#1A1A1A" />
+          <ChevronLeft size={22} color="#1A1A1A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Bill Management</Text>
         <TouchableOpacity
@@ -290,7 +290,7 @@ export default function ActiveBillsList({
           onPress={handleRefresh}
           activeOpacity={0.7}
         >
-          <Icon name="refresh-outline" size={22} color="#FF8C42" />
+          <RefreshCw size={22} color="#FF8C42" />
         </TouchableOpacity>
       </View>
 
@@ -316,7 +316,7 @@ export default function ActiveBillsList({
       {/* Search Bar & Date Selector */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
-          <Icon name="search-outline" size={20} color="#999999" />
+          <Search size={20} color="#999999" />
           <TextInput
             style={styles.searchInput}
             placeholder="Search bills..."
@@ -330,7 +330,7 @@ export default function ActiveBillsList({
               onPress={() => setSearchText('')}
               activeOpacity={0.7}
             >
-              <Icon name="close-circle" size={18} color="#CCCCCC" />
+              <XCircle size={18} color="#CCCCCC" />
             </TouchableOpacity>
           )}
         </View>
@@ -343,8 +343,7 @@ export default function ActiveBillsList({
           onPress={() => setShowDatePicker(true)}
           activeOpacity={0.7}
         >
-          <Icon
-            name="calendar-outline"
+          <Calendar
             size={18}
             color={filterByDate ? '#FF8C42' : '#666666'}
           />
@@ -362,7 +361,7 @@ export default function ActiveBillsList({
               style={styles.clearDateButton}
               activeOpacity={0.7}
             >
-              <Icon name="close-circle" size={16} color="#FF8C42" />
+              <XCircle size={16} color="#FF8C42" />
             </TouchableOpacity>
           )}
         </TouchableOpacity>
@@ -399,7 +398,7 @@ export default function ActiveBillsList({
       ) : error ? (
         <View style={styles.centerContainer}>
           <View style={styles.errorIcon}>
-            <Icon name="alert-circle-outline" size={48} color="#D32F2F" />
+            <AlertCircle size={48} color="#D32F2F" />
           </View>
           <Text style={styles.errorText}>{error}</Text>
           <Text style={styles.errorSubText}>Please check your connection</Text>
@@ -408,14 +407,14 @@ export default function ActiveBillsList({
             onPress={() => fetchActiveBills()}
             activeOpacity={0.8}
           >
-            <Icon name="refresh-outline" size={18} color="#FFFFFF" />
+            <RefreshCw size={18} color="#FFFFFF" />
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
       ) : filteredBills.length === 0 ? (
         <View style={styles.centerContainer}>
           <View style={styles.emptyIcon}>
-            <Icon name="receipt-outline" size={48} color="#FF8C42" />
+            <Receipt size={48} color="#FF8C42" />
           </View>
           <Text style={styles.emptyText}>No active bills found</Text>
           <Text style={styles.emptySubText}>

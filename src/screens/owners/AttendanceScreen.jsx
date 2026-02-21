@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react';
+import { Calendar, Clock, Power } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -11,7 +12,6 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { attendanceAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -164,7 +164,7 @@ export default function AttendanceScreen({ navigation }) {
       <View key={item.id || index} style={styles.historyCard}>
         <View style={styles.historyHeader}>
           <View style={styles.dateContainer}>
-            <Icon name="calendar-outline" size={16} color="#666" />
+            <Calendar size={16} color="#666" />
             <Text style={styles.historyDate}>
               {formatDate(item.check_in_time)}
             </Text>
@@ -207,7 +207,7 @@ export default function AttendanceScreen({ navigation }) {
           </View>
 
           <View style={styles.durationRow}>
-            <Icon name="time-outline" size={16} color="#FF8C42" />
+            <Clock size={16} color="#FF8C42" />
             <Text style={styles.durationText}>
               Total:{' '}
               {calculateDuration(item.check_in_time, item.check_out_time)}
@@ -260,7 +260,7 @@ export default function AttendanceScreen({ navigation }) {
 
           {activeShift && (
             <View style={styles.timerContainer}>
-              <Icon name="time" size={48} color="#FF8C42" />
+              <Clock size={48} color="#FF8C42" />
               <Text style={styles.timerText}>{elapsedTime}</Text>
               <Text style={styles.timerLabel}>Hours worked today</Text>
             </View>
@@ -268,7 +268,7 @@ export default function AttendanceScreen({ navigation }) {
 
           {!activeShift && (
             <View style={styles.clockedOutContainer}>
-              <Icon name="power-outline" size={48} color="#999" />
+              <Power size={48} color="#999" />
               <Text style={styles.clockedOutText}>
                 You are currently clocked out
               </Text>
@@ -317,7 +317,7 @@ export default function AttendanceScreen({ navigation }) {
 
           {attendanceHistory.length === 0 ? (
             <View style={styles.emptyHistoryContainer}>
-              <Icon name="calendar-outline" size={48} color="#CCCCCC" />
+              <Calendar size={48} color="#CCCCCC" />
               <Text style={styles.emptyHistoryText}>No attendance records</Text>
               <Text style={styles.emptyHistorySubtext}>
                 Your attendance history will appear here

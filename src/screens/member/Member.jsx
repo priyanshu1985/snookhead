@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { ChevronRight, ArrowLeft, Search, XCircle, Users, X } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -13,7 +14,6 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../config';
 
@@ -210,8 +210,7 @@ const Members = ({ navigation }) => {
         </Text>
       </View>
 
-      <Icon
-        name="chevron-forward"
+      <ChevronRight
         size={20}
         color="#ccc"
         style={styles.chevron}
@@ -229,7 +228,7 @@ const Members = ({ navigation }) => {
             style={styles.backButton}
             onPress={() => navigation.navigate('MainTabs', { screen: 'Home' })}
           >
-            <Icon name="arrow-back" size={24} color="#333" />
+            <ArrowLeft size={24} color="#333" />
           </TouchableOpacity>
           <Text style={styles.title}>Members</Text>
           <View style={styles.headerActions}>
@@ -237,7 +236,7 @@ const Members = ({ navigation }) => {
               style={styles.searchButton}
               onPress={toggleSearch}
             >
-              <Icon name="search" size={20} color="#666" />
+              <Search size={20} color="#666" />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.addBtn}
@@ -251,8 +250,7 @@ const Members = ({ navigation }) => {
         {/* Search Input */}
         {showSearch && (
           <View style={styles.searchContainer}>
-            <Icon
-              name="search"
+            <Search
               size={16}
               color="#999"
               style={styles.searchIcon}
@@ -273,7 +271,7 @@ const Members = ({ navigation }) => {
                 }}
                 style={styles.clearButton}
               >
-                <Icon name="close-circle" size={16} color="#999" />
+                <XCircle size={16} color="#999" />
               </TouchableOpacity>
             )}
           </View>
@@ -290,7 +288,7 @@ const Members = ({ navigation }) => {
             contentContainerStyle={{ paddingBottom: 20 }}
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
-                <Icon name="people-outline" size={48} color="#ccc" />
+                <Users size={48} color="#ccc" />
                 <Text style={styles.emptyText}>
                   {searchQuery
                     ? 'No members found matching your search'
@@ -337,7 +335,7 @@ const Members = ({ navigation }) => {
                     onPress={() => setShowAddModal(false)}
                     style={styles.closeButton}
                   >
-                    <Icon name="close" size={24} color="#666" />
+                    <X size={24} color="#666" />
                   </TouchableOpacity>
                 </View>
 

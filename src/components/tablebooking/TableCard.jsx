@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { Grid, Calendar, CheckCircle2 } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -9,7 +10,6 @@ import {
   Easing,
   Vibration,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import { Audio } from 'expo-av';
 
 export default function TableCard({ table, color, gameImageUrl, onPress }) {
@@ -336,8 +336,7 @@ export default function TableCard({ table, color, gameImageUrl, onPress }) {
                 ]}
               >
                 {/* Fallback icon when no image */}
-                <Icon
-                  name="grid-outline"
+                <Grid
                   size={32}
                   color="rgba(255,255,255,0.6)"
                 />
@@ -384,7 +383,7 @@ export default function TableCard({ table, color, gameImageUrl, onPress }) {
             {/* Reserved badge with time */}
             {reservationInfo && (
               <View style={styles.reservedBadge}>
-                <Icon name="calendar" size={12} color="#FF9800" />
+                <Calendar size={12} color="#FF9800" />
                 <Text style={styles.reservedText}>
                   Reserved for {reservationInfo.time}
                 </Text>
@@ -394,7 +393,7 @@ export default function TableCard({ table, color, gameImageUrl, onPress }) {
             {/* Available badge */}
             {!isOccupied && !reservationInfo && (
               <View style={styles.availableBadge}>
-                <Icon name="checkmark-circle" size={12} color="#4CAF50" />
+                <CheckCircle2 size={12} color="#4CAF50" />
                 <Text style={styles.availableText}>Available</Text>
               </View>
             )}

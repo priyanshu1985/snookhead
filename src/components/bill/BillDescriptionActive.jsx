@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ChevronLeft, Clock, X, Banknote, CreditCard, Wallet } from 'lucide-react-native';
 import {
   View,
   Text,
@@ -9,7 +10,6 @@ import {
   ActivityIndicator,
   Modal,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../config';
 
@@ -172,12 +172,11 @@ export default function BillDescriptionActive({
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
-          <Icon name="chevron-back" size={24} color="#333" />
+          <ChevronLeft size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Bill Details</Text>
         <View style={styles.statusBadge}>
-          <Icon
-            name="time-outline"
+          <Clock
             size={14}
             color="#FF8C42"
             style={{ marginRight: 4 }}
@@ -313,7 +312,7 @@ export default function BillDescriptionActive({
                   onPress={() => setShowPaymentConfirmModal(false)}
                   style={styles.closeButton}
                 >
-                  <Icon name="close" size={24} color="#666" />
+                  <X size={24} color="#666" />
                 </TouchableOpacity>
               </View>
 
@@ -327,8 +326,7 @@ export default function BillDescriptionActive({
                   ]}
                   onPress={() => setSelectedPaymentMethod('cash')}
                 >
-                  <Icon
-                    name="cash-outline"
+                  <Banknote
                     size={28}
                     color={
                       selectedPaymentMethod === 'cash' ? '#FF8C42' : '#666'
@@ -379,8 +377,7 @@ export default function BillDescriptionActive({
                   ]}
                   onPress={() => setSelectedPaymentMethod('card')}
                 >
-                  <Icon
-                    name="card-outline"
+                  <CreditCard
                     size={28}
                     color={
                       selectedPaymentMethod === 'card' ? '#FF8C42' : '#666'
@@ -406,8 +403,7 @@ export default function BillDescriptionActive({
                   ]}
                   onPress={() => setSelectedPaymentMethod('credit')}
                 >
-                  <Icon
-                    name="wallet-outline"
+                  <Wallet
                     size={28}
                     color={
                       selectedPaymentMethod === 'credit' ? '#FF8C42' : '#666'
