@@ -14,7 +14,7 @@ export default function Header({ navigation }) {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
+    <View style={[styles.container, { paddingTop: insets.top + 16 }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       {/* Logo */}
       <View style={styles.logoContainer}>
@@ -47,7 +47,7 @@ export default function Header({ navigation }) {
           activeOpacity={0.7}
           onPress={() => navigation.navigate('Menu')}
         >
-          <Icon name="menu" size={24} color="#1A1A1A" />
+          <Icon name="menu" size={28} color="#1A1A1A" />
         </TouchableOpacity>
       </View>
     </View>
@@ -61,7 +61,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingBottom: 10,
+    paddingTop: 10,
+    paddingBottom: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
@@ -78,25 +79,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoImageWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: '#F8F9FA',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
   },
   logoImage: {
-    width: 32,
-    height: 32,
+    width: 40,
+    height: 40,
     resizeMode: 'contain',
-    borderRadius: 8,
+    borderRadius: 10,
   },
   logoText: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
     color: '#1A1A1A',
-    marginLeft: 10,
+    marginLeft: 12,
     letterSpacing: 0.5,
   },
   rightIcons: {

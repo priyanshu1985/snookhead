@@ -154,10 +154,8 @@ export default function TableBookingScreen({ route, navigation }) {
     }
   };
 
-  // Fetch menu items on mount
+  // Pre-fill if this is a queue booking on mount
   useEffect(() => {
-    fetchMenuItems();
-    // Pre-fill if this is a queue booking
     if (safeTable.bookingType === 'queue' && safeTable.queueBooking) {
       const q = safeTable.queueBooking;
       console.log('Pre-filling from queue:', q);
@@ -177,7 +175,7 @@ export default function TableBookingScreen({ route, navigation }) {
         if (q.duration_minutes) setTimerDuration(String(q.duration_minutes));
       }
     }
-  }, [selectedMainCategory]); // dependency array to re-parse subcategories on main category change
+  }, []); // Run on mount only
 
   // Calculate cost on change
   useEffect(() => {
@@ -202,33 +200,7 @@ export default function TableBookingScreen({ route, navigation }) {
     }
   }, [selectedDate, selectedTime, timerDuration]);
 
-  // Fetch menu items from backend
-  const fetchMenuItems = async () => {
-    try {
-      setLoading(true);
-      const token = await AsyncStorage.getItem('authToken');
 
-      const response = await fetch(`${API_URL}/api/menu`, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        const items = Array.isArray(result) ? result : result.data || [];
-        setMenuItems(items);
-        parseCategories(items);
-      } else {
-        console.error('Failed to fetch menu items:', response.status);
-      }
-    } catch (error) {
-      console.error('Error fetching menu items:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Check availability for selected date/time/table
   const checkAvailability = async () => {
@@ -709,6 +681,14 @@ export default function TableBookingScreen({ route, navigation }) {
       frameCount = parseInt(selectedFrame) || 1;
     }
 
+    // Format bill items for backend
+    const cart = billItems.map(item => ({
+      menu_item_id: item.id,
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+    }));
+
     // Prepare booking data
     const bookingData = {
       table_id: safeTable.id,
@@ -718,6 +698,7 @@ export default function TableBookingScreen({ route, navigation }) {
       booking_type: bookingType,
       frame_count: frameCount,
       customer_name: customerDetails.name || 'Walk-in Customer',
+      cart: cart,
     };
 
     console.log('Booking table with data:', bookingData);
@@ -738,8 +719,18 @@ export default function TableBookingScreen({ route, navigation }) {
       throw new Error(result.error || 'Booking failed');
     }
 
-    // Show success modal instead of alert
-    setShowSuccessModal(true);
+    // Pass the newly created session and cart to AfterBooking instantly
+    navigation.replace('AfterBooking', {
+      table: safeTable,
+      session: result.session,
+      gameType: safeGameType,
+      timeOption: selectedTimeOption,
+      timeDetails: {
+        selectedTime: selectedTime,
+        selectedFrame: selectedFrame,
+      },
+      preSelectedFoodItems: billItems,
+    });
   };
 
   const processFutureReservation = async () => {
@@ -787,6 +778,7 @@ export default function TableBookingScreen({ route, navigation }) {
         start_time: convertTo24Hour(selectedTime),
         duration_minutes: durationMinutes,
         notes: `Table: ${safeTable.name}, Game: ${safeGameType}`,
+        food_orders: billItems,
       };
 
       console.log('Creating reservation with data:', reservationData);
@@ -840,6 +832,26 @@ export default function TableBookingScreen({ route, navigation }) {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{safeGameType}</Text>
         <View style={{ width: 24 }} />
+      </View>
+
+      {/* Navigation Tabs */}
+      <View style={{ flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' }}>
+        <TouchableOpacity style={{ flex: 1, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: '#FF8C42', alignItems: 'center' }}>
+          <Text style={{ color: '#FF8C42', fontWeight: '600' }}>Table</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={{ flex: 1, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: 'transparent', alignItems: 'center' }}
+          onPress={() => navigation.navigate('TableBookingOrders', {
+            tableId: safeTable.id,
+            tableName: safeTable.name,
+            table: safeTable,
+            gameType: safeGameType,
+            color,
+            existingCart: billItems,
+          })}
+        >
+          <Text style={{ color: '#666', fontWeight: '600' }}>Food</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -1066,192 +1078,39 @@ export default function TableBookingScreen({ route, navigation }) {
           </>
         )}
 
-        {/* Food Section Header */}
-        <View style={styles.foodHeader}>
-          <Text style={styles.sectionTitle}>Add Food Items</Text>
-          {billItems.length > 0 && (
-            <TouchableOpacity onPress={handleAddInstructions}>
-              <Text style={styles.addInstructionLink}>+ Instructions</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Category Tabs */}
-        <View style={styles.categoriesSection}>
-          {/* Main Categories Row */}
-          {mainCategories.length > 0 && (
-            <View style={styles.mainCategoriesGrid}>
-              {mainCategories.map(cat => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[
-                    styles.mainCategoryButton,
-                    selectedMainCategory === cat && styles.mainCategoryButtonActive,
-                  ]}
-                  onPress={() => setSelectedMainCategory(cat)}
-                >
-                  <Text
-                    style={[
-                      styles.mainCategoryButtonText,
-                      selectedMainCategory === cat &&
-                        styles.mainCategoryButtonTextActive,
-                    ]}
-                  >
-                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          {/* Sub Categories Row */}
-          {subCategories.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.subCategoriesScroll}
-              contentContainerStyle={styles.subCategoriesContent}
-            >
-              {subCategories.map(cat => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[
-                    styles.subCategoryButton,
-                    selectedSubCategory === cat && styles.subCategoryButtonActive,
-                  ]}
-                  onPress={() => setSelectedSubCategory(cat)}
-                >
-                  <Text
-                    style={[
-                      styles.subCategoryButtonText,
-                      selectedSubCategory === cat &&
-                        styles.subCategoryButtonTextActive,
-                    ]}
-                  >
-                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-        </View>
-
-        {/* Food Items Section */}
-        <View style={styles.foodItemsContainer}>
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#FF8C42" />
-              <Text style={styles.loadingText}>Loading menu...</Text>
-            </View>
-          ) : getFilteredMenuItems().length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Icon name="restaurant-outline" size={48} color="#ccc" />
-              <Text style={styles.emptyText}>
-                No items in {selectedSubCategory || selectedMainCategory}
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.foodListContainer}>
-              {getFilteredMenuItems().map((item, index) => {
-                const billItem = billItems.find(bi => bi.id === item.id);
-                const imageUrl = getMenuImageUrl(
-                  item.imageUrl || item.imageurl,
-                );
-                return (
-                  <View key={item.id || index} style={styles.foodCard}>
-                    {/* Food Image */}
-                    <View style={styles.foodImageContainer}>
-                      {imageUrl ? (
-                        <Image
-                          source={{ uri: imageUrl }}
-                          style={styles.foodImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.foodImagePlaceholder}>
-                          <Text style={styles.foodEmoji}>
-                            {item.category === 'Beverages'
-                              ? '🥤'
-                              : item.category === 'Fast Food'
-                              ? '🍔'
-                              : '🍽️'}
-                          </Text>
-                        </View>
-                      )}
-                      {/* Veg/Non-veg indicator */}
-                      <View
-                        style={[
-                          styles.vegIndicator,
-                          { borderColor: '#0F8A0F' },
-                        ]}
-                      >
-                        <View
-                          style={[
-                            styles.vegDot,
-                            { backgroundColor: '#0F8A0F' },
-                          ]}
-                        />
-                      </View>
-                    </View>
-
-                    {/* Food Details */}
-                    <View style={styles.foodCardContent}>
-                      <View style={styles.foodCardHeader}>
-                        <Text style={styles.foodCardName} numberOfLines={1}>
-                          {item.name}
-                        </Text>
-                        {item.description && (
-                          <Text
-                            style={styles.foodCardDescription}
-                            numberOfLines={2}
-                          >
-                            {item.description}
-                          </Text>
-                        )}
-                      </View>
-
-                      <View style={styles.foodCardFooter}>
-                        <Text style={styles.foodCardPrice}>
-                          ₹{item.price || 0}
-                        </Text>
-
-                        {/* Add/Quantity Controls */}
-                        {billItem ? (
-                          <View style={styles.quantityControlsCompact}>
-                            <TouchableOpacity
-                              style={styles.quantityBtnCompact}
-                              onPress={() => handleRemoveFromBill(item.id)}
-                            >
-                              <Icon name="remove" size={16} color="#FFFFFF" />
-                            </TouchableOpacity>
-                            <Text style={styles.quantityTextCompact}>
-                              {billItem.quantity}
-                            </Text>
-                            <TouchableOpacity
-                              style={styles.quantityBtnCompact}
-                              onPress={() => handleAddToBill(item)}
-                            >
-                              <Icon name="add" size={16} color="#FFFFFF" />
-                            </TouchableOpacity>
-                          </View>
-                        ) : (
-                          <TouchableOpacity
-                            style={styles.addBtnCompact}
-                            onPress={() => handleAddToBill(item)}
-                          >
-                            <Text style={styles.addBtnText}>ADD</Text>
-                            <View style={styles.addBtnPlus}>
-                              <Icon name="add" size={12} color="#FF8C42" />
-                            </View>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  </View>
-                );
+        {/* Food Section Header with Add Button */}
+        <View style={[styles.foodHeader, { marginBottom: 16 }]}>
+          <Text style={styles.sectionTitle}>Food Orders</Text>
+          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('TableBookingOrders', {
+                tableId: safeTable.id,
+                tableName: safeTable.name,
+                table: safeTable,
+                gameType: safeGameType,
+                color,
+                existingCart: billItems,
               })}
-            </View>
-          )}
+              style={{
+                backgroundColor: '#FF8C42',
+                borderRadius: 8,
+                paddingVertical: 8,
+                paddingHorizontal: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <Icon name="fast-food-outline" size={18} color="#FFFFFF" />
+              <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>Add Items</Text>
+            </TouchableOpacity>
+
+            {billItems.length > 0 && (
+              <TouchableOpacity onPress={handleAddInstructions}>
+                <Text style={styles.addInstructionLink}>+ Instructions</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Bill Summary */}

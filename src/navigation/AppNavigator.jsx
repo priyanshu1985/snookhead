@@ -65,9 +65,9 @@ function BottomTabs() {
         tabBarActiveTintColor: '#FF8C42', // Orange color for active tab
         tabBarInactiveTintColor: '#888', // Gray for inactive tabs
         tabBarStyle: {
-          height: 65,
-          paddingBottom: 8,
-          paddingTop: 8,
+          height: 75,
+          paddingBottom: 12,
+          paddingTop: 12,
           backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
           borderTopColor: '#E8E8E8',
@@ -78,9 +78,9 @@ function BottomTabs() {
           shadowRadius: 3,
         },
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: '500',
-          marginTop: 2,
+          marginTop: 4,
         },
         tabBarIconStyle: {
           marginBottom: 0,
@@ -99,7 +99,7 @@ function BottomTabs() {
           tabBarIcon: ({ color, focused }) => (
             <Icon
               name={focused ? 'home' : 'home-outline'}
-              size={24}
+              size={28}
               color={color}
             />
           ),
@@ -113,7 +113,7 @@ function BottomTabs() {
           tabBarIcon: ({ color, focused }) => (
             <Icon
               name={focused ? 'people' : 'people-outline'}
-              size={24}
+              size={28}
               color={color}
             />
           ),
@@ -127,7 +127,7 @@ function BottomTabs() {
           tabBarIcon: ({ color, focused }) => (
             <Icon
               name={focused ? 'scan' : 'scan-outline'}
-              size={24}
+              size={28}
               color={color}
             />
           ),
@@ -142,7 +142,7 @@ function BottomTabs() {
           tabBarIcon: ({ color, focused }) => (
             <Icon
               name={focused ? 'receipt' : 'receipt-outline'}
-              size={24}
+              size={28}
               color={color}
             />
           ),
@@ -156,7 +156,7 @@ function BottomTabs() {
           tabBarIcon: ({ color, focused }) => (
             <Icon
               name={focused ? 'document-text' : 'document-text-outline'}
-              size={24}
+              size={28}
               color={color}
             />
           ),

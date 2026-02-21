@@ -57,8 +57,13 @@ export default function AfterBooking({ route, navigation }) {
   const isCountdownMode =
     timeOption === 'Set Time' || (!isStopwatchMode && !isFrameMode);
   const [menuItems, setMenuItems] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState('Food');
+  
+  // Two-Tier Category States
+  const [mainCategories, setMainCategories] = useState([]);
+  const [selectedMainCategory, setSelectedMainCategory] = useState('');
+  const [subCategories, setSubCategories] = useState([]);
+  const [selectedSubCategory, setSelectedSubCategory] = useState('');
+  
   const [loading, setLoading] = useState(false);
   const [billItems, setBillItems] = useState([]);
   const [totalBill, setTotalBill] = useState(0);
@@ -437,10 +442,74 @@ export default function AfterBooking({ route, navigation }) {
     }
   }, []);
 
-  // Fetch menu items and existing session orders on component mount
+  // Fetch menu items from backend
+  const fetchMenuItems = async () => {
+    try {
+      setLoading(true);
+      const token = await AsyncStorage.getItem('authToken');
+
+      const response = await fetch(`${API_URL}/api/menu`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const items = Array.isArray(result) ? result : result.data || [];
+        setMenuItems(items);
+        console.log('Fetched menu items:', items.length);
+      } else {
+        console.error('Failed to fetch menu items:', response.status);
+      }
+    } catch (error) {
+      console.error('Error fetching menu items:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Update categories dynamically when menu items or main category change
   useEffect(() => {
-    fetchMenuItems();
-    fetchExistingOrders();
+    if (menuItems.length > 0) {
+      // 1. Extract Main Categories
+      const uniqueMainCats = Array.from(
+        new Set(
+          menuItems.map(m => (m.item_type || 'prepared').toLowerCase()).filter(Boolean),
+        ),
+      );
+      if (uniqueMainCats.length && !uniqueMainCats.includes(selectedMainCategory)) {
+        setMainCategories(uniqueMainCats);
+        setSelectedMainCategory(uniqueMainCats[0]);
+      } else if (uniqueMainCats.length) {
+        setMainCategories(uniqueMainCats);
+      }
+
+      // 2. Extract Sub Categories
+      const activeMainCat = uniqueMainCats.includes(selectedMainCategory) ? selectedMainCategory : (uniqueMainCats[0] || 'prepared');
+      const relevantSubCats = Array.from(
+        new Set(
+          menuItems
+            .filter(m => (m.item_type || 'prepared').toLowerCase() === activeMainCat)
+            .map(m => (m.category || '').toLowerCase())
+            .filter(Boolean),
+        ),
+      );
+      
+      setSubCategories(prevSubCats => {
+        if (relevantSubCats.length > 0 && !relevantSubCats.includes(selectedSubCategory)) {
+           setSelectedSubCategory(relevantSubCats[0]);
+        } else if (relevantSubCats.length === 0) {
+           setSelectedSubCategory('');
+        }
+        return relevantSubCats;
+      });
+    }
+  }, [selectedMainCategory, menuItems]);
+
+  // Fetch queue and existing orders on component mount
+  useEffect(() => {
     fetchMenuItems();
     fetchExistingOrders();
     fetchQueue();
@@ -627,46 +696,6 @@ export default function AfterBooking({ route, navigation }) {
       console.error('Error calculating pricing:', error);
     }
   };
-
-  // Fetch menu items from backend
-  const fetchMenuItems = async () => {
-    try {
-      setLoading(true);
-      const token = await AsyncStorage.getItem('authToken');
-
-      const response = await fetch(`${API_URL}/api/menu`, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        const items = Array.isArray(result) ? result : result.data || [];
-
-        // Extract unique categories
-        const uniqueCategories = [
-          ...new Set(items.map(item => item.category || 'Food')),
-        ];
-        setCategories(
-          uniqueCategories.length > 0
-            ? uniqueCategories
-            : ['Food', 'Fast Food', 'Beverages'],
-        );
-
-        setMenuItems(items);
-        console.log('Fetched menu items:', items);
-      } else {
-        console.error('Failed to fetch menu items:', response.status);
-      }
-    } catch (error) {
-      console.error('Error fetching menu items:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Format countdown time display (MM:SS or HH:MM:SS)
   const formatCountdownTime = totalSeconds => {
     if (totalSeconds <= 0) return '00:00';
@@ -741,11 +770,13 @@ export default function AfterBooking({ route, navigation }) {
     });
   };
 
-  // Get filtered menu items by category
+  // Get filtered menu items according to selected main and subcategories
   const getFilteredMenuItems = () => {
-    return menuItems.filter(
-      item => (item.category || 'Food') === selectedCategory,
-    );
+    return menuItems.filter(item => {
+      const matchMain = (item.item_type || 'prepared').toLowerCase() === (selectedMainCategory || 'prepared').toLowerCase();
+      const matchSub = (item.category || '').toLowerCase() === (selectedSubCategory || '').toLowerCase();
+      return matchMain && matchSub;
+    });
   };
 
   // Helper to get full menu image URL
@@ -1255,30 +1286,57 @@ export default function AfterBooking({ route, navigation }) {
           </View>
         )}
 
-        {/* Categories */}
-        <View style={styles.categoriesContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {categories.map((category, index) => (
+        {/* 1. Main Categories (Prepared vs Packed) */}
+        {mainCategories.length > 0 && (
+          <View style={styles.mainCategoriesContainer}>
+            {mainCategories.map(cat => (
               <TouchableOpacity
-                key={index}
+                key={cat}
                 style={[
-                  styles.categoryButton,
-                  selectedCategory === category && styles.categoryButtonActive,
+                  styles.mainCategoryButton,
+                  selectedMainCategory === cat && styles.mainCategoryButtonActive,
                 ]}
-                onPress={() => setSelectedCategory(category)}
+                onPress={() => setSelectedMainCategory(cat)}
               >
                 <Text
                   style={[
-                    styles.categoryText,
-                    selectedCategory === category && styles.categoryTextActive,
+                    styles.mainCategoryText,
+                    selectedMainCategory === cat && styles.mainCategoryTextActive,
                   ]}
                 >
-                  {category}
+                  {cat.charAt(0).toUpperCase() + cat.slice(1)}
                 </Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
-        </View>
+          </View>
+        )}
+
+        {/* 2. Sub Categories */}
+        {subCategories.length > 0 && (
+          <View style={styles.categoriesContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {subCategories.map(category => (
+                <TouchableOpacity
+                  key={category}
+                  style={[
+                    styles.categoryButton,
+                    selectedSubCategory === category && styles.categoryButtonActive,
+                  ]}
+                  onPress={() => setSelectedSubCategory(category)}
+                >
+                  <Text
+                    style={[
+                      styles.categoryText,
+                      selectedSubCategory === category && styles.categoryTextActive,
+                    ]}
+                  >
+                    {category}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Food Items */}
         <View style={styles.foodItemsContainer}>
@@ -1291,7 +1349,7 @@ export default function AfterBooking({ route, navigation }) {
             <View style={styles.emptyContainer}>
               <Icon name="restaurant-outline" size={48} color="#ccc" />
               <Text style={styles.emptyText}>
-                No items found in {selectedCategory}
+                No items found in {selectedSubCategory || selectedMainCategory}
               </Text>
               <Text style={styles.emptySubText}>
                 Try selecting a different category
@@ -1452,71 +1510,22 @@ export default function AfterBooking({ route, navigation }) {
           </View>
         )}
 
-        {/* Comprehensive Bill Summary */}
-        {(totalDurationSeconds > 0 || billItems.length > 0) && (
-          <View style={styles.billSummaryContainer}>
-            <Text style={styles.billSummaryTitle}>Current Bill Preview</Text>
-
-            {/* Table Charges */}
-            {totalDurationSeconds > 0 && (
-              <View style={styles.billSection}>
-                <Text style={styles.billSectionTitle}>Table Charges</Text>
-                <View style={styles.billItem}>
-                  <Text style={styles.billItemName}>
-                    {gameType || 'Gaming'} - {table?.name} (
-                    {Math.ceil(totalDurationSeconds / 60)} min)
-                  </Text>
-                  <Text style={styles.billItemPrice}>
-                    ₹{tableCharges.toFixed(2)}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {/* Menu Charges */}
-            {billItems.length > 0 && (
-              <View style={styles.billSection}>
-                <Text style={styles.billSectionTitle}>Menu Items</Text>
-                {billItems.map((item, index) => (
-                  <View key={item.id || index} style={styles.billItem}>
-                    <View style={styles.billItemNameContainer}>
-                      <Text style={styles.billItemName}>
-                        {item.name} x{item.quantity}
-                      </Text>
-                      {item.fromPreBooking && (
-                        <Text style={styles.preBookingBadge}>Pre-Booked</Text>
-                      )}
-                      {item.fromExistingOrder && (
-                        <Text style={styles.existingOrderBadge}>
-                          Already Ordered
-                        </Text>
-                      )}
-                    </View>
-                    <Text style={styles.billItemPrice}>
-                      ₹{(item.price * item.quantity).toFixed(2)}
-                    </Text>
-                  </View>
-                ))}
-                <View style={styles.billSubtotal}>
-                  <Text style={styles.billSubtotalText}>
-                    Menu Subtotal: ₹{menuCharges.toFixed(2)}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {/* Total */}
-            <View style={styles.billTotal}>
-              <Text style={styles.billTotalText}>
-                Total Amount: ₹{totalBill.toFixed(2)}
-              </Text>
-            </View>
-          </View>
-        )}
       </ScrollView>
 
       {/* Fixed Bottom Button */}
-      <View style={styles.fixedBottomContainer}>
+      <View style={[styles.fixedBottomContainer, { flexDirection: 'row', gap: 12, paddingHorizontal: 20 }]}>
+        <TouchableOpacity
+          style={[
+            styles.generateBillButton,
+            { flex: 1, backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#FF8C42' }
+          ]}
+          onPress={handleShowBillPreview}
+          disabled={isCalculatingBill}
+        >
+          <Text style={[styles.generateBillButtonText, { color: '#FF8C42' }]}>
+            View Bill
+          </Text>
+        </TouchableOpacity>
         {reservationPayment &&
         reservationPayment.paymentType === 'pay_now' &&
         reservationPayment.advancePayment > 0 ? (
@@ -1545,6 +1554,7 @@ export default function AfterBooking({ route, navigation }) {
           <TouchableOpacity
             style={[
               styles.generateBillButton,
+              { flex: 1 },
               (totalBill < 0 ||
                 isCalculatingBill ||
                 (isStopwatchMode && elapsedSeconds < 60)) &&
@@ -1944,6 +1954,36 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF5EE',
     borderColor: '#FF8C42',
   },
+  
+  // Main Categories
+  mainCategoriesContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    marginBottom: 20,
+    paddingHorizontal: 20,
+  },
+  mainCategoryButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+    backgroundColor: '#F0F0F0',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  mainCategoryButtonActive: {
+    backgroundColor: '#FF8C42',
+    borderColor: '#FF8C42',
+  },
+  mainCategoryText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#666',
+  },
+  mainCategoryTextActive: {
+    color: '#FFFFFF',
+  },
+  
   categoryText: {
     fontSize: 13,
     color: '#696969',

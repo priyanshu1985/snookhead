@@ -10,6 +10,7 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,20 +26,29 @@ async function getAuthToken() {
 }
 
 export default function TableOrder({ route, navigation }) {
-  const { tableId, tableName, table, gameType, color } = route.params || {};
+  const { tableId, tableName, table, gameType, color, existingCart } = route.params || {};
 
   const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // To preserve hook order, we must keep the original hooks in the exact same place
   const [categories, setCategories] = useState([
     'FOOD',
     'PACKFOOD',
     'BEVERAGES',
   ]);
   const [selectedCategory, setSelectedCategory] = useState('FOOD');
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [cartItems, setCartItems] = useState([]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [personName, setPersonName] = useState('');
+
+  // New hooks for two-tier category logic added AFTER the original hooks
+  const [selectedMainCategory, setSelectedMainCategory] = useState('prepared');
+  const [selectedSubCategory, setSelectedSubCategory] = useState('');
+  const [mainCategories, setMainCategories] = useState(['prepared', 'packed']);
+  const [subCategories, setSubCategories] = useState([]);
 
   // Fetch menu items from backend
   const fetchMenuItems = useCallback(async () => {
@@ -58,17 +68,6 @@ export default function TableOrder({ route, navigation }) {
         ? result
         : result.menus || result.items || result.data || [];
       setMenuItems(items);
-
-      // Derive categories from menu data
-      const uniqueCats = Array.from(
-        new Set(
-          items.map(m => (m.category || '').toUpperCase()).filter(Boolean),
-        ),
-      );
-      if (uniqueCats.length) {
-        setCategories(uniqueCats);
-        setSelectedCategory(uniqueCats[0]);
-      }
     } catch (error) {
       console.error('Error fetching menu:', error);
       setMenuItems([]);
@@ -77,9 +76,61 @@ export default function TableOrder({ route, navigation }) {
     }
   }, []);
 
+  // Update categories dynamically when menu items or main category change
+  useEffect(() => {
+    if (menuItems.length > 0) {
+      // 1. Extract Main Categories
+      const uniqueMainCats = Array.from(
+        new Set(
+          menuItems.map(m => (m.item_type || 'prepared').toLowerCase()).filter(Boolean),
+        ),
+      );
+      if (uniqueMainCats.length && !uniqueMainCats.includes(selectedMainCategory)) {
+        setMainCategories(uniqueMainCats);
+        setSelectedMainCategory(uniqueMainCats[0]);
+      } else if (uniqueMainCats.length) {
+        setMainCategories(uniqueMainCats);
+      }
+
+      // 2. Extract Sub Categories
+      const activeMainCat = uniqueMainCats.includes(selectedMainCategory) ? selectedMainCategory : (uniqueMainCats[0] || 'prepared');
+      const relevantSubCats = Array.from(
+        new Set(
+          menuItems
+            .filter(m => (m.item_type || 'prepared').toLowerCase() === activeMainCat)
+            .map(m => (m.category || '').toLowerCase())
+            .filter(Boolean),
+        ),
+      );
+      
+      setSubCategories(prevSubCats => {
+        if (relevantSubCats.length > 0 && !relevantSubCats.includes(selectedSubCategory)) {
+           setSelectedSubCategory(relevantSubCats[0]);
+        } else if (relevantSubCats.length === 0) {
+           setSelectedSubCategory('');
+        }
+        return relevantSubCats;
+      });
+    }
+  }, [selectedMainCategory, menuItems]);
+
   useEffect(() => {
     fetchMenuItems();
-  }, [fetchMenuItems]);
+
+    // Pre-fill cart if existing items were passed back
+    if (existingCart && existingCart.length > 0) {
+      const mapped = existingCart.map(i => ({
+        item: {
+          id: i.id,
+          name: i.name,
+          price: i.price,
+          category: i.category,
+        },
+        qty: i.quantity,
+      }));
+      setCartItems(mapped);
+    }
+  }, [fetchMenuItems, existingCart]);
 
   useFocusEffect(
     useCallback(() => {
@@ -88,11 +139,13 @@ export default function TableOrder({ route, navigation }) {
   );
 
   // Filter items by category and search
-  const filteredItems = menuItems.filter(
-    item =>
-      (item.category || '').toUpperCase() === selectedCategory.toUpperCase() &&
-      (item.name || '').toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  const filteredItems = menuItems.filter(item => {
+    const matchesMainCat = (item.item_type || 'prepared').toLowerCase() === selectedMainCategory.toLowerCase();
+    const matchesSubCat = !selectedSubCategory || (item.category || '').toLowerCase() === selectedSubCategory.toLowerCase();
+    const matchesSearch = (item.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    return matchesMainCat && matchesSubCat && matchesSearch;
+  });
 
   // Handle add food
   const handleAddFood = food => {
@@ -109,6 +162,26 @@ export default function TableOrder({ route, navigation }) {
   };
 
   // Handle remove from cart
+  const handleDecreaseFood = food => {
+    setCartItems(prev => {
+      const arr = Array.isArray(prev) ? prev : [];
+      const idx = arr.findIndex(ci => ci.item.id === food.id);
+      
+      if (idx !== -1) {
+        const clone = [...arr];
+        if (clone[idx].qty > 1) {
+          clone[idx] = { ...clone[idx], qty: clone[idx].qty - 1 };
+          return clone;
+        } else {
+          // Remove if quantity is 1
+          return clone.filter((_, i) => i !== idx);
+        }
+      }
+      return arr;
+    });
+  };
+
+  // Handle completely remove from cart
   const handleRemoveFromCart = id => {
     setCartItems(prev =>
       Array.isArray(prev) ? prev.filter(ci => ci.item.id !== id) : [],
@@ -147,12 +220,25 @@ export default function TableOrder({ route, navigation }) {
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
+      <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation?.goBack()}>
             <Icon name="chevron-back" size={24} color="#333" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Food</Text>
           <View style={{ width: 24 }} />
+        </View>
+
+        {/* Navigation Tabs */}
+        <View style={{ flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' }}>
+          <TouchableOpacity 
+            style={{ flex: 1, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: 'transparent', alignItems: 'center' }}
+            onPress={() => navigation?.goBack()}
+          >
+            <Text style={{ color: '#666', fontWeight: '600' }}>Table</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={{ flex: 1, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: '#FF8C42', alignItems: 'center' }}>
+            <Text style={{ color: '#FF8C42', fontWeight: '600' }}>Food</Text>
+          </TouchableOpacity>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FF8C42" />
@@ -173,6 +259,45 @@ export default function TableOrder({ route, navigation }) {
         <View style={{ width: 24 }} />
       </View>
 
+      {/* Navigation Tabs */}
+      <View style={{ flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' }}>
+        <TouchableOpacity 
+          style={{ flex: 1, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: 'transparent', alignItems: 'center' }}
+          onPress={() => navigation?.goBack()}
+        >
+          <Text style={{ color: '#666', fontWeight: '600' }}>Table</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={{ flex: 1, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: '#FF8C42', alignItems: 'center' }}>
+          <Text style={{ color: '#FF8C42', fontWeight: '600' }}>Food</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Main Categories Row */}
+      {mainCategories.length > 0 && (
+        <View style={styles.mainCategoriesGrid}>
+          {mainCategories.map(cat => (
+            <TouchableOpacity
+              key={cat}
+              style={[
+                styles.mainCategoryButton,
+                selectedMainCategory === cat && styles.mainCategoryButtonActive,
+              ]}
+              onPress={() => setSelectedMainCategory(cat)}
+            >
+              <Text
+                style={[
+                  styles.mainCategoryButtonText,
+                  selectedMainCategory === cat &&
+                    styles.mainCategoryButtonTextActive,
+                ]}
+              >
+                {cat.charAt(0).toUpperCase() + cat.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       {/* Search Bar */}
       <View style={styles.searchRow}>
         <View style={styles.searchContainer}>
@@ -190,28 +315,35 @@ export default function TableOrder({ route, navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Category Tabs */}
-      <View style={styles.categoryTabs}>
-        {categories.map(cat => (
-          <TouchableOpacity
-            key={cat}
-            style={[
-              styles.categoryTab,
-              selectedCategory === cat && styles.categoryTabActive,
-            ]}
-            onPress={() => setSelectedCategory(cat)}
-          >
-            <Text
+      {/* Sub Category Tabs */}
+      {subCategories.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.subCategoriesScroll}
+          contentContainerStyle={styles.subCategoriesContent}
+        >
+          {subCategories.map(cat => (
+            <TouchableOpacity
+              key={cat}
               style={[
-                styles.categoryTabText,
-                selectedCategory === cat && styles.categoryTabTextActive,
+                styles.subCategoryButton,
+                selectedSubCategory === cat && styles.subCategoryButtonActive,
               ]}
+              onPress={() => setSelectedSubCategory(cat)}
             >
-              {cat}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+              <Text
+                style={[
+                  styles.subCategoryButtonText,
+                  selectedSubCategory === cat && styles.subCategoryButtonTextActive,
+                ]}
+              >
+                {cat.charAt(0).toUpperCase() + cat.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
       {/* Menu Grid */}
       <FlatList
@@ -239,12 +371,38 @@ export default function TableOrder({ route, navigation }) {
             </View>
             <Text style={styles.foodName}>{item.name}</Text>
             <Text style={styles.foodPrice}>₹{item.price}</Text>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => handleAddFood(item)}
-            >
-              <Icon name="add" size={18} color="#FF8C42" />
-            </TouchableOpacity>
+
+            {(() => {
+              const cartItem = cartItems.find(ci => ci.item.id === item.id);
+              if (cartItem) {
+                return (
+                  <View style={styles.quantityControls}>
+                    <TouchableOpacity
+                      style={styles.qtyButton}
+                      onPress={() => handleDecreaseFood(item)}
+                    >
+                      <Icon name="remove" size={16} color="#FF8C42" />
+                    </TouchableOpacity>
+                    <Text style={styles.qtyText}>{cartItem.qty}</Text>
+                    <TouchableOpacity
+                      style={styles.qtyButton}
+                      onPress={() => handleAddFood(item)}
+                    >
+                      <Icon name="add" size={16} color="#FF8C42" />
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
+              return (
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={() => handleAddFood(item)}
+                >
+                  <Icon name="add" size={18} color="#FF8C42" />
+                </TouchableOpacity>
+              );
+            })()}
+
           </TouchableOpacity>
         )}
         ListEmptyComponent={
@@ -301,16 +459,6 @@ export default function TableOrder({ route, navigation }) {
               <Text style={styles.totalLabel}>Total</Text>
               <Text style={styles.totalAmount}>₹ {cartTotal}</Text>
             </View>
-
-            {/* Person Name Input */}
-            <Text style={styles.inputLabel}>Person Name</Text>
-            <TextInput
-              style={styles.personNameInput}
-              placeholder="Enter person name"
-              placeholderTextColor="#999"
-              value={personName}
-              onChangeText={setPersonName}
-            />
 
             {/* Modal Buttons */}
             <View style={styles.modalButtonsContainer}>
@@ -394,32 +542,70 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  categoryTabs: {
+  mainCategoriesGrid: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
+    gap: 12,
+    justifyContent: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    gap: 10,
+    backgroundColor: '#FFFFFF',
   },
-  categoryTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  mainCategoryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 10,
     borderRadius: 20,
-    backgroundColor: '#F5F5F5',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#E8E8E8',
+    backgroundColor: '#FFFFFF',
+    minWidth: 100,
+    alignItems: 'center',
   },
-  categoryTabActive: {
+  mainCategoryButtonActive: {
     backgroundColor: '#FF8C42',
     borderColor: '#FF8C42',
   },
-  categoryTabText: {
-    fontSize: 12,
+  mainCategoryButtonText: {
+    fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: '#666666',
   },
-  categoryTabTextActive: {
-    color: '#fff',
+  mainCategoryButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  subCategoriesScroll: {
+    flexGrow: 0,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingVertical: 10,
+  },
+  subCategoriesContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  subCategoryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+  },
+  subCategoryButtonActive: {
+    backgroundColor: '#FFF1E8',
+    borderWidth: 1,
+    borderColor: '#FF8C42',
+    paddingHorizontal: 15,
+    paddingVertical: 7,
+  },
+  subCategoryButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#666666',
+  },
+  subCategoryButtonTextActive: {
+    color: '#FF8C42',
+    fontWeight: '600',
   },
 
   gridContent: {
@@ -479,6 +665,29 @@ const styles = StyleSheet.create({
     borderColor: '#FF8C42',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+  },
+  qtyButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FFF8F0',
+    borderWidth: 1,
+    borderColor: '#FF8C42',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  qtyText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+    minWidth: 16,
+    textAlign: 'center',
   },
 
   confirmButton: {

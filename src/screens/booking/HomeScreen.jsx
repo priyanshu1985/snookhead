@@ -17,6 +17,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import Header from '../../components/common/Header';
 import HeaderTabs from '../../components/common/HeaderTabs';
 import TableCard from '../../components/tablebooking/TableCard';
+import BillPreviewModal from '../../components/tablebooking/BillPreviewModal';
 import { API_URL } from '../../config';
 import eventEmitter from '../../utils/eventEmitter';
 import {
@@ -65,6 +66,10 @@ export default function HomeScreen({ navigation }) {
   const [showStartSessionModal, setShowStartSessionModal] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState(null);
   const [startingSession, setStartingSession] = useState(false);
+
+  // Preview Bill Modal States
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewTable, setPreviewTable] = useState(null);
 
   // Add event listener for table updates with ref trigger
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -849,6 +854,14 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  const handleTableLongPress = (table) => {
+    // Only show preview if the table is currently occupied (i.e. has a running session)
+    if (table.status === 'occupied' && table.sessionId) {
+      setPreviewTable(table);
+      setShowPreviewModal(true);
+    }
+  };
+
   const renderGame = ({ item }) => {
     // Determine number of columns based on screen width
     // On average, we want 2 columns for phones
@@ -864,6 +877,7 @@ export default function HomeScreen({ navigation }) {
               color={item.color}
               gameImageUrl={item.imageUrl}
               onPress={(table, action) => handleTablePress(table, action, item.name, item.color, item.id)}
+              onLongPress={handleTableLongPress}
               imageKey={item.imageKey}
             />
           ))}
@@ -1173,6 +1187,16 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Bill Preview Modal on Long Press */}
+      <BillPreviewModal 
+        visible={showPreviewModal}
+        table={previewTable}
+        onClose={() => {
+          setShowPreviewModal(false);
+          setPreviewTable(null);
+        }}
+      />
     </View>
   );
 }

@@ -12,7 +12,7 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Audio } from 'expo-av';
 
-export default function TableCard({ table, color, gameImageUrl, onPress }) {
+export default function TableCard({ table, color, gameImageUrl, onPress, onLongPress }) {
   const [isPortrait, setIsPortrait] = React.useState(false);
   const [currentTime, setCurrentTime] = React.useState(Date.now());
   if (!table) return null;
@@ -275,6 +275,11 @@ export default function TableCard({ table, color, gameImageUrl, onPress }) {
       style={[styles.card, isOccupied && styles.cardOccupied]}
       activeOpacity={0.85}
       onPress={handlePress}
+      onLongPress={() => {
+        if (onLongPress) {
+          onLongPress(table);
+        }
+      }}
     >
       {/* Safety Check: If table data is corrupt, show error */}
       {!table || !table.name ? (
