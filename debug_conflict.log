@@ -188,3 +188,51 @@
   "checkingAgainst": []
 }
 
+{
+  "body": {
+    "table_id": "41",
+    "game_id": 24,
+    "duration_minutes": 30,
+    "customer_name": "79tti",
+    "user_id": "1ee33ea2-253e-4f5e-8669-feaf05b2679b",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "41",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "41",
+    "game_id": 24,
+    "duration_minutes": 1,
+    "customer_name": "RUTVIK PAWA",
+    "user_id": "52fe3419-11bf-4d16-a95e-8fff7649743a",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "41",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "44",
+    "game_id": 23,
+    "duration_minutes": 1,
+    "customer_name": "RUTVIK PAWA",
+    "user_id": "52fe3419-11bf-4d16-a95e-8fff7649743a",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "44",
+  "checkingAgainst": []
+}
+
