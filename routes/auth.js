@@ -416,6 +416,47 @@ router.get("/me", auth, async (req, res) => {
   }
 });
 
+// @route   PUT /api/auth/profile
+// @desc    Update current user and station info
+// @access  Private
+router.put("/profile", auth, async (req, res) => {
+  try {
+    const { name, phone, stationname, locationcity, locationstate, stationphotourl } = req.body;
+
+    // 1. Update User info
+    const userUpdate = {};
+    if (name !== undefined) userUpdate.name = name;
+    if (phone !== undefined) userUpdate.phone = phone;
+
+    if (Object.keys(userUpdate).length > 0) {
+      await User.update(userUpdate, { where: { id: req.user.id } });
+    }
+
+    // 2. Update Station info if the user has a station
+    const user = await User.findByPk(req.user.id);
+    if (user && user.stationid) {
+      const stationUpdate = {};
+
+      // Keep ownername in sync with User name if updated
+      if (name !== undefined) stationUpdate.ownername = name;
+      if (phone !== undefined) stationUpdate.ownerphone = phone;
+      if (stationname !== undefined) stationUpdate.stationname = stationname;
+      if (locationcity !== undefined) stationUpdate.locationcity = locationcity;
+      if (locationstate !== undefined) stationUpdate.locationstate = locationstate;
+      if (stationphotourl !== undefined) stationUpdate.stationphotourl = stationphotourl;
+
+      if (Object.keys(stationUpdate).length > 0) {
+        await Station.update(stationUpdate, { where: { id: user.stationid } });
+      }
+    }
+
+    res.json({ success: true, message: "Profile updated successfully." });
+  } catch (err) {
+    console.error("Update profile error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // @route   POST /api/auth/create-station
 // @desc    Create station for existing user (if they don't have one)
 // @access  Private
