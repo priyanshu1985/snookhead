@@ -9,6 +9,8 @@ import express from "express";
 import cors from "cors";
 
 import { getSupabase, testConnection } from "./config/supabase.js";
+import { securityHeaders } from "./middleware/security.js";
+import { rateLimit } from "./middleware/rateLimiter.js";
 
 // Import all route modules
 import authRoutes from "./routes/auth.js";
@@ -47,7 +49,13 @@ process.on("unhandledRejection", (reason, promise) => {
 });
 
 // Middleware
+app.use(securityHeaders); // Must be before other middlewares
+// We use 500 requests per 15 minutes. 10 requests (the default) is far too strict for an SPA that fires multiple API calls on load.
+app.use(rateLimit(500, 15 * 60 * 1000));
+
+// Permissive CORS: Allow all origins for initial deployment
 app.use(cors());
+
 app.use(express.json());
 // Serve static files from public directory
 app.use("/static", express.static("public"));
