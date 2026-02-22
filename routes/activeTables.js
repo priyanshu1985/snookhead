@@ -779,8 +779,9 @@ router.put(
 
       // Whitelist allowed updates
       const allowedUpdates = {};
-      if (updates.frame_count !== undefined)
+      if (updates.frame_count !== undefined) {
         allowedUpdates.framecount = updates.frame_count; // REVERTED
+      }
       if (updates.booking_end_time !== undefined)
         allowedUpdates.bookingendtime = updates.booking_end_time; // REVERTED
       if (updates.duration_minutes !== undefined)

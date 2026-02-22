@@ -266,3 +266,33 @@
   "checkingAgainst": []
 }
 
+{
+  "body": {
+    "table_id": "44",
+    "game_id": 23,
+    "duration_minutes": 15,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "frame",
+    "frame_count": 1,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "44",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "44",
+    "game_id": 23,
+    "duration_minutes": 15,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "frame",
+    "frame_count": 1,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "44",
+  "checkingAgainst": []
+}
+
