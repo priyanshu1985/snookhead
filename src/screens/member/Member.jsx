@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
+import { MemberContext } from '../../context/MemberContext';
 import {
   View,
   Text,
@@ -27,6 +28,7 @@ const getAuthToken = async () => {
 };
 
 const Members = ({ navigation }) => {
+  const { refreshMembers } = useContext(MemberContext) || {};
   const [members, setMembers] = useState([]);
   const [filteredMembers, setFilteredMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -193,7 +195,10 @@ const Members = ({ navigation }) => {
           address: '',
           external_id: '',
         });
-        fetchMembers(); // Refresh the list
+        fetchMembers(); // Refresh the local list
+        if (refreshMembers) {
+          refreshMembers(); // Refresh the global cache
+        }
       } else {
         // Handle specific error messages
         let errorMessage = result.error || 'Failed to add member';

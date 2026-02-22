@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../config';
+import MemberAutocomplete from '../../components/member/MemberAutocomplete';
 
 // Move OUTSIDE component
 const getNextDates = () => {
@@ -884,17 +885,29 @@ export default function TableBookingScreen({ route, navigation }) {
 
         {/* Customer Name */}
         <Text style={styles.sectionTitle}>Customer Details</Text>
-        <View style={styles.customerInputContainer}>
-          <Icon name="person-outline" size={20} color="#666" style={styles.customerInputIcon} />
-          <TextInput
-            style={styles.customerNameInput}
-            placeholder="Enter Customer Name (Optional)"
-            placeholderTextColor="#999"
+        <View style={{ marginBottom: 24, zIndex: 10 }}>
+          <Text style={styles.inputLabel}>Select or Enter Customer (Optional)</Text>
+          <MemberAutocomplete
             value={customerDetails.name}
-            onChangeText={(text) => setCustomerDetails({...customerDetails, name: text})}
-            returnKeyType="done"
+            onChangeText={(text) => setCustomerDetails({...customerDetails, name: text, phone: customerDetails.phone})}
+            onSelectMember={(member) => {
+              setCustomerDetails({
+                name: member.name,
+                phone: member.phone || '',
+              });
+            }}
+            onCreateNewMember={(text) => {
+              // Just allow them to type it in normally, it will be treated as walk-in or new
+              setCustomerDetails({...customerDetails, name: text});
+            }}
+            placeholder="Search Name or Phone"
           />
         </View>
+
+        {/* Since phone input isn't visible here immediately, if they want to enter a phone manually,
+            we might need a separate phone input. If there's none currently, we might just use the
+            autocomplete for name/phone together. Let's see if there's a phone input for future bookings. */}
+
 
         {/* Time Selection */}
         <Text style={styles.sectionTitle}>Select Time</Text>

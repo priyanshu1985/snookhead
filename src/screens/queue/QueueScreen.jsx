@@ -18,6 +18,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import QueueListView from '../../components/queue/QueueListView';
 import Header from '../../components/common/Header';
 import { API_URL } from '../../config';
+import MemberAutocomplete from '../../components/member/MemberAutocomplete';
 
 // Helper function to get auth token
 async function getAuthToken() {
@@ -512,14 +513,18 @@ export default function QueueScreen({ navigation, route }) {
                 </View>
 
                 {/* Customer Details Section */}
-                <View style={styles.formSection}>
-                  <Text style={styles.inputLabel}>Customer Name *</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="Enter customer name"
-                    placeholderTextColor="#999"
+                <View style={[styles.formSection, { zIndex: 10 }]}>
+                  <Text style={styles.inputLabel}>Select or Enter Customer *</Text>
+                  <MemberAutocomplete
                     value={newCustomerName}
                     onChangeText={setNewCustomerName}
+                    onSelectMember={(member) => {
+                      setNewCustomerName(member.name);
+                      setNewCustomerPhone(member.phone || '');
+                    }}
+                    onCreateNewMember={(text) => setNewCustomerName(text)}
+                    placeholder="Search Name or Phone"
+                    style={{ marginBottom: 12 }}
                   />
 
                   {/* Phone Number */}

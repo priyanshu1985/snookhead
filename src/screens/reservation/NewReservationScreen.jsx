@@ -19,6 +19,7 @@ import {
   getAvailableTables,
   calculateEstimatedCost,
 } from '../../services/reservationService';
+import MemberAutocomplete from '../../components/member/MemberAutocomplete';
 
 const BOOKING_MODES = {
   TIMER: 'timer',
@@ -173,19 +174,29 @@ export default function NewReservationScreen({ navigation, route }) {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Customer Details */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Customer Details</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Customer Name *"
+        <View style={[styles.section, { zIndex: 10 }]}>
+          <Text style={styles.sectionTitle}>Customer Details *</Text>
+          <MemberAutocomplete
             value={customerName}
             onChangeText={setCustomerName}
+            onSelectMember={(member) => {
+              setCustomerName(member.name);
+              setCustomerPhone(member.phone || '');
+            }}
+            onCreateNewMember={(text) => setCustomerName(text)}
+            placeholder="Search Name or Phone"
+            style={{ marginBottom: 12 }}
           />
           <TextInput
             style={styles.input}
             placeholder="Phone Number *"
             value={customerPhone}
-            onChangeText={setCustomerPhone}
+            onChangeText={text => {
+              const digits = text.replace(/\D/g, '');
+              if (digits.length <= 10) {
+                setCustomerPhone(digits);
+              }
+            }}
             keyboardType="phone-pad"
             maxLength={10}
           />

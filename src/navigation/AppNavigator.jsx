@@ -52,6 +52,7 @@ import PaymentConfirmScreen from '../screens/reservation/PaymentConfirmScreen';
 import { AuthProvider } from '../context/AuthContext';
 import AuthChecker from '../components/auth/AuthChecker';
 import GlobalBillManager from '../components/bill/GlobalBillManager';
+import { MemberProvider } from '../context/MemberContext';
 
 const Tab = createBottomTabNavigator(); // Creates bottom tabs
 const Stack = createNativeStackNavigator(); // Creates stack navigation
@@ -170,89 +171,91 @@ function BottomTabs() {
 export default function AppNavigator() {
   return (
     <AuthProvider>
-      <GlobalBillManager />
-      <NavigationContainer>
-        <Stack.Navigator
-          initialRouteName="AuthChecker"
-          screenOptions={{ headerShown: false }}
-        >
-          <Stack.Screen name="AuthChecker" component={AuthChecker} />
-          <Stack.Screen name="LoginScreen" component={LoginScreen} />
-          <Stack.Screen name="SignUpScreen" component={SignUpScreen} />
-          <Stack.Screen
-            name="ForgotPasswordScreen"
-            component={ForgotPasswordScreen}
-          />
-          <Stack.Screen
-            name="ResetPasswordScreen"
-            component={ResetPasswordScreen}
-          />
+      <MemberProvider>
+        <GlobalBillManager />
+        <NavigationContainer>
+          <Stack.Navigator
+            initialRouteName="AuthChecker"
+            screenOptions={{ headerShown: false }}
+          >
+            <Stack.Screen name="AuthChecker" component={AuthChecker} />
+            <Stack.Screen name="LoginScreen" component={LoginScreen} />
+            <Stack.Screen name="SignUpScreen" component={SignUpScreen} />
+            <Stack.Screen
+              name="ForgotPasswordScreen"
+              component={ForgotPasswordScreen}
+            />
+            <Stack.Screen
+              name="ResetPasswordScreen"
+              component={ResetPasswordScreen}
+            />
 
-          <Stack.Screen
-            name="OtpVerificationScreen"
-            component={OtpVerificationScreen}
-          />
-          <Stack.Screen name="MainTabs" component={BottomTabs} />
+            <Stack.Screen
+              name="OtpVerificationScreen"
+              component={OtpVerificationScreen}
+            />
+            <Stack.Screen name="MainTabs" component={BottomTabs} />
 
-          {/* Role-based screens */}
-          <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
-          <Stack.Screen name="StaffMember" component={StaffMember} />
+            {/* Role-based screens */}
+            <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
+            <Stack.Screen name="StaffMember" component={StaffMember} />
 
-          {/* Common screens */}
-          <Stack.Screen
-            name="Menu"
-            component={MenuScreen}
-            options={{
-              presentation: 'transparentModal', // Slide from left
-              animation: 'slide_from_left',
-            }}
-          />
-          <Stack.Screen name="OwnerPanel" component={OwnerPanel} />
-          <Stack.Screen name="OwnerTabs" component={OwnerTabs} />
-          <Stack.Screen
-            name="OwnerPasswordSetup"
-            component={OwnerPasswordSetup}
-          />
-          <Stack.Screen name="SetupMenu" component={SetupMenu} />
-          <Stack.Screen
-            name="InventoryDashboard"
-            component={InventoryDashboard}
-          />
-          <Stack.Screen name="ServerStatus" component={ServerStatusScreen} />
-          <Stack.Screen name="Member" component={Member} />
-          <Stack.Screen name="MemberDetails" component={MemberDetails} />
-          <Stack.Screen name="Notifications" component={Notifications} />
-          <Stack.Screen
-            name="UpgradeSubscription"
-            component={UpgradeSubscription}
-          />
-          <Stack.Screen name="ReportBugs" component={ReportBugs} />
-          <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicy} />
-          <Stack.Screen
-            name="TableBookingScreen"
-            component={TableBookingScreen}
-          />
-          <Stack.Screen
-            name="TableBookingOrders"
-            component={TableBookingOrders}
-          />
-          <Stack.Screen name="AfterBooking" component={AfterBooking} />
-          <Stack.Screen name="PaymentGateway" component={PaymentGateway} />
-          <Stack.Screen name="ScannerScreen" component={ScannerScreen} />
-          <Stack.Screen
-            name="ReservationsListScreen"
-            component={ReservationsListScreen}
-          />
-          <Stack.Screen
-            name="NewReservation"
-            component={NewReservationScreen}
-          />
-          <Stack.Screen
-            name="PaymentConfirm"
-            component={PaymentConfirmScreen}
-          />
-        </Stack.Navigator>
-      </NavigationContainer>
+            {/* Common screens */}
+            <Stack.Screen
+              name="Menu"
+              component={MenuScreen}
+              options={{
+                presentation: 'transparentModal', // Slide from left
+                animation: 'slide_from_left',
+              }}
+            />
+            <Stack.Screen name="OwnerPanel" component={OwnerPanel} />
+            <Stack.Screen name="OwnerTabs" component={OwnerTabs} />
+            <Stack.Screen
+              name="OwnerPasswordSetup"
+              component={OwnerPasswordSetup}
+            />
+            <Stack.Screen name="SetupMenu" component={SetupMenu} />
+            <Stack.Screen
+              name="InventoryDashboard"
+              component={InventoryDashboard}
+            />
+            <Stack.Screen name="ServerStatus" component={ServerStatusScreen} />
+            <Stack.Screen name="Member" component={Member} />
+            <Stack.Screen name="MemberDetails" component={MemberDetails} />
+            <Stack.Screen name="Notifications" component={Notifications} />
+            <Stack.Screen
+              name="UpgradeSubscription"
+              component={UpgradeSubscription}
+            />
+            <Stack.Screen name="ReportBugs" component={ReportBugs} />
+            <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicy} />
+            <Stack.Screen
+              name="TableBookingScreen"
+              component={TableBookingScreen}
+            />
+            <Stack.Screen
+              name="TableBookingOrders"
+              component={TableBookingOrders}
+            />
+            <Stack.Screen name="AfterBooking" component={AfterBooking} />
+            <Stack.Screen name="PaymentGateway" component={PaymentGateway} />
+            <Stack.Screen name="ScannerScreen" component={ScannerScreen} />
+            <Stack.Screen
+              name="ReservationsListScreen"
+              component={ReservationsListScreen}
+            />
+            <Stack.Screen
+              name="NewReservation"
+              component={NewReservationScreen}
+            />
+            <Stack.Screen
+              name="PaymentConfirm"
+              component={PaymentConfirmScreen}
+            />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </MemberProvider>
     </AuthProvider>
   );
 }
