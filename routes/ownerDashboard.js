@@ -89,8 +89,8 @@ router.get("/stats", auth, stationContext, async (req, res) => {
     const { count: activeWallets } = await activeWalletsQuery;
 
     // Get previous period for comparison
-    const prevPeriodLength = endDate - startDate;
-    const prevStartDate = new Date(startDate - prevPeriodLength);
+    const prevPeriodLength = endDate.getTime() - startDate.getTime();
+    const prevStartDate = new Date(startDate.getTime() - prevPeriodLength);
 
     let prevActiveWalletsQuery = supabase
       .from("wallets")
@@ -311,9 +311,9 @@ router.get("/revenue", auth, stationContext, async (req, res) => {
     const totalBills = (revenueData || []).length;
 
     // Previous period revenue
-    const prevPeriodLength = endDate - startDate;
-    const prevStartDate = new Date(startDate - prevPeriodLength);
-    const prevEndDate = startDate;
+    const prevPeriodLength = endDate.getTime() - startDate.getTime();
+    const prevStartDate = new Date(startDate.getTime() - prevPeriodLength);
+    const prevEndDate = new Date(startDate);
 
     let prevRevenueQuery = supabase
       .from("bills")
@@ -381,9 +381,9 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     });
 
     // Get previous period for comparison
-    const prevPeriodLength = endDate - startDate;
-    const prevStartDate = new Date(startDate - prevPeriodLength);
-    const prevEndDate = startDate;
+    const prevPeriodLength = endDate.getTime() - startDate.getTime();
+    const prevStartDate = new Date(startDate.getTime() - prevPeriodLength);
+    const prevEndDate = new Date(startDate);
 
     // ===== STATS - filters applied manually via supabase chain helpers =====
     
