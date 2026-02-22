@@ -113,6 +113,18 @@ router.post("/login", async (req, res) => {
     // Return user info (exclude sensitive data)
     const { passwordHash: _, ...userWithoutPassword } = freshUser;
 
+    // Attach stationphotourl to user object for frontend consumption
+    if (freshUser.stationid) {
+      try {
+        const station = await Station.findByPk(freshUser.stationid);
+        if (station && station.stationphotourl) {
+          userWithoutPassword.stationphotourl = station.stationphotourl;
+        }
+      } catch (err) {
+        console.error("Failed to fetch station photo during login", err);
+      }
+    }
+
     res.json({
       accessToken,
       refreshToken,
@@ -285,7 +297,21 @@ router.post("/verify-otp", async (req, res) => {
     await tokenStore.setRefreshToken(freshUserForToken.id, refreshToken);
 
     // Return user info (exclude sensitive data)
-    const { passwordHash: _, ...userWithoutPassword } = freshUserForToken;
+    const { passwordHash: _, ...userWithoutPassword } = freshUserForToken
+      ? freshUserForToken.toJSON()
+      : {};
+
+    // Attach stationphotourl to user object for frontend consumption
+    if (freshUserForToken && freshUserForToken.stationid) {
+      try {
+        const station = await Station.findByPk(freshUserForToken.stationid);
+        if (station && station.stationphotourl) {
+          userWithoutPassword.stationphotourl = station.stationphotourl;
+        }
+      } catch (err) {
+        console.error("Failed to fetch station photo during OTP verify", err);
+      }
+    }
 
     res.json({
       message: "Email verified successfully. Welcome!",
@@ -399,6 +425,11 @@ router.get("/me", auth, async (req, res) => {
     }
 
     const { password, ...userWithoutPassword } = user;
+
+    // Attach stationphotourl to user object for frontend consumption
+    if (stationInfo && stationInfo.stationphotourl) {
+      userWithoutPassword.stationphotourl = stationInfo.stationphotourl;
+    }
 
     res.json({
       user: userWithoutPassword,
