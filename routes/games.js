@@ -16,7 +16,7 @@ router.get("/", auth, stationContext, async (req, res) => {
     if (req.needsStationSetup) {
       return res.json([]);
     }
-    
+
     const where = addStationFilter({}, req.stationId);
     const list = await Game.findAll({ where });
     res.json(list);
@@ -39,13 +39,13 @@ router.get("/:id", auth, stationContext, async (req, res) => {
     // Actually the model wrapper passes the filter directly.
     // Let's assume the DB column is probably gamename, gameid etc.
     // game_id in URL param is just a variable name.
-    
+
     // BUT the filter passed to findAll/findOne must match DB columns.
     // The previous code used { game_id: ... }. Supabase ignores extra filters? No.
     // If the column is gameid, we must query gameid.
     const dbFilter = {};
     if (req.params.id) dbFilter.gameid = req.params.id;
-    
+
     const finalWhere = addStationFilter(dbFilter, req.stationId);
     const g = await Game.findOne({ where: finalWhere });
     if (!g) return res.status(404).json({ error: "Game not found" });
@@ -88,6 +88,7 @@ router.post(
         {
           gamename: gameName,
           imagekey: req.body.image_key || null,
+          frame_threshold: req.body.frame_threshold ? parseInt(req.body.frame_threshold) : 30,
           gamecreatedon: new Date(),
           createdby: req.user.email || req.user.name || req.user.id,
         },
@@ -140,6 +141,10 @@ router.put(
         gamemodify: new Date().toISOString(),
         modifiedby: req.user.email || req.user.name || req.user.id,
       };
+
+      if (req.body.frame_threshold !== undefined) {
+        updateData.frame_threshold = parseInt(req.body.frame_threshold);
+      }
 
       // Only update image_key if provided in request
       if (req.body.image_key !== undefined) {

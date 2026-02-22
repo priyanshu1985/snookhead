@@ -269,6 +269,10 @@ router.post(
             frame_count || (queueEntry ? queueEntry.frame_count : null),
           // bookingsource removed due to schema constraint
           created_by: req.user.id, // Track who started the session
+          current_frame_start_time:
+            (booking_type || (queueEntry ? queueEntry.booking_type : "timer")) === "frame"
+              ? startTime
+              : null,
           food_orders:
             food_orders ||
             (queueEntry ? queueEntry.food_orders : []) ||
@@ -783,6 +787,12 @@ router.put(
         allowedUpdates.durationminutes = updates.duration_minutes; // REVERTED
       if (updates.food_orders !== undefined)
         allowedUpdates.food_orders = updates.food_orders; // New persistent cart
+
+      // Custom logic for "Add Next Frame" action
+      if (updates.add_next_frame) {
+        allowedUpdates.framecount = (session.framecount || session.frame_count || 0) + 1;
+        allowedUpdates.current_frame_start_time = new Date();
+      }
 
       if (Object.keys(allowedUpdates).length === 0) {
         return res.status(400).json({ error: "No valid fields to update" });
