@@ -16,6 +16,8 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { API_URL } from '../../config';
+import MenuItemCard from '../menu/MenuItemCard';
+import VariationModal from '../menu/VariationModal';
 
 async function getAuthToken() {
   try {
@@ -43,6 +45,10 @@ export default function TableOrder({ route, navigation }) {
   const [cartItems, setCartItems] = useState([]);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [personName, setPersonName] = useState('');
+
+  // Variation Modal states
+  const [selectedVariationItem, setSelectedVariationItem] = useState(null);
+  const [isVariationModalVisible, setIsVariationModalVisible] = useState(false);
 
   // New hooks for two-tier category logic added AFTER the original hooks
   const [selectedMainCategory, setSelectedMainCategory] = useState('prepared');
@@ -121,12 +127,14 @@ export default function TableOrder({ route, navigation }) {
     if (existingCart && existingCart.length > 0) {
       const mapped = existingCart.map(i => ({
         item: {
-          id: i.id,
-          name: i.name,
-          price: i.price,
-          category: i.category,
+          id: i.item?.id || i.id,
+          name: i.item?.name || i.name,
+          price: i.item?.price || i.price,
+          category: i.item?.category || i.category,
         },
-        qty: i.quantity,
+        qty: i.quantity || i.qty,
+        variation_id: i.variation_id || null,
+        uid: i.variation_id ? `${i.item?.id || i.id}_${i.variation_id}` : `${i.item?.id || i.id}`,
       }));
       setCartItems(mapped);
     }
@@ -147,25 +155,39 @@ export default function TableOrder({ route, navigation }) {
     return matchesMainCat && matchesSubCat && matchesSearch;
   });
 
-  // Handle add food
-  const handleAddFood = food => {
+  // Handle add food (with or without variation)
+  const handleAddFood = (food, variation = null) => {
     setCartItems(prev => {
       const arr = Array.isArray(prev) ? prev : [];
-      const idx = arr.findIndex(ci => ci.item.id === food.id);
+      const uid = variation ? `${food.id}_${variation.id}` : `${food.id}`;
+      
+      const idx = arr.findIndex(ci => ci.uid === uid);
       if (idx !== -1) {
         const clone = [...arr];
         clone[idx] = { ...clone[idx], qty: clone[idx].qty + 1 };
         return clone;
       }
-      return [...arr, { item: food, qty: 1 }];
+      return [
+        ...arr,
+        {
+          item: {
+            ...food,
+            price: variation ? variation.selling_price : food.price, // use variation price
+            name: variation ? `${food.name} - ${variation.variation_name}` : food.name, // Append variation name
+          },
+          qty: 1,
+          variation_id: variation?.id || null,
+          uid,
+        },
+      ];
     });
   };
 
-  // Handle remove from cart
-  const handleDecreaseFood = food => {
+  // Handle remove from cart summary
+  const handleDecreaseFoodByUid = uid => {
     setCartItems(prev => {
       const arr = Array.isArray(prev) ? prev : [];
-      const idx = arr.findIndex(ci => ci.item.id === food.id);
+      const idx = arr.findIndex(ci => ci.uid === uid);
       
       if (idx !== -1) {
         const clone = [...arr];
@@ -181,10 +203,43 @@ export default function TableOrder({ route, navigation }) {
     });
   };
 
+  // Handle generic decrease from menu card
+  const handleDecreaseFood = (foodId) => {
+    setCartItems((prev) => {
+      const arr = Array.isArray(prev) ? prev : [];
+      // Find the most recently added instance of this base item
+      // We will loop backwards to find the last occurrence
+      let lastIndex = -1;
+      for (let i = arr.length - 1; i >= 0; i--) {
+         // handle both old state structures (without uid) and new state structures
+         const match = arr[i].uid 
+             ? arr[i].uid.startsWith(`${foodId}_`) || arr[i].uid === `${foodId}`
+             : arr[i].item.id === foodId;
+         if (match) {
+             lastIndex = i;
+             break;
+         }
+      }
+
+      if (lastIndex !== -1) {
+         const uidToRemove = arr[lastIndex].uid || arr[lastIndex].item.id;
+         // Now reuse the specific uid remover logic
+         const clone = [...arr];
+         if (clone[lastIndex].qty > 1) {
+             clone[lastIndex] = { ...clone[lastIndex], qty: clone[lastIndex].qty - 1 };
+             return clone;
+         } else {
+             return clone.filter((_, i) => i !== lastIndex);
+         }
+      }
+      return arr;
+    });
+  };
+
   // Handle completely remove from cart
-  const handleRemoveFromCart = id => {
+  const handleRemoveFromCart = uid => {
     setCartItems(prev =>
-      Array.isArray(prev) ? prev.filter(ci => ci.item.id !== id) : [],
+      Array.isArray(prev) ? prev.filter(ci => ci.uid !== uid) : [],
     );
   };
 
@@ -351,74 +406,18 @@ export default function TableOrder({ route, navigation }) {
           data={filteredItems}
           keyExtractor={item => String(item.id || item.name)}
           contentContainerStyle={styles.foodListContent}
-          renderItem={({ item }) => {
-            const cartItem = cartItems.find(ci => ci.item.id === item.id);
-            return (
-              <View style={styles.foodCard}>
-                {/* Food Image */}
-                <View style={styles.foodImageContainer}>
-                  {item.image ? (
-                    <Image source={{ uri: item.image }} style={styles.foodImage} />
-                  ) : (
-                    <View style={styles.foodImagePlaceholder}>
-                      <Icon name="fast-food-outline" size={32} color="#FF8C42" />
-                    </View>
-                  )}
-                  {/* Veg/Non-veg indicator */}
-                  <View style={[styles.vegIndicator, { borderColor: '#0F8A0F' }]}>
-                    <View style={[styles.vegDot, { backgroundColor: '#0F8A0F' }]} />
-                  </View>
-                </View>
-
-                {/* Food Details */}
-                <View style={styles.foodCardContent}>
-                  <View style={styles.foodCardHeader}>
-                    <Text style={styles.foodName}>{item.name}</Text>
-                    {item.description && (
-                      <Text style={styles.foodDescription} numberOfLines={2}>
-                        {item.description}
-                      </Text>
-                    )}
-                  </View>
-
-                  <View style={styles.foodCardFooter}>
-                    <Text style={styles.foodPrice}>₹{item.price}</Text>
-
-                    {/* Add/Quantity Controls */}
-                    {cartItem ? (
-                      <View style={styles.quantityControlsCompact}>
-                        <TouchableOpacity
-                          style={styles.quantityBtnCompact}
-                          onPress={() => handleDecreaseFood(item)}
-                        >
-                          <Icon name="remove" size={16} color="#FFFFFF" />
-                        </TouchableOpacity>
-                        <Text style={styles.quantityTextCompact}>
-                          {cartItem.qty}
-                        </Text>
-                        <TouchableOpacity
-                          style={styles.quantityBtnCompact}
-                          onPress={() => handleAddFood(item)}
-                        >
-                          <Icon name="add" size={16} color="#FFFFFF" />
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.addBtnCompact}
-                        onPress={() => handleAddFood(item)}
-                      >
-                        <Text style={styles.addBtnText}>ADD</Text>
-                        <View style={styles.addBtnPlus}>
-                          <Icon name="add" size={12} color="#FF8C42" />
-                        </View>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              </View>
-            );
-          }}
+          renderItem={({ item }) => (
+            <MenuItemCard
+              item={item}
+              cartItems={cartItems}
+              onAddFood={handleAddFood}
+              onRemoveFood={handleDecreaseFood}
+              onOpenVariations={(item) => {
+                setSelectedVariationItem(item);
+                setIsVariationModalVisible(true);
+              }}
+            />
+          )}
           ListEmptyComponent={
             <View style={{ flex: 1, alignItems: 'center', marginTop: 40 }}>
               <Text style={{ color: '#999', fontSize: 16 }}>No items found</Text>
@@ -451,7 +450,7 @@ export default function TableOrder({ route, navigation }) {
             {/* Cart Items */}
             <View style={styles.cartItemsContainer}>
               {cartItems.map(ci => (
-                <View key={ci.item.id} style={styles.cartItem}>
+                <View key={ci.uid} style={styles.cartItem}>
                   <View style={styles.cartItemInfo}>
                     <Text style={styles.cartItemName}>
                       {ci.item.name} x {ci.qty}
@@ -461,7 +460,7 @@ export default function TableOrder({ route, navigation }) {
                     </Text>
                   </View>
                   <TouchableOpacity
-                    onPress={() => handleRemoveFromCart(ci.item.id)}
+                    onPress={() => handleRemoveFromCart(ci.uid)}
                   >
                     <Icon name="trash-outline" size={18} color="#FF4D4F" />
                   </TouchableOpacity>
@@ -495,6 +494,14 @@ export default function TableOrder({ route, navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Variation Selection Modal */}
+      <VariationModal
+        visible={isVariationModalVisible}
+        menuItem={selectedVariationItem}
+        onClose={() => setIsVariationModalVisible(false)}
+        onAddVariation={handleAddFood}
+      />
     </View>
   );
 }

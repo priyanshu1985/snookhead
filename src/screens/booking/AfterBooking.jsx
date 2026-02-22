@@ -20,6 +20,8 @@ import {
   getNextQueueMember,
   assignQueueMemberToTable,
 } from '../../utils/queueAutoAssignment';
+import MenuItemCard from '../../components/menu/MenuItemCard';
+import VariationModal from '../../components/menu/VariationModal';
 
 export default function AfterBooking({ route, navigation }) {
   const {
@@ -72,6 +74,10 @@ export default function AfterBooking({ route, navigation }) {
   const [showBillPreview, setShowBillPreview] = useState(false);
   const [isCalculatingBill, setIsCalculatingBill] = useState(false);
   const [billData, setBillData] = useState(null);
+
+  // Variation Modal states
+  const [selectedVariationItem, setSelectedVariationItem] = useState(null);
+  const [isVariationModalVisible, setIsVariationModalVisible] = useState(false);
 
   // Queue State
   const [nextInQueue, setNextInQueue] = useState(null);
@@ -209,6 +215,7 @@ export default function AfterBooking({ route, navigation }) {
         selected_menu_items: billItems.map(item => ({
           menu_item_id: item.id,
           quantity: item.quantity || 1,
+          variation_id: item.variation_id || null, // newly passed for silent bill
         })),
         session_duration: Math.ceil(totalDurationSeconds / 60),
         booking_time: sessionData?.start_time || sessionData?.starttime,
@@ -440,6 +447,8 @@ export default function AfterBooking({ route, navigation }) {
         quantity: item.quantity || 1,
         category: item.category || 'Food',
         fromPreBooking: true, // Mark as added during booking
+        variation_id: item.variation_id || null,
+        uid: item.uid || (item.variation_id ? `${item.id}_${item.variation_id}` : `${item.id}`),
       }));
       setBillItems(formattedItems);
     }
@@ -605,13 +614,17 @@ export default function AfterBooking({ route, navigation }) {
                 quantity: item.quantity,
                 category: item.category,
                 fromExistingOrder: true, // Mark as already ordered
+                variation_id: item.variation_id || null, // handle past variations if any
+                uid: item.variation_id ? `${item.id}_${item.variation_id}` : `${item.id}`,
               }));
 
-            // Merge quantities for items that exist in both
+            // Merge quantities for items that exist in both (compare uid)
             const mergedItems = prevItems.map(prevItem => {
-              const matchingNew = result.consolidated_items.find(
-                i => i.id === prevItem.id,
-              );
+              const prevUid = prevItem.uid || prevItem.id;
+              const matchingNew = result.consolidated_items.find(i => {
+                  const newUid = i.variation_id ? `${i.id}_${i.variation_id}` : i.id;
+                  return newUid === prevUid;
+              });
               if (matchingNew) {
                 return {
                   ...prevItem,
@@ -742,46 +755,69 @@ export default function AfterBooking({ route, navigation }) {
   };
 
   // Add item to bill
-  const handleAddToBill = menuItem => {
-    const existingItem = billItems.find(item => item.id === menuItem.id);
+  const handleAddToBill = (menuItem, variation = null) => {
+    const uid = variation ? `${menuItem.id}_${variation.id}` : `${menuItem.id}`;
+    
+    // Check if item exists by uid
+    // Also support fallback to mapping existing items without uid
+    const existingItemIndex = billItems.findIndex(
+      item => (item.uid && item.uid === uid) || (!item.uid && item.id === menuItem.id && !variation)
+    );
 
-    if (existingItem) {
+    if (existingItemIndex > -1) {
       // Increase quantity if item already exists
-      setBillItems(prev =>
-        prev.map(item =>
-          item.id === menuItem.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item,
-        ),
-      );
+      setBillItems(prev => {
+        const arr = [...prev];
+        arr[existingItemIndex] = {
+            ...arr[existingItemIndex],
+            quantity: arr[existingItemIndex].quantity + 1,
+        }
+        return arr;
+      });
     } else {
       // Add new item to bill
       setBillItems(prev => [
         ...prev,
         {
           ...menuItem,
+          name: variation ? `${menuItem.name} - ${variation.variation_name}` : menuItem.name,
           quantity: 1,
-          price: menuItem.price || 0,
+          price: variation ? variation.selling_price : menuItem.price || 0,
+          variation_id: variation?.id || null,
+          uid,
         },
       ]);
     }
 
-    Alert.alert('Added to Bill', `${menuItem.name} added to your bill`);
+    Alert.alert('Added to Bill', `${variation ? variation.variation_name : menuItem.name} added to your bill`);
   };
 
   // Remove item from bill
-  const handleRemoveFromBill = itemId => {
+  const handleRemoveFromBill = foodId => {
     setBillItems(prev => {
-      const existingItem = prev.find(item => item.id === itemId);
-      if (existingItem && existingItem.quantity > 1) {
-        // Decrease quantity
-        return prev.map(item =>
-          item.id === itemId ? { ...item, quantity: item.quantity - 1 } : item,
-        );
-      } else {
-        // Remove item completely
-        return prev.filter(item => item.id !== itemId);
+      const arr = Array.isArray(prev) ? prev : [];
+      let lastIndex = -1;
+      
+      for (let i = arr.length - 1; i >= 0; i--) {
+         const match = arr[i].uid 
+             ? arr[i].uid.startsWith(`${foodId}_`) || arr[i].uid === `${foodId}`
+             : arr[i].id === foodId;
+         if (match) {
+             lastIndex = i;
+             break;
+         }
       }
+
+      if (lastIndex !== -1) {
+         const clone = [...arr];
+         if (clone[lastIndex].quantity > 1) {
+             clone[lastIndex] = { ...clone[lastIndex], quantity: clone[lastIndex].quantity - 1 };
+             return clone;
+         } else {
+             return clone.filter((_, i) => i !== lastIndex);
+         }
+      }
+      return arr;
     });
   };
 
@@ -1384,101 +1420,24 @@ export default function AfterBooking({ route, navigation }) {
           ) : (
             <View style={styles.foodListContainer}>
               {getFilteredMenuItems().map((item, index) => {
-                const billItem = billItems.find(bi => bi.id === item.id);
-                const imageUrl = getMenuImageUrl(
-                  item.imageUrl || item.imageurl,
-                );
+                const cartListFormatForCard = billItems.map((bi) => ({
+                    item: { id: bi.id }, // Map back to format MenuItemCard expects to calculate total quantity
+                    qty: bi.quantity,
+                    uid: bi.uid
+                }));
+
                 return (
-                  <View key={item.id || index} style={styles.foodCard}>
-                    {/* Food Image */}
-                    <View style={styles.foodImageContainer}>
-                      {imageUrl ? (
-                        <Image
-                          source={{ uri: imageUrl }}
-                          style={styles.foodImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.foodImagePlaceholder}>
-                          <Text style={styles.foodEmoji}>
-                            {item.category === 'Beverages'
-                              ? '🥤'
-                              : item.category === 'Fast Food'
-                              ? '🍔'
-                              : '🍽️'}
-                          </Text>
-                        </View>
-                      )}
-                      {/* Veg/Non-veg indicator */}
-                      <View
-                        style={[
-                          styles.vegIndicator,
-                          { borderColor: '#0F8A0F' },
-                        ]}
-                      >
-                        <View
-                          style={[
-                            styles.vegDot,
-                            { backgroundColor: '#0F8A0F' },
-                          ]}
-                        />
-                      </View>
-                    </View>
-
-                    {/* Food Details */}
-                    <View style={styles.foodCardContent}>
-                      <View style={styles.foodCardHeader}>
-                        <Text style={styles.foodCardName} numberOfLines={1}>
-                          {item.name}
-                        </Text>
-                        {item.description && (
-                          <Text
-                            style={styles.foodCardDescription}
-                            numberOfLines={2}
-                          >
-                            {item.description}
-                          </Text>
-                        )}
-                      </View>
-
-                      <View style={styles.foodCardFooter}>
-                        <Text style={styles.foodCardPrice}>
-                          ₹{item.price || 0}
-                        </Text>
-
-                        {/* Add/Quantity Controls */}
-                        {billItem ? (
-                          <View style={styles.quantityControlsCompact}>
-                            <TouchableOpacity
-                              style={styles.quantityBtnCompact}
-                              onPress={() => handleRemoveFromBill(item.id)}
-                            >
-                              <Icon name="remove" size={16} color="#FFFFFF" />
-                            </TouchableOpacity>
-                            <Text style={styles.quantityTextCompact}>
-                              {billItem.quantity}
-                            </Text>
-                            <TouchableOpacity
-                              style={styles.quantityBtnCompact}
-                              onPress={() => handleAddToBill(item)}
-                            >
-                              <Icon name="add" size={16} color="#FFFFFF" />
-                            </TouchableOpacity>
-                          </View>
-                        ) : (
-                          <TouchableOpacity
-                            style={styles.addBtnCompact}
-                            onPress={() => handleAddToBill(item)}
-                          >
-                            <Text style={styles.addBtnText}>ADD</Text>
-                            <View style={styles.addBtnPlus}>
-                              <Icon name="add" size={12} color="#FF8C42" />
-                            </View>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  </View>
+                  <MenuItemCard
+                    key={item.id || index}
+                    item={item}
+                    cartItems={cartListFormatForCard}
+                    onAddFood={handleAddToBill}
+                    onRemoveFood={handleRemoveFromBill}
+                    onOpenVariations={(item) => {
+                       setSelectedVariationItem(item);
+                       setIsVariationModalVisible(true);
+                    }}
+                  />
                 );
               })}
             </View>
@@ -1719,6 +1678,13 @@ export default function AfterBooking({ route, navigation }) {
           </View>
         </View>
       )}
+      {/* Variation Selection Modal */}
+      <VariationModal
+        visible={isVariationModalVisible}
+        menuItem={selectedVariationItem}
+        onClose={() => setIsVariationModalVisible(false)}
+        onAddVariation={handleAddToBill}
+      />
     </SafeAreaView>
   );
 }

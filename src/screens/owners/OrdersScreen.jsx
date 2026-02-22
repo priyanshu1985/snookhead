@@ -20,6 +20,8 @@ import {
 import { API_URL } from '../../config';
 import Header from '../../components/common/Header';
 import ActiveOrders from '../../components/orders/ActiveOrders';
+import MenuItemCard from '../../components/menu/MenuItemCard';
+import VariationModal from '../../components/menu/VariationModal';
 
 const DEFAULT_CATEGORIES = ['prepared', 'packed', 'cigarette'];
 
@@ -50,6 +52,10 @@ export default function OrdersScreen({ navigation }) {
   const [cartItems, setCartItems] = useState([]); // [{item, qty}]
   const [personName, setPersonName] = useState(''); // NEW
   const [activeOrdersKey, setActiveOrdersKey] = useState(0); // Force refresh of ActiveOrders
+  
+  // Variation Modal states
+  const [selectedVariationItem, setSelectedVariationItem] = useState(null);
+  const [isVariationModalVisible, setIsVariationModalVisible] = useState(false);
 
   const [menuItems, setMenuItems] = useState([]);
   const [mainCategories, setMainCategories] = useState(['prepared', 'packed']);
@@ -157,33 +163,62 @@ export default function OrdersScreen({ navigation }) {
   });
 
   // ===== HANDLERS =====
-  const handleAddFood = food => {
+  const handleAddFood = (food, variation = null) => {
     setCartItems(prev => {
       const arr = Array.isArray(prev) ? prev : [];
-      const idx = arr.findIndex(ci => ci.item.id === food.id);
+      const uid = variation ? `${food.id}_${variation.id}` : `${food.id}`;
+
+      const idx = arr.findIndex(ci => ci.uid === uid);
       if (idx !== -1) {
         const clone = [...arr];
         clone[idx] = { ...clone[idx], qty: clone[idx].qty + 1 };
         return clone;
       }
-      return [...arr, { item: food, qty: 1 }];
+      return [
+        ...arr,
+        {
+          item: {
+            ...food,
+            price: variation ? variation.selling_price : food.price,
+            name: variation ? `${food.name} - ${variation.variation_name}` : food.name,
+          },
+          qty: 1,
+          variation_id: variation?.id || null,
+          uid,
+        },
+      ];
     });
   };
 
-  const handleRemoveFood = id => {
+  const handleRemoveFood = foodId => {
     setCartItems(prev => {
       const arr = Array.isArray(prev) ? prev : [];
-      const idx = arr.findIndex(ci => ci.item.id === id);
-      if (idx !== -1) {
-        const clone = [...arr];
-        if (clone[idx].qty > 1) {
-          clone[idx] = { ...clone[idx], qty: clone[idx].qty - 1 };
-          return clone;
-        } else {
-          return clone.filter(ci => ci.item.id !== id);
-        }
+      // Find the most recently added instance of this base item
+      // We will loop backwards to find the last occurrence
+      let lastIndex = -1;
+      for (let i = arr.length - 1; i >= 0; i--) {
+         // handle both old state structures (without uid) and new state structures
+         const match = arr[i].uid 
+             ? arr[i].uid.startsWith(`${foodId}_`) || arr[i].uid === `${foodId}`
+             : arr[i].item.id === foodId;
+         if (match) {
+             lastIndex = i;
+             break;
+         }
       }
-      return prev;
+
+      if (lastIndex !== -1) {
+         const uidToRemove = arr[lastIndex].uid || arr[lastIndex].item.id;
+         // Now reuse the specific uid remover logic
+         const clone = [...arr];
+         if (clone[lastIndex].qty > 1) {
+             clone[lastIndex] = { ...clone[lastIndex], qty: clone[lastIndex].qty - 1 };
+             return clone;
+         } else {
+             return clone.filter((_, i) => i !== lastIndex);
+         }
+      }
+      return arr;
     });
   };
 
@@ -215,13 +250,22 @@ export default function OrdersScreen({ navigation }) {
         0,
       );
 
+      // Extract correct backend payload mapping (variation_id map included from cart payload)
+      // Actually `cartItems` now correctly has `variation_id` properly set, so sending it directly is fine
+      // but ensure backend expects the `cart` in the shape of { item: ..., qty: ..., variation_id: ... }
       const orderData = {
         personName: personName.trim(),
         orderTotal,
         paymentMethod: 'offline', // Default payment method (will be updated in PaymentGateway)
         cashAmount: orderTotal, // Set initial amount
         onlineAmount: 0,
-        cart: cartItems,
+        cart: cartItems.map((ci) => ({
+          menu_item_id: ci.item.id,
+          name: ci.item.name,
+          price: ci.item.price,
+          quantity: ci.qty,
+          variation_id: ci.variation_id || null, // newly passed variation_id
+        })),
       };
 
       console.log('Creating order:', orderData);
@@ -269,9 +313,9 @@ export default function OrdersScreen({ navigation }) {
     setShowConfirmModal(false);
   };
 
-  const handleRemoveFromCart = id => {
+  const handleRemoveFromCart = uid => {
     setCartItems(prev =>
-      Array.isArray(prev) ? prev.filter(ci => ci.item.id !== id) : [],
+      Array.isArray(prev) ? prev.filter(ci => ci.uid !== uid) : [],
     );
   };
 
@@ -401,83 +445,18 @@ export default function OrdersScreen({ navigation }) {
                 item.id ? String(item.id) : String(item.name)
               }
               contentContainerStyle={styles.foodListContent}
-              renderItem={({ item }) => {
-                const cartItem = cartItems.find(ci => ci.item.id === item.id);
-                return (
-                  <View style={styles.foodCard}>
-                    {/* Food Image */}
-                    <View style={styles.foodImageContainer}>
-                      {item.imageUrl || item.imageurl ? (
-                        <Image
-                          source={{
-                            uri: getMenuImageUrl(item.imageUrl || item.imageurl),
-                          }}
-                          style={styles.foodImage}
-                          resizeMode="cover"
-                          onError={e =>
-                            console.log('Menu image error:', e.nativeEvent.error)
-                          }
-                        />
-                      ) : (
-                        <View style={styles.foodImagePlaceholder}>
-                          <Icon name="fast-food-outline" size={32} color="#FF8C42" />
-                        </View>
-                      )}
-                      {/* Veg/Non-veg indicator */}
-                      <View style={[styles.vegIndicator, { borderColor: '#0F8A0F' }]}>
-                        <View style={[styles.vegDot, { backgroundColor: '#0F8A0F' }]} />
-                      </View>
-                    </View>
-
-                    {/* Food Details */}
-                    <View style={styles.foodCardContent}>
-                      <View style={styles.foodCardHeader}>
-                        <Text style={styles.foodName}>{item.name}</Text>
-                        {item.description && (
-                          <Text style={styles.foodDescription} numberOfLines={2}>
-                            {item.description}
-                          </Text>
-                        )}
-                      </View>
-
-                      <View style={styles.foodCardFooter}>
-                        <Text style={styles.foodPrice}>₹ {item.price}</Text>
-
-                        {/* Add/Quantity Controls */}
-                        {cartItem ? (
-                          <View style={styles.quantityControlsCompact}>
-                            <TouchableOpacity
-                              style={styles.quantityBtnCompact}
-                              onPress={() => handleRemoveFood(item.id)}
-                            >
-                              <Icon name="remove" size={16} color="#FFFFFF" />
-                            </TouchableOpacity>
-                            <Text style={styles.quantityTextCompact}>
-                              {cartItem.qty}
-                            </Text>
-                            <TouchableOpacity
-                              style={styles.quantityBtnCompact}
-                              onPress={() => handleAddFood(item)}
-                            >
-                              <Icon name="add" size={16} color="#FFFFFF" />
-                            </TouchableOpacity>
-                          </View>
-                        ) : (
-                          <TouchableOpacity
-                            style={styles.addBtnCompact}
-                            onPress={() => handleAddFood(item)}
-                          >
-                            <Text style={styles.addBtnText}>ADD</Text>
-                            <View style={styles.addBtnPlus}>
-                              <Icon name="add" size={12} color="#FF8C42" />
-                            </View>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  </View>
-                );
-              }}
+              renderItem={({ item }) => (
+                <MenuItemCard
+                  item={item}
+                  cartItems={cartItems}
+                  onAddFood={handleAddFood}
+                  onRemoveFood={handleRemoveFood}
+                  onOpenVariations={(item) => {
+                    setSelectedVariationItem(item);
+                    setIsVariationModalVisible(true);
+                  }}
+                />
+              )}
             />
           </View>
         </>
@@ -546,7 +525,7 @@ export default function OrdersScreen({ navigation }) {
               <>
                 {cartItems.map(ci => (
                   <View
-                    key={ci.item.id}
+                    key={ci.uid}
                     style={{
                       flexDirection: 'row',
                       justifyContent: 'space-between',
@@ -564,7 +543,7 @@ export default function OrdersScreen({ navigation }) {
                       ₹ {(Number(ci.item.price) || 0) * ci.qty}
                     </Text>
                     <TouchableOpacity
-                      onPress={() => handleRemoveFromCart(ci.item.id)}
+                      onPress={() => handleRemoveFromCart(ci.uid)}
                     >
                       <Icon name="trash-outline" size={18} color="#FF4D4F" />
                     </TouchableOpacity>
@@ -637,6 +616,13 @@ export default function OrdersScreen({ navigation }) {
           </View>
         </View>
       )}
+      {/* Variation Selection Modal */}
+      <VariationModal
+        visible={isVariationModalVisible}
+        menuItem={selectedVariationItem}
+        onClose={() => setIsVariationModalVisible(false)}
+        onAddVariation={handleAddFood}
+      />
     </View>
   );
 }

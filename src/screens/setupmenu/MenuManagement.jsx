@@ -50,6 +50,7 @@ export default function MenuManagement() {
     price: '',
     supplier: '',
     image_key: '',
+    variations: [],
   });
 
   // Edit/Delete Menu Modal state
@@ -64,6 +65,7 @@ export default function MenuManagement() {
     supplier: '',
     image_key: '',
     isAvailable: true,
+    variations: [],
   });
   const [deleteMenuConfirmModal, setDeleteMenuConfirmModal] = useState(false);
   const [menuToDelete, setMenuToDelete] = useState(null);
@@ -216,6 +218,7 @@ export default function MenuManagement() {
       supplier: item.supplier || '',
       image_key: item.imageUrl || '',
       isAvailable: itemAvailable,
+      variations: Array.isArray(item.variations) ? item.variations : [],
     });
     setEditMenuModal(true);
   };
@@ -328,6 +331,7 @@ export default function MenuManagement() {
       supplier: editMenuForm.supplier,
       image_key: editMenuForm.image_key,
       is_available: editMenuForm.isAvailable,
+      variations: editMenuForm.variations,
     });
     if (success) {
       setEditMenuModal(false);
@@ -341,6 +345,7 @@ export default function MenuManagement() {
         supplier: '',
         image_key: '',
         isAvailable: true,
+        variations: [],
       });
       setMenuSuccess(prev => !prev);
     }
@@ -375,6 +380,102 @@ export default function MenuManagement() {
         return matchesMainCategory && matchesSubcategory;
       })
     : [];
+
+  const renderVariationsUI = (formState, setFormState) => {
+    const addVariation = () => {
+      setFormState({
+        ...formState,
+        variations: [
+          ...(formState.variations || []),
+          {
+            variation_name: '',
+            selling_price: '',
+            cost_price: '',
+            inventory_multiplier: '1',
+          },
+        ],
+      });
+    };
+
+    const updateVariation = (index, field, value) => {
+      const newVariations = [...(formState.variations || [])];
+      newVariations[index][field] = value;
+      setFormState({ ...formState, variations: newVariations });
+    };
+
+    const removeVariation = index => {
+      const newVariations = [...(formState.variations || [])];
+      newVariations.splice(index, 1);
+      setFormState({ ...formState, variations: newVariations });
+    };
+
+    return (
+      <View style={styles.variationsSectionContainer}>
+        <View style={styles.variationsHeaderRow}>
+          <Text style={styles.inputLabelVariation}>Item Variations *</Text>
+          <TouchableOpacity onPress={addVariation} style={styles.addVariationBtnTag}>
+            <Text style={styles.addVariationBtnTagText}>+ Add Variation</Text>
+          </TouchableOpacity>
+        </View>
+
+        {(formState.variations || []).map((variation, index) => (
+          <View key={index} style={styles.variationCard}>
+             <TouchableOpacity
+               onPress={() => removeVariation(index)}
+               style={styles.removeVariationIconBtn}
+             >
+               <Icon name="close" size={18} color="#999" />
+             </TouchableOpacity>
+
+            <View style={styles.variationGridRow}>
+              <View style={styles.variationGridCol}>
+                <Text style={styles.variationInputLabel}>Variation Name (e.g. Regular, Box, Half)</Text>
+                <TextInput
+                  style={styles.variationInputField}
+                  placeholder="Regular"
+                  value={variation.variation_name}
+                  onChangeText={text => updateVariation(index, 'variation_name', text)}
+                />
+              </View>
+              <View style={styles.variationGridCol}>
+                <Text style={styles.variationInputLabel}>Inventory Multiplier (eg. 1 plate = 1, 1 box = 10)</Text>
+                <TextInput
+                  style={styles.variationInputField}
+                  placeholder="1"
+                  keyboardType="numeric"
+                  value={String(variation.inventory_multiplier || '')}
+                  onChangeText={text => updateVariation(index, 'inventory_multiplier', text)}
+                />
+              </View>
+            </View>
+
+            <View style={styles.variationGridRow}>
+              <View style={styles.variationGridCol}>
+                <Text style={styles.variationInputLabel}>Selling Price (\u20B9) *</Text>
+                <TextInput
+                  style={styles.variationInputField}
+                  placeholder="0"
+                  keyboardType="numeric"
+                  value={String(variation.selling_price || '')}
+                  onChangeText={text => updateVariation(index, 'selling_price', text)}
+                />
+              </View>
+              <View style={styles.variationGridCol}>
+                <Text style={styles.variationInputLabel}>Cost Price (\u20B9)</Text>
+                <TextInput
+                  style={styles.variationInputField}
+                  placeholder="0"
+                  keyboardType="numeric"
+                  value={String(variation.cost_price || '')}
+                  onChangeText={text => updateVariation(index, 'cost_price', text)}
+                />
+              </View>
+            </View>
+          </View>
+        ))}
+      </View>
+    );
+  };
 
   if (loading && menus.length === 0) {
     return (
@@ -943,6 +1044,8 @@ export default function MenuManagement() {
                 imageType="menu"
               />
 
+              {renderVariationsUI(menuForm, setMenuForm)}
+
               <View style={styles.modalFooter}>
                 <TouchableOpacity
                   style={styles.cancelButton}
@@ -955,6 +1058,7 @@ export default function MenuManagement() {
                       price: '',
                       supplier: '',
                       image_key: '',
+                      variations: [],
                     });
                   }}
                 >
@@ -986,6 +1090,7 @@ export default function MenuManagement() {
                         price: '',
                         supplier: '',
                         image_key: '',
+                        variations: [],
                       });
                       setMenuSuccess(prev => !prev);
                     } catch (err) {
@@ -1122,6 +1227,8 @@ export default function MenuManagement() {
                 selectedImage={editMenuForm.image_key}
                 imageType="menu"
               />
+
+              {renderVariationsUI(editMenuForm, setEditMenuForm)}
 
               <View style={styles.modalFooter}>
                 <TouchableOpacity
@@ -1829,5 +1936,71 @@ const styles = StyleSheet.create({
   },
   subcategoryPickerOptionTextActive: {
     color: '#FFF',
+  },
+  variationsSectionContainer: {
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  variationsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  inputLabelVariation: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#444',
+  },
+  addVariationBtnTag: {
+    backgroundColor: '#FFF1E6', // Light orange background matching screenshot
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  addVariationBtnTagText: {
+    color: '#E06B26', // Deep orange text matching screenshot
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  variationCard: {
+    backgroundColor: '#FAFAFA',
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    position: 'relative',
+  },
+  removeVariationIconBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    padding: 4,
+    zIndex: 10,
+  },
+  variationGridRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  variationGridCol: {
+    flex: 1,
+  },
+  variationInputLabel: {
+    fontSize: 11,
+    color: '#666',
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  variationInputField: {
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: '#333',
   },
 });
