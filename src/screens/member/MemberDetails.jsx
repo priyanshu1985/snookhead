@@ -37,6 +37,8 @@ export default function MemberDetails({ route, navigation }) {
   const [addingAmount, setAddingAmount] = useState(false);
   const [transactions, setTransactions] = useState([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
+  const [showTransactionDetails, setShowTransactionDetails] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
 
   // Fetch fresh member data from API
   const fetchMemberData = async () => {
@@ -265,34 +267,32 @@ export default function MemberDetails({ route, navigation }) {
         {/* Member Information Card */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Icon name="person-circle-outline" size={40} color="#ff8c1a" />
-            <View style={styles.memberInfo}>
-              <Text style={styles.memberName}>{member.name}</Text>
-              <Text style={styles.memberPhone}>{member.phone}</Text>
-              <Text style={styles.memberEmail}>
+            <Icon name="person-circle-outline" size={36} color="#ff8c1a" />
+            <Text style={styles.memberName} numberOfLines={1}>
+              {member.name}
+            </Text>
+            <View style={styles.contactInfo}>
+              <Text style={styles.memberEmail} numberOfLines={1}>
                 {member.email || 'No email'}
               </Text>
+              <Text style={styles.memberPhone}>{member.phone}</Text>
             </View>
           </View>
-
-          {member.address && (
-            <View style={styles.addressSection}>
-              <Text style={styles.addressLabel}>Address:</Text>
-              <Text style={styles.addressText}>{member.address}</Text>
-            </View>
-          )}
-
-          <Text style={styles.joinDate}>
-            Member since: {formatDate(member.createdAt)}
-          </Text>
         </View>
 
         {/* Wallet Information */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>
-            <Icon name="wallet-outline" size={20} color="#ff8c1a" /> Wallet
-            Information
-          </Text>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.cardTitle}>
+              <Icon name="wallet-outline" size={20} color="#ff8c1a" /> Wallet
+              Information
+            </Text>
+            {wallet && (
+              <Text style={styles.walletIdBadge}>
+                WALLET ID {generateSimpleWalletId(wallet.id)}
+              </Text>
+            )}
+          </View>
 
           {loading ? (
             <View style={styles.loadingContainer}>
@@ -326,30 +326,6 @@ export default function MemberDetails({ route, navigation }) {
                   <Icon name="add-circle" size={18} color="#fff" />
                   <Text style={styles.addAmountButtonText}>Add Amount</Text>
                 </TouchableOpacity>
-              </View>
-
-              <View style={styles.walletInfoRow}>
-                <View style={styles.walletInfoItem}>
-                  <Text style={styles.walletInfoLabel}>Wallet ID</Text>
-                  <Text style={styles.walletInfoValue}>
-                    {generateSimpleWalletId(wallet.id)}
-                  </Text>
-                </View>
-                <View style={styles.walletInfoItem}>
-                  <Text style={styles.walletInfoLabel}>Currency</Text>
-                  <Text style={styles.walletInfoValue}>
-                    {wallet.currency || 'INR'}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.walletInfoRow}>
-                <View style={styles.walletInfoItem}>
-                  <Text style={styles.walletInfoLabel}>Created</Text>
-                  <Text style={styles.walletInfoValue}>
-                    {formatDate(wallet.createdAt)}
-                  </Text>
-                </View>
               </View>
 
               {wallet.qr_code &&
@@ -409,58 +385,74 @@ export default function MemberDetails({ route, navigation }) {
                           .toLowerCase()
                           .includes('topup')));
 
+                  const handleTransactionPress = () => {
+                    if (!isCredit) {
+                      setSelectedTransaction(transaction);
+                      setShowTransactionDetails(true);
+                    }
+                  };
+
                   return (
-                    <View
+                    <TouchableOpacity
                       key={transaction.id || index}
                       style={[
                         styles.transactionItem,
                         index === transactions.length - 1 &&
                           styles.transactionItemLast,
                       ]}
+                      onPress={handleTransactionPress}
+                      activeOpacity={isCredit ? 1 : 0.7}
                     >
-                      <View style={styles.transactionLeft}>
-                        <View
-                          style={[
-                            styles.transactionIcon,
-                            isCredit ? styles.creditIcon : styles.debitIcon,
-                          ]}
-                        >
-                          <Icon
-                            name={isCredit ? 'add-circle' : 'remove-circle'}
-                            size={20}
-                            color={isCredit ? '#4CAF50' : '#F44336'}
-                          />
-                        </View>
-                        <View style={styles.transactionDetails}>
-                          <Text style={styles.transactionType}>
+                      <View
+                        style={[
+                          styles.transactionIcon,
+                          isCredit ? styles.creditIcon : styles.debitIcon,
+                        ]}
+                      >
+                        <Icon
+                          name={isCredit ? 'add-circle' : 'remove-circle'}
+                          size={20}
+                          color={isCredit ? '#4CAF50' : '#F44336'}
+                        />
+                      </View>
+
+                      <View style={styles.transactionDetails}>
+                        <View style={styles.transactionHeader}>
+                          <Text
+                            style={styles.transactionType}
+                            numberOfLines={1}
+                          >
                             {isCredit
                               ? 'Money Added in Wallet'
                               : 'Money Deducted'}
                           </Text>
-                          {transaction.description && (
-                            <Text style={styles.transactionDescription}>
-                              {transaction.description}
-                            </Text>
-                          )}
-                          <Text style={styles.transactionDate}>
-                            {formatDate(
-                              transaction.created_at || transaction.createdAt,
-                            )}
+                          <Text
+                            style={[
+                              styles.transactionAmount,
+                              isCredit
+                                ? styles.creditAmount
+                                : styles.debitAmount,
+                            ]}
+                          >
+                            {isCredit ? '+' : '-'}
+                            {formatCurrency(transaction.amount)}
                           </Text>
                         </View>
-                      </View>
-                      <View style={styles.transactionRight}>
-                        <Text
-                          style={[
-                            styles.transactionAmount,
-                            isCredit ? styles.creditAmount : styles.debitAmount,
-                          ]}
-                        >
-                          {isCredit ? '+' : '-'}
-                          {formatCurrency(transaction.amount)}
+                        <Text style={styles.transactionDate}>
+                          {formatDate(
+                            transaction.created_at || transaction.createdAt,
+                          )}
                         </Text>
                       </View>
-                    </View>
+                      {!isCredit && (
+                        <Icon
+                          name="chevron-forward"
+                          size={20}
+                          color="#ccc"
+                          style={{ marginLeft: 4 }}
+                        />
+                      )}
+                    </TouchableOpacity>
                   );
                 })}
               </View>
@@ -562,6 +554,173 @@ export default function MemberDetails({ route, navigation }) {
           </View>
         </View>
       )}
+
+      {/* Transaction Details Modal */}
+      <Modal
+        visible={showTransactionDetails && selectedTransaction !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowTransactionDetails(false);
+          setSelectedTransaction(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              {/* Header */}
+              <View style={styles.modalHeader}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowTransactionDetails(false);
+                    setSelectedTransaction(null);
+                  }}
+                  style={styles.headerBackButton}
+                >
+                  <Icon name="chevron-back" size={24} color="#333" />
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>Bill Details</Text>
+                <View style={styles.statusBadgeCompleted}>
+                  <Icon
+                    name="checkmark-circle"
+                    size={14}
+                    color="#4CAF50"
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text style={styles.statusCompletedText}>Completed</Text>
+                </View>
+              </View>
+
+              <ScrollView
+                style={styles.detailsModalBody}
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Bill Number */}
+                <View style={styles.billNumberContainer}>
+                  <Text style={styles.billNumber}>
+                    {selectedTransaction.bill_id
+                      ? `BILL-${selectedTransaction.bill_id}`
+                      : `TXN-${selectedTransaction.id}`}
+                  </Text>
+                  <Text style={styles.billLabel}>Paid Bill</Text>
+                </View>
+
+                {/* Customer Info Card */}
+                <View style={styles.customerInfoCard}>
+                  <View style={styles.customerRow}>
+                    <Text style={styles.customerName}>
+                      {member.name || 'Customer'}
+                    </Text>
+                    <Text style={styles.dateText}>
+                      {formatDate(
+                        selectedTransaction.created_at ||
+                          selectedTransaction.createdAt,
+                      )}
+                    </Text>
+                  </View>
+
+                  {/* Items List */}
+                  {selectedTransaction.order_items &&
+                  Array.isArray(selectedTransaction.order_items) &&
+                  selectedTransaction.order_items.length > 0 ? (
+                    selectedTransaction.order_items.map((item, index) => (
+                      <View key={index} style={styles.itemRow}>
+                        <View style={styles.itemLeft}>
+                          <View style={styles.itemIcon}>
+                            <Icon
+                              name="cube-outline"
+                              size={24}
+                              color="#4CAF50"
+                            />
+                          </View>
+                          <View>
+                            <Text style={styles.itemName}>
+                              {item.name || 'Item'}
+                            </Text>
+                            <Text style={styles.itemQuantity}>
+                              {item.quantity || 1} unit
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={styles.itemPrice}>
+                          ₹
+                          {((item.price || 0) * (item.quantity || 1)).toFixed(
+                            2,
+                          )}
+                        </Text>
+                      </View>
+                    ))
+                  ) : (
+                    <View style={styles.itemRow}>
+                      <View style={styles.itemLeft}>
+                        <View style={styles.itemIcon}>
+                          <Icon
+                            name="game-controller-outline"
+                            size={24}
+                            color="#4CAF50"
+                          />
+                        </View>
+                        <View>
+                          <Text style={styles.itemName}>
+                            {selectedTransaction.game_name || 'Table Charges'}
+                          </Text>
+                          <Text style={styles.itemQuantity}>
+                            {selectedTransaction.duration
+                              ? `${selectedTransaction.duration} mins`
+                              : '1 unit'}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.itemPrice}>
+                        ₹{selectedTransaction.amount.toFixed(2)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Watermark */}
+                <View style={styles.watermark}>
+                  <Icon name="fish" size={100} color="#F0F0F0" />
+                  <Text style={styles.watermarkText}>SNOKEHEAD</Text>
+                </View>
+
+                {/* Payment Details Card */}
+                <View style={styles.paymentDetailsCard}>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Mobile No. :</Text>
+                    <Text style={styles.detailValue}>
+                      {member.contact || '+91 XXXXXXXXXX'}
+                    </Text>
+                  </View>
+
+                  {selectedTransaction.wallet_amount !== undefined && (
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Wallet Amount :</Text>
+                      <Text style={styles.detailValue}>
+                        ₹{selectedTransaction.wallet_amount.toFixed(2)}
+                      </Text>
+                    </View>
+                  )}
+
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Total Amount :</Text>
+                    <Text style={styles.detailValue}>
+                      ₹{selectedTransaction.amount.toFixed(2)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Status :</Text>
+                    <View style={styles.statusBadgePaid}>
+                      <Text style={styles.statusPaidText}>PAID</Text>
+                    </View>
+                  </View>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -605,7 +764,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
+    padding: 12,
     marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -617,28 +776,28 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-  },
-
-  memberInfo: {
-    flex: 1,
-    marginLeft: 12,
+    justifyContent: 'space-between',
   },
 
   memberName: {
     fontSize: 18,
     fontWeight: '700',
     color: '#333',
-    marginBottom: 4,
+    flex: 1,
+    marginLeft: 10,
   },
 
-  memberPhone: {
-    fontSize: 14,
+  contactInfo: {
+    alignItems: 'flex-end',
+  },
+
+  memberEmail: {
+    fontSize: 13,
     color: '#666',
     marginBottom: 2,
   },
 
-  memberEmail: {
+  memberPhone: {
     fontSize: 14,
     color: '#666',
   },
@@ -674,7 +833,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#333',
+  },
+
+  cardTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 16,
+  },
+
+  walletIdBadge: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#666',
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    textTransform: 'uppercase',
   },
 
   loadingContainer: {
@@ -714,21 +890,21 @@ const styles = StyleSheet.create({
   },
 
   walletDetails: {
-    paddingTop: 8,
+    paddingTop: 4,
   },
 
   balanceContainer: {
     alignItems: 'center',
-    padding: 20,
+    padding: 14,
     backgroundColor: '#f8f9fa',
     borderRadius: 12,
-    marginBottom: 16,
+    marginBottom: 0,
   },
 
   balanceLabel: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 8,
+    marginBottom: 4,
   },
 
   balanceAmount: {
@@ -739,7 +915,7 @@ const styles = StyleSheet.create({
 
   walletInfoRow: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: 0,
   },
 
   walletInfoItem: {
@@ -785,9 +961,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ff8c1a',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderRadius: 8,
-    marginTop: 16,
+    marginTop: 10,
     gap: 6,
   },
 
@@ -800,38 +976,84 @@ const styles = StyleSheet.create({
   // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
+  modalContainer: {
+    width: '92%',
+    maxWidth: 500,
+    maxHeight: '85%',
+  },
+
   modalContent: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    width: '90%',
-    maxWidth: 400,
+    borderRadius: 16,
+    padding: 0,
+    flex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+
+  headerBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  statusBadgeCompleted: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E8',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
+  },
+
+  statusCompletedText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4CAF50',
   },
 
   modalTitle: {
+    flex: 1,
     fontSize: 18,
     fontWeight: '700',
-    color: '#333',
+    color: '#1A1A1A',
+    letterSpacing: 0.3,
+    marginLeft: 12,
   },
 
   closeButton: {
-    padding: 5,
+    padding: 8,
+    backgroundColor: '#fff',
+    borderRadius: 20,
   },
 
   modalBody: {
-    paddingVertical: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
   },
 
   currentBalanceLabel: {
@@ -894,8 +1116,14 @@ const styles = StyleSheet.create({
   modalFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 20,
     gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    backgroundColor: '#f8f9fa',
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
   },
 
   cancelButton: {
@@ -915,16 +1143,22 @@ const styles = StyleSheet.create({
 
   submitButton: {
     flex: 1,
-    padding: 12,
-    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
     backgroundColor: '#ff8c1a',
     alignItems: 'center',
+    shadowColor: '#ff8c1a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
 
   submitButtonText: {
     fontSize: 16,
     color: '#fff',
-    fontWeight: '600',
+    fontWeight: '700',
   },
 
   disabledButton: {
@@ -944,14 +1178,13 @@ const styles = StyleSheet.create({
   },
 
   transactionsList: {
-    marginTop: 12,
+    marginTop: 8,
   },
 
   transactionItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
+    alignItems: 'flex-start',
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
@@ -960,19 +1193,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
 
-  transactionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-
   transactionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 10,
+    marginTop: 2,
   },
 
   creditIcon: {
@@ -987,26 +1215,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  transactionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+
   transactionType: {
     fontSize: 15,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 2,
-  },
-
-  transactionDescription: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 2,
+    flex: 1,
+    marginRight: 8,
   },
 
   transactionDate: {
     fontSize: 12,
     color: '#999',
-  },
-
-  transactionRight: {
-    alignItems: 'flex-end',
   },
 
   transactionAmount: {
@@ -1020,5 +1246,180 @@ const styles = StyleSheet.create({
 
   debitAmount: {
     color: '#F44336',
+  },
+
+  // Transaction Details Modal Styles
+  detailsModalBody: {
+    flex: 1,
+    paddingBottom: 32,
+  },
+
+  billNumberContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+
+  billNumber: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#4CAF50',
+    letterSpacing: 0.5,
+  },
+
+  billLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4CAF50',
+    backgroundColor: '#E8F5E8',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 8,
+    textAlign: 'center',
+    overflow: 'hidden',
+  },
+
+  customerInfoCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+
+  customerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+
+  customerName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    flex: 1,
+  },
+
+  dateText: {
+    fontSize: 14,
+    color: '#666666',
+    fontWeight: '500',
+  },
+
+  itemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8F9FA',
+  },
+
+  itemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+
+  itemIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#E8F5E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+
+  itemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 2,
+  },
+
+  itemQuantity: {
+    fontSize: 12,
+    color: '#888888',
+    fontWeight: '400',
+  },
+
+  itemPrice: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#4CAF50',
+  },
+
+  watermark: {
+    alignItems: 'center',
+    marginVertical: 32,
+  },
+
+  watermarkText: {
+    fontSize: 16,
+    color: '#E0E0E0',
+    fontWeight: '700',
+    letterSpacing: 4,
+    marginTop: 8,
+  },
+
+  paymentDetailsCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+  },
+
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingVertical: 4,
+  },
+
+  detailLabel: {
+    fontSize: 14,
+    color: '#888888',
+    width: 120,
+    fontWeight: '500',
+  },
+
+  detailValue: {
+    fontSize: 14,
+    color: '#1A1A1A',
+    fontWeight: '600',
+    flex: 1,
+  },
+
+  statusBadgePaid: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+  },
+
+  statusPaidText: {
+    fontSize: 12,
+    color: '#4CAF50',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

@@ -39,14 +39,17 @@ export default function QueueScreen({ navigation, route }) {
 
   // Modal state
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
   const [addingToQueue, setAddingToQueue] = useState(false);
+  const [showGameDropdown, setShowGameDropdown] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   // Form state
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
   const [targetGameId, setTargetGameId] = useState(null);
   const [targetTableId, setTargetTableId] = useState(null);
-  const [members, setMembers] = useState('1');
   const [bookingType, setBookingType] = useState('Timer');
   const [duration, setDuration] = useState('60');
   const [frameCount, setFrameCount] = useState('1');
@@ -161,10 +164,21 @@ export default function QueueScreen({ navigation, route }) {
     }, []),
   );
 
-  // Handle add to queue
+  // Handle add/edit queue
   const handleAddToQueue = async () => {
     if (!newCustomerName.trim()) {
       Alert.alert('Error', 'Please enter customer name');
+      return;
+    }
+
+    if (!newCustomerPhone.trim()) {
+      Alert.alert('Error', 'Please enter phone number');
+      return;
+    }
+
+    const phoneDigits = newCustomerPhone.replace(/\D/g, '');
+    if (phoneDigits.length !== 10) {
+      Alert.alert('Error', 'Phone number must be exactly 10 digits');
       return;
     }
 
@@ -210,9 +224,14 @@ export default function QueueScreen({ navigation, route }) {
         return;
       }
 
-      // Add to queue
-      const response = await fetch(`${API_URL}/api/queue`, {
-        method: 'POST',
+      // Add or Update queue
+      const endpoint = isEditMode
+        ? `${API_URL}/api/queue/${editingItem.id}`
+        : `${API_URL}/api/queue`;
+      const method = isEditMode ? 'PUT' : 'POST';
+
+      const response = await fetch(endpoint, {
+        method: method,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
@@ -223,13 +242,11 @@ export default function QueueScreen({ navigation, route }) {
           status: 'waiting',
           gameid: targetGameId || 1,
           preferredtableid: targetTableId,
-          members: parseInt(members) || 1,
           booking_type:
             bookingType === 'Set Time' ? 'set_time' : bookingType.toLowerCase(),
           duration_minutes:
-            bookingType === 'Set Time' ? parseInt(duration) : null,
+            bookingType === 'Set Time' ? parseInt(duration) || 60 : null,
           frame_count: bookingType === 'Frame' ? parseInt(frameCount) : null,
-          set_time: bookingType === 'Set Time' ? setTime : null,
         }),
       });
 
@@ -239,21 +256,57 @@ export default function QueueScreen({ navigation, route }) {
         setShowAddModal(false);
         setNewCustomerName('');
         setNewCustomerPhone('');
-        setMembers('1');
         setDuration('60');
         setFrameCount('1');
         setSetTime('');
+        setIsEditMode(false);
+        setEditingItem(null);
         fetchQueueData();
-        Alert.alert('Success', 'Customer added to queue successfully!');
+        setShowSuccessModal(true);
       } else {
         throw new Error(result.error || 'Failed to add to queue');
       }
     } catch (err) {
       console.error('Error adding to queue:', err);
-      Alert.alert('Error', err.message || 'Failed to add customer to queue');
+      Alert.alert('Error', err.message || `Failed to ${isEditMode ? 'update' : 'add'} customer to queue`);
     } finally {
       setAddingToQueue(false);
     }
+  };
+
+  const openAddModal = () => {
+    setIsEditMode(false);
+    setEditingItem(null);
+    setNewCustomerName('');
+    setNewCustomerPhone('');
+    setTargetGameId(null);
+    setTargetTableId(null);
+    setBookingType('Timer');
+    setDuration('60');
+    setFrameCount('1');
+    setSetTime('');
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (item) => {
+    setIsEditMode(true);
+    setEditingItem(item);
+    setNewCustomerName(item.customer_name || item.name || '');
+    setNewCustomerPhone(item.customer_phone || item.phone || '');
+    setTargetGameId(item.game_id || item.gameid || null);
+    setTargetTableId(item.preferred_table_id || item.preferredtableid || null);
+    
+    // Determine booking type mapping
+    let bType = 'Timer';
+    if (item.booking_type === 'set_time') bType = 'Set Time';
+    else if (item.booking_type === 'frame') bType = 'Frame';
+    setBookingType(bType);
+
+    setDuration(item.duration_minutes ? item.duration_minutes.toString() : '60');
+    setFrameCount(item.frame_count ? item.frame_count.toString() : '1');
+    setSetTime(item.set_time || '');
+    
+    setShowAddModal(true);
   };
 
   // Handle remove from queue
@@ -305,12 +358,13 @@ export default function QueueScreen({ navigation, route }) {
         error={error}
         refreshing={refreshing}
         onRefresh={handleRefresh}
-        onAddPress={() => setShowAddModal(true)}
+        onAddPress={openAddModal}
         onRemovePress={handleRemoveFromQueue}
+        onEditPress={openEditModal}
         navigation={navigation}
       />
 
-      {/* Add to Queue Modal */}
+      {/* Add/Edit Queue Modal */}
       <Modal
         visible={showAddModal}
         transparent
@@ -324,230 +378,277 @@ export default function QueueScreen({ navigation, route }) {
         >
           <TouchableWithoutFeedback onPress={() => {}}>
             <View style={styles.modalContent}>
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>
-                    {targetTableId
-                      ? `Add to Queue (Table ${targetTableId})`
-                      : 'Add to Queue'}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => setShowAddModal(false)}
-                    style={styles.modalCloseButton}
-                  >
-                    <Icon name="close" size={24} color="#333" />
-                  </TouchableOpacity>
-                </View>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{isEditMode ? 'Edit Queue Entry' : 'Add to Queue'}</Text>
+                <TouchableOpacity
+                  onPress={() => setShowAddModal(false)}
+                  style={styles.modalCloseButton}
+                >
+                  <Icon name="close" size={24} color="#333" />
+                </TouchableOpacity>
+              </View>
 
-                {/* Game Selection */}
-                <Text style={styles.inputLabel}>Select Game</Text>
-                <View style={styles.chipRow}>
-                  {games.map(game => (
-                    <TouchableOpacity
-                      key={game.game_id || game.gameid}
-                      style={[
-                        styles.selectionChip,
-                        targetGameId === (game.game_id || game.gameid) &&
-                          styles.selectionChipActive,
-                      ]}
-                      onPress={() => {
-                        setTargetGameId(game.game_id || game.gameid);
-                        setTargetTableId(null);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.selectionChipText,
-                          targetGameId === (game.game_id || game.gameid) &&
-                            styles.selectionChipTextActive,
-                        ]}
-                      >
-                        {game.game_name || game.gamename || game.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {/* Table Selection */}
-                <Text style={styles.inputLabel}>
-                  Preferred Table (Optional)
-                </Text>
-                <View style={styles.chipRow}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 10 }}
+              >
+                {/* Game Selection Section */}
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionLabel}>Select Game *</Text>
                   <TouchableOpacity
-                    style={[
-                      styles.selectionChip,
-                      targetTableId === null && styles.selectionChipActive,
-                    ]}
-                    onPress={() => setTargetTableId(null)}
+                    style={styles.dropdownButton}
+                    onPress={() => setShowGameDropdown(!showGameDropdown)}
                   >
-                    <Text
-                      style={[
-                        styles.selectionChipText,
-                        targetTableId === null &&
-                          styles.selectionChipTextActive,
-                      ]}
-                    >
-                      Any Table
+                    <Text style={styles.dropdownButtonText}>
+                      {targetGameId
+                        ? games.find(
+                            g => (g.game_id || g.gameid) === targetGameId,
+                          )?.game_name ||
+                          games.find(
+                            g => (g.game_id || g.gameid) === targetGameId,
+                          )?.gamename ||
+                          games.find(
+                            g => (g.game_id || g.gameid) === targetGameId,
+                          )?.name ||
+                          'Select a game'
+                        : 'Select a game'}
                     </Text>
+                    <Icon
+                      name={showGameDropdown ? 'chevron-up' : 'chevron-down'}
+                      size={20}
+                      color="#666"
+                    />
                   </TouchableOpacity>
-                  {tables
-                    .filter(
-                      t =>
-                        !targetGameId ||
-                        (t.game_id || t.gameid) === targetGameId,
-                    )
-                    .map(table => (
+                  {showGameDropdown && (
+                    <View style={styles.dropdownList}>
+                      {games.map(game => (
+                        <TouchableOpacity
+                          key={game.game_id || game.gameid}
+                          style={[
+                            styles.dropdownItem,
+                            targetGameId === (game.game_id || game.gameid) &&
+                              styles.dropdownItemActive,
+                          ]}
+                          onPress={() => {
+                            setTargetGameId(game.game_id || game.gameid);
+                            setTargetTableId(null);
+                            setShowGameDropdown(false);
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.dropdownItemText,
+                              targetGameId === (game.game_id || game.gameid) &&
+                                styles.dropdownItemTextActive,
+                            ]}
+                          >
+                            {game.game_name || game.gamename || game.name}
+                          </Text>
+                          {targetGameId === (game.game_id || game.gameid) && (
+                            <Icon name="checkmark" size={20} color="#FF8C42" />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+
+                {/* Table Selection Section */}
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionLabel}>
+                    Preferred Table (Optional)
+                  </Text>
+                  {!targetGameId ? (
+                    <View style={styles.lockedSection}>
+                      <Icon name="lock-closed" size={20} color="#999" />
+                      <Text style={styles.lockedText}>
+                        Please select a game first
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.chipRow}>
                       <TouchableOpacity
-                        key={table.id}
                         style={[
                           styles.selectionChip,
-                          targetTableId === table.id &&
-                            styles.selectionChipActive,
+                          targetTableId === null && styles.selectionChipActive,
                         ]}
-                        onPress={() => setTargetTableId(table.id)}
+                        onPress={() => setTargetTableId(null)}
                       >
                         <Text
                           style={[
                             styles.selectionChipText,
-                            targetTableId === table.id &&
+                            targetTableId === null &&
                               styles.selectionChipTextActive,
                           ]}
                         >
-                          {table.name}
+                          Any Table
                         </Text>
                       </TouchableOpacity>
-                    ))}
+                      {tables
+                        .filter(t => (t.game_id || t.gameid) === targetGameId)
+                        .map(table => (
+                          <TouchableOpacity
+                            key={table.id}
+                            style={[
+                              styles.selectionChip,
+                              targetTableId === table.id &&
+                                styles.selectionChipActive,
+                            ]}
+                            onPress={() => setTargetTableId(table.id)}
+                          >
+                            <Text
+                              style={[
+                                styles.selectionChipText,
+                                targetTableId === table.id &&
+                                  styles.selectionChipTextActive,
+                              ]}
+                            >
+                              {table.name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+                  )}
                 </View>
 
-                {/* Customer Name */}
-                <Text style={styles.inputLabel}>Customer Name *</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter customer name"
-                  placeholderTextColor="#999"
-                  value={newCustomerName}
-                  onChangeText={setNewCustomerName}
-                />
-
-                {/* Phone Number */}
-                <Text style={styles.inputLabel}>Phone Number (Optional)</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter phone number"
-                  placeholderTextColor="#999"
-                  value={newCustomerPhone}
-                  onChangeText={setNewCustomerPhone}
-                  keyboardType="phone-pad"
-                />
-
-                {/* Number of Players */}
-                <Text style={styles.inputLabel}>Number of Players</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="1 player"
-                  placeholderTextColor="#999"
-                  value={members}
-                  onChangeText={setMembers}
-                  keyboardType="numeric"
-                />
-
-                {/* Booking Type */}
-                <Text style={styles.inputLabel}>Booking Type *</Text>
-                <View style={styles.radioRow}>
-                  {['Timer', 'Set Time', 'Frame'].map(type => (
-                    <TouchableOpacity
-                      key={type}
-                      style={styles.radioOption}
-                      onPress={() => setBookingType(type)}
-                    >
-                      <Icon
-                        name={
-                          bookingType === type
-                            ? 'radio-button-on'
-                            : 'radio-button-off'
-                        }
-                        size={20}
-                        color={bookingType === type ? '#FF8C42' : '#999'}
-                      />
-                      <Text style={styles.radioText}>{type}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {/* Duration/Frame Selection */}
-                {bookingType === 'Timer' && (
-                  <View style={styles.durationRow}>
-                    <TouchableOpacity
-                      style={styles.durationButton}
-                      onPress={() =>
-                        setDuration(
-                          Math.max(15, parseInt(duration || 0) - 15).toString(),
-                        )
-                      }
-                    >
-                      <Text style={styles.durationButtonText}>-</Text>
-                    </TouchableOpacity>
-                    <TextInput
-                      style={styles.durationInput}
-                      value={`${duration} min`}
-                      onChangeText={text =>
-                        setDuration(text.replace(/[^0-9]/g, ''))
-                      }
-                      keyboardType="numeric"
-                    />
-                    <TouchableOpacity
-                      style={styles.durationButton}
-                      onPress={() =>
-                        setDuration((parseInt(duration || 0) + 15).toString())
-                      }
-                    >
-                      <Text style={styles.durationButtonText}>+</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {bookingType === 'Frame' && (
-                  <View style={styles.durationRow}>
-                    <TouchableOpacity
-                      style={styles.durationButton}
-                      onPress={() =>
-                        setFrameCount(
-                          Math.max(1, parseInt(frameCount || 0) - 1).toString(),
-                        )
-                      }
-                    >
-                      <Text style={styles.durationButtonText}>-</Text>
-                    </TouchableOpacity>
-                    <TextInput
-                      style={styles.durationInput}
-                      value={`${frameCount} frame(s)`}
-                      onChangeText={text =>
-                        setFrameCount(text.replace(/[^0-9]/g, ''))
-                      }
-                      keyboardType="numeric"
-                    />
-                    <TouchableOpacity
-                      style={styles.durationButton}
-                      onPress={() =>
-                        setFrameCount(
-                          (parseInt(frameCount || 0) + 1).toString(),
-                        )
-                      }
-                    >
-                      <Text style={styles.durationButtonText}>+</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {bookingType === 'Set Time' && (
+                {/* Customer Details Section */}
+                <View style={styles.formSection}>
+                  <Text style={styles.inputLabel}>Customer Name *</Text>
                   <TextInput
                     style={styles.textInput}
-                    placeholder="Enter time (e.g., 14:30)"
+                    placeholder="Enter customer name"
                     placeholderTextColor="#999"
-                    value={setTime}
-                    onChangeText={setSetTime}
+                    value={newCustomerName}
+                    onChangeText={setNewCustomerName}
                   />
-                )}
+
+                  {/* Phone Number */}
+                  <Text style={styles.inputLabel}>Phone Number *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Enter 10-digit phone number"
+                    placeholderTextColor="#999"
+                    value={newCustomerPhone}
+                    onChangeText={text => {
+                      const digits = text.replace(/\D/g, '');
+                      if (digits.length <= 10) {
+                        setNewCustomerPhone(digits);
+                      }
+                    }}
+                    keyboardType="phone-pad"
+                    maxLength={10}
+                  />
+                </View>
+
+                {/* Booking Type Section */}
+                <View style={styles.formSection}>
+                  <Text style={styles.sectionLabel}>Booking Type *</Text>
+                  <View style={styles.radioRow}>
+                    {['Timer', 'Set Time', 'Frame'].map(type => (
+                      <TouchableOpacity
+                        key={type}
+                        style={styles.radioOption}
+                        onPress={() => setBookingType(type)}
+                      >
+                        <Icon
+                          name={
+                            bookingType === type
+                              ? 'radio-button-on'
+                              : 'radio-button-off'
+                          }
+                          size={20}
+                          color={bookingType === type ? '#FF8C42' : '#999'}
+                        />
+                        <Text style={styles.radioText}>{type}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {/* Duration/Frame Selection */}
+                  {bookingType === 'Set Time' && (
+                    <View style={styles.durationRow}>
+                      <TouchableOpacity
+                        style={styles.durationButton}
+                        onPress={() =>
+                          setDuration(
+                            Math.max(
+                              15,
+                              parseInt(duration || 0) - 15,
+                            ).toString(),
+                          )
+                        }
+                      >
+                        <Text style={styles.durationButtonText}>-</Text>
+                      </TouchableOpacity>
+                      <TextInput
+                        style={styles.durationInput}
+                        value={`${duration} min`}
+                        onChangeText={text =>
+                          setDuration(text.replace(/[^0-9]/g, ''))
+                        }
+                        keyboardType="numeric"
+                      />
+                      <TouchableOpacity
+                        style={styles.durationButton}
+                        onPress={() =>
+                          setDuration((parseInt(duration || 0) + 15).toString())
+                        }
+                      >
+                        <Text style={styles.durationButtonText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {bookingType === 'Frame' && (
+                    <View style={styles.durationRow}>
+                      <TouchableOpacity
+                        style={styles.durationButton}
+                        onPress={() =>
+                          setFrameCount(
+                            Math.max(
+                              1,
+                              parseInt(frameCount || 0) - 1,
+                            ).toString(),
+                          )
+                        }
+                      >
+                        <Text style={styles.durationButtonText}>-</Text>
+                      </TouchableOpacity>
+                      <TextInput
+                        style={styles.durationInput}
+                        value={`${frameCount} frame(s)`}
+                        onChangeText={text =>
+                          setFrameCount(text.replace(/[^0-9]/g, ''))
+                        }
+                        keyboardType="numeric"
+                      />
+                      <TouchableOpacity
+                        style={styles.durationButton}
+                        onPress={() =>
+                          setFrameCount(
+                            (parseInt(frameCount || 0) + 1).toString(),
+                          )
+                        }
+                      >
+                        <Text style={styles.durationButtonText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {bookingType === 'Timer' && (
+                    <View style={styles.infoBox}>
+                      <Icon
+                        name="information-circle-outline"
+                        size={18}
+                        color="#FF8C42"
+                      />
+                      <Text style={styles.infoText}>
+                        Timer will start from 0 and count up until bill is
+                        generated
+                      </Text>
+                    </View>
+                  )}
+                </View>
 
                 {/* Submit Button */}
                 <TouchableOpacity
@@ -560,13 +661,40 @@ export default function QueueScreen({ navigation, route }) {
                   activeOpacity={0.85}
                 >
                   <Text style={styles.modalAddButtonText}>
-                    {addingToQueue ? 'Adding...' : 'Add to Queue'}
+                    {addingToQueue ? 'Saving...' : isEditMode ? 'Save Changes' : 'Add to Queue'}
                   </Text>
                 </TouchableOpacity>
               </ScrollView>
             </View>
           </TouchableWithoutFeedback>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <View style={styles.successModalOverlay}>
+          <View style={styles.successModalContent}>
+            <View style={styles.successIconContainer}>
+              <Icon name="checkmark-circle" size={60} color="#4CAF50" />
+            </View>
+            <Text style={styles.successModalTitle}>Success</Text>
+            <Text style={styles.successModalMessage}>
+              Customer {isEditMode ? 'updated in' : 'added to'} queue successfully!
+            </Text>
+            <TouchableOpacity
+              style={styles.successModalButton}
+              onPress={() => setShowSuccessModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.successModalButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -587,14 +715,17 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
-    paddingBottom: 40,
+    paddingBottom: 16,
     maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    marginBottom: 4,
   },
   modalTitle: {
     fontSize: 20,
@@ -610,44 +741,109 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   inputLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#666666',
-    marginBottom: 8,
+    color: '#333333',
+    marginBottom: 6,
     marginTop: 8,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 8,
+  },
+  formSection: {
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
   },
   textInput: {
     backgroundColor: '#F8F9FA',
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
     color: '#1A1A1A',
     borderWidth: 1,
     borderColor: '#E8E8E8',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 8,
+  },
+  dropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+    marginBottom: 8,
+  },
+  dropdownButtonText: {
+    fontSize: 14,
+    color: '#1A1A1A',
+    fontWeight: '500',
+  },
+  dropdownList: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+    marginTop: 4,
+    maxHeight: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+  },
+  dropdownItemActive: {
+    backgroundColor: '#FFF3E0',
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  dropdownItemTextActive: {
+    color: '#FF8C42',
+    fontWeight: '600',
   },
   selectionChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F5F5F5',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1.5,
+    borderColor: '#E8E8E8',
   },
   selectionChipActive: {
     backgroundColor: '#FFF3E0',
     borderColor: '#FF8C42',
+    borderWidth: 2,
   },
   selectionChipText: {
     fontSize: 13,
     color: '#666',
+    fontWeight: '500',
   },
   selectionChipTextActive: {
     color: '#FF8C42',
@@ -655,54 +851,99 @@ const styles = StyleSheet.create({
   },
   radioRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 16,
+    gap: 20,
+    marginBottom: 12,
   },
   radioOption: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   radioText: {
-    marginLeft: 6,
+    marginLeft: 8,
     color: '#333',
+    fontSize: 14,
+    fontWeight: '500',
   },
   durationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 10,
+    gap: 12,
+    marginBottom: 8,
+    marginTop: 8,
   },
   durationButton: {
-    padding: 10,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
+    width: 40,
+    height: 40,
+    backgroundColor: '#FF8C42',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   durationButtonText: {
-    fontSize: 20,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   durationInput: {
     flex: 1,
     backgroundColor: '#F8F9FA',
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
     color: '#1A1A1A',
     borderWidth: 1,
     borderColor: '#E8E8E8',
     textAlign: 'center',
   },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF5E6',
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 6,
+    marginTop: 6,
+    gap: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF8C42',
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 18,
+  },
+  lockedSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8F9FA',
+    padding: 18,
+    borderRadius: 10,
+    marginBottom: 8,
+    gap: 10,
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
+    borderStyle: 'dashed',
+  },
+  lockedText: {
+    fontSize: 14,
+    color: '#999',
+    fontStyle: 'italic',
+  },
   modalAddButton: {
     backgroundColor: '#FF8C42',
-    paddingVertical: 16,
+    paddingVertical: 18,
     borderRadius: 14,
     alignItems: 'center',
-    marginTop: 16,
-    elevation: 3,
+    marginTop: 8,
+    marginBottom: 8,
+    elevation: 4,
     shadowColor: '#FF8C42',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
   },
   modalAddButtonDisabled: {
     backgroundColor: '#CCCCCC',
@@ -713,5 +954,60 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  successModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  successModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 30,
+    width: '85%',
+    maxWidth: 400,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  successIconContainer: {
+    marginBottom: 20,
+  },
+  successModalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  successModalMessage: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 24,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  successModalButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 12,
+    minWidth: 120,
+    alignItems: 'center',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  successModalButtonText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
 });

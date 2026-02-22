@@ -34,6 +34,8 @@ const Members = ({ navigation }) => {
   const [addingMember, setAddingMember] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [selectedTab, setSelectedTab] = useState('all'); // 'all', 'balance', 'credits'
+  const [membersWithWallets, setMembersWithWallets] = useState([]);
 
   // Form data state matching backend customer API requirements
   const [formData, setFormData] = useState({
@@ -58,7 +60,9 @@ const Members = ({ navigation }) => {
       if (response.ok) {
         const customers = await response.json();
         setMembers(customers);
-        setFilteredMembers(customers); // Initialize filtered members
+
+        // Fetch wallet information for all customers
+        await fetchWalletsForMembers(customers, token);
       } else {
         console.error('Failed to fetch customers');
       }
@@ -66,6 +70,53 @@ const Members = ({ navigation }) => {
       console.log('Failed to fetch customers:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fetch wallet information for all members
+  const fetchWalletsForMembers = async (customers, token) => {
+    try {
+      const membersWithWalletData = await Promise.all(
+        customers.map(async customer => {
+          try {
+            const walletResponse = await fetch(
+              `${API_URL}/api/wallets/customer/${customer.id}`,
+              {
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`,
+                },
+              },
+            );
+
+            if (walletResponse.ok) {
+              const wallet = await walletResponse.json();
+              return {
+                ...customer,
+                wallet_balance: parseFloat(wallet.balance || 0),
+              };
+            }
+          } catch (err) {
+            console.log(`Failed to fetch wallet for customer ${customer.id}`);
+          }
+
+          return {
+            ...customer,
+            wallet_balance: 0,
+          };
+        }),
+      );
+
+      setMembersWithWallets(membersWithWalletData);
+      applyFilters(membersWithWalletData, selectedTab, searchQuery);
+    } catch (error) {
+      console.log('Error fetching wallets:', error);
+      setMembersWithWallets(customers.map(c => ({ ...c, wallet_balance: 0 })));
+      applyFilters(
+        customers.map(c => ({ ...c, wallet_balance: 0 })),
+        selectedTab,
+        searchQuery,
+      );
     }
   };
 
@@ -173,17 +224,37 @@ const Members = ({ navigation }) => {
     }
   };
 
+  // Apply filters based on tab and search query
+  const applyFilters = (membersList, tab, search) => {
+    let filtered = membersList;
+
+    // Apply tab filter
+    if (tab === 'balance') {
+      filtered = filtered.filter(m => (m.wallet_balance || 0) > 0);
+    } else if (tab === 'credits') {
+      filtered = filtered.filter(m => (m.wallet_balance || 0) < 0);
+    }
+
+    // Apply search filter
+    if (search.trim() !== '') {
+      filtered = filtered.filter(member =>
+        member.name.toLowerCase().includes(search.toLowerCase()),
+      );
+    }
+
+    setFilteredMembers(filtered);
+  };
+
+  // Handle tab change
+  const handleTabChange = tab => {
+    setSelectedTab(tab);
+    applyFilters(membersWithWallets, tab, searchQuery);
+  };
+
   // Search functionality
   const handleSearch = text => {
     setSearchQuery(text);
-    if (text.trim() === '') {
-      setFilteredMembers(members);
-    } else {
-      const filtered = members.filter(member =>
-        member.name.toLowerCase().includes(text.toLowerCase()),
-      );
-      setFilteredMembers(filtered);
-    }
+    applyFilters(membersWithWallets, selectedTab, text);
   };
 
   // Toggle search input
@@ -191,7 +262,7 @@ const Members = ({ navigation }) => {
     setShowSearch(!showSearch);
     if (showSearch) {
       setSearchQuery('');
-      setFilteredMembers(members);
+      applyFilters(membersWithWallets, selectedTab, '');
     }
   };
 
@@ -201,14 +272,29 @@ const Members = ({ navigation }) => {
       onPress={() => navigation.navigate('MemberDetails', { member: item })}
       activeOpacity={0.7}
     >
-      <View>
-        <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.phone}>{item.phone}</Text>
-        <Text style={styles.meta}>
-          {item.email || 'No email'} •{' '}
-          {new Date(item.createdAt).toLocaleDateString()}
+      <View style={styles.customerInfo}>
+        <Text style={styles.name} numberOfLines={1} ellipsizeMode="tail">
+          {item.name}
         </Text>
+        <Text style={styles.phone}>{item.phone}</Text>
       </View>
+
+      {item.wallet_balance !== undefined && (
+        <View style={styles.walletContainer}>
+          <Text
+            style={[
+              styles.walletBadge,
+              item.wallet_balance > 0
+                ? styles.walletPositive
+                : item.wallet_balance < 0
+                ? styles.walletNegative
+                : styles.walletZero,
+            ]}
+          >
+            ₹{item.wallet_balance.toFixed(2)}
+          </Text>
+        </View>
+      )}
 
       <Icon
         name="chevron-forward"
@@ -248,6 +334,54 @@ const Members = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Tabs */}
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'all' && styles.activeTab]}
+            onPress={() => handleTabChange('all')}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                selectedTab === 'all' && styles.activeTabText,
+              ]}
+            >
+              All
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'balance' && styles.activeTab]}
+            onPress={() => handleTabChange('balance')}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                selectedTab === 'balance' && styles.activeTabText,
+              ]}
+            >
+              Balance
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tab, selectedTab === 'credits' && styles.activeTab]}
+            onPress={() => handleTabChange('credits')}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                selectedTab === 'credits' && styles.activeTabText,
+              ]}
+            >
+              Credits
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Search Input */}
         {showSearch && (
           <View style={styles.searchContainer}>
@@ -269,7 +403,7 @@ const Members = ({ navigation }) => {
               <TouchableOpacity
                 onPress={() => {
                   setSearchQuery('');
-                  setFilteredMembers(members);
+                  applyFilters(membersWithWallets, selectedTab, '');
                 }}
                 style={styles.clearButton}
               >
@@ -301,7 +435,7 @@ const Members = ({ navigation }) => {
                     style={styles.clearSearchButton}
                     onPress={() => {
                       setSearchQuery('');
-                      setFilteredMembers(members);
+                      applyFilters(membersWithWallets, selectedTab, '');
                     }}
                   >
                     <Text style={styles.clearSearchText}>Clear Search</Text>
@@ -511,6 +645,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
+  // Tabs
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+  },
+
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+
+  activeTab: {
+    backgroundColor: '#ff8c1a',
+  },
+
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+
+  activeTabText: {
+    color: '#fff',
+  },
+
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -576,6 +740,48 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+
+  customerInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+
+  walletContainer: {
+    width: 110,
+    alignItems: 'flex-start',
+  },
+
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+
+  walletBadge: {
+    fontSize: 16,
+    fontWeight: '700',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    width: 110,
+    textAlign: 'center',
+  },
+
+  walletPositive: {
+    backgroundColor: '#e8f5e9',
+    color: '#2e7d32',
+  },
+
+  walletNegative: {
+    backgroundColor: '#ffebee',
+    color: '#c62828',
+  },
+
+  walletZero: {
+    backgroundColor: '#f5f5f5',
+    color: '#666',
   },
 
   chevron: {

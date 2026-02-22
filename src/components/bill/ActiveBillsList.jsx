@@ -62,7 +62,7 @@ export default function ActiveBillsList({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [filterByDate, setFilterByDate] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  
+
   // Date range states
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState(new Date());
@@ -200,12 +200,12 @@ export default function ActiveBillsList({
     if (filterByDate) {
       const billDate = new Date(bill.rawDate);
       billDate.setHours(0, 0, 0, 0);
-      
+
       if (dateFilterMode === 'single') {
         // Single date mode - exact match
         const selected = new Date(selectedDate);
         selected.setHours(0, 0, 0, 0);
-        
+
         if (billDate.getTime() !== selected.getTime()) {
           return false;
         }
@@ -213,10 +213,10 @@ export default function ActiveBillsList({
         // Date range mode
         const start = new Date(startDate);
         start.setHours(0, 0, 0, 0);
-        
+
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
-        
+
         if (billDate < start || billDate > end) {
           return false;
         }
@@ -249,20 +249,23 @@ export default function ActiveBillsList({
       }
     }
   };
-  
+
   // Apply date filter
   const applyDateFilter = () => {
     if (dateFilterMode === 'range') {
       // Ensure start date is before or equal to end date
       if (startDate > endDate) {
-        Alert.alert('Invalid Date Range', 'Start date must be before or equal to end date.');
+        Alert.alert(
+          'Invalid Date Range',
+          'Start date must be before or equal to end date.',
+        );
         return;
       }
     }
     setFilterByDate(true);
     setShowDateRangeModal(false);
   };
-  
+
   // Clear date filter
   const clearDateFilter = () => {
     setFilterByDate(false);
@@ -299,7 +302,7 @@ export default function ActiveBillsList({
           </Text>
           <Text style={styles.amount}>{item.amountDisplay}</Text>
         </View>
-        
+
         {/* Row 2: Mobile and Status */}
         <View style={styles.row}>
           <Text style={styles.mobile}>{item.mobile}</Text>
@@ -404,10 +407,12 @@ export default function ActiveBillsList({
               filterByDate && styles.dateSelectorTextActive,
             ]}
           >
-            {filterByDate 
-              ? (dateFilterMode === 'single' 
-                  ? formatDate(selectedDate) 
-                  : `${formatDate(startDate).slice(0, 5)} - ${formatDate(endDate).slice(0, 5)}`)
+            {filterByDate
+              ? dateFilterMode === 'single'
+                ? formatDate(selectedDate)
+                : `${formatDate(startDate).slice(0, 5)} - ${formatDate(
+                    endDate,
+                  ).slice(0, 5)}`
               : formatDate(new Date())}
           </Text>
           {filterByDate && (
@@ -427,8 +432,12 @@ export default function ActiveBillsList({
         <View style={styles.filterInfo}>
           <Text style={styles.filterInfoText}>
             Showing {filteredBills.length} of {allBills.length} bills
-            {filterByDate && dateFilterMode === 'single' && ` for ${formatDate(selectedDate)}`}
-            {filterByDate && dateFilterMode === 'range' && ` from ${formatDate(startDate)} to ${formatDate(endDate)}`}
+            {filterByDate &&
+              dateFilterMode === 'single' &&
+              ` for ${formatDate(selectedDate)}`}
+            {filterByDate &&
+              dateFilterMode === 'range' &&
+              ` from ${formatDate(startDate)} to ${formatDate(endDate)}`}
             {searchText && ` matching "${searchText}"`}
           </Text>
           <TouchableOpacity
@@ -506,14 +515,20 @@ export default function ActiveBillsList({
       {/* Date Picker Modal */}
       {showDatePicker && (
         <DateTimePicker
-          value={dateFilterMode === 'single' ? selectedDate : (selectingDateType === 'start' ? startDate : endDate)}
+          value={
+            dateFilterMode === 'single'
+              ? selectedDate
+              : selectingDateType === 'start'
+              ? startDate
+              : endDate
+          }
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={handleDateChange}
           maximumDate={new Date()}
         />
       )}
-      
+
       {/* Date Range Selection Modal */}
       <Modal
         visible={showDateRangeModal}
@@ -532,7 +547,7 @@ export default function ActiveBillsList({
                 <Icon name="close" size={24} color="#666666" />
               </TouchableOpacity>
             </View>
-            
+
             {/* Mode Selector */}
             <View style={styles.modeSelectorContainer}>
               <TouchableOpacity
@@ -543,10 +558,10 @@ export default function ActiveBillsList({
                 onPress={() => setDateFilterMode('single')}
                 activeOpacity={0.7}
               >
-                <Icon 
-                  name="calendar-outline" 
-                  size={18} 
-                  color={dateFilterMode === 'single' ? '#FFFFFF' : '#666666'} 
+                <Icon
+                  name="calendar-outline"
+                  size={18}
+                  color={dateFilterMode === 'single' ? '#FFFFFF' : '#666666'}
                 />
                 <Text
                   style={[
@@ -557,7 +572,7 @@ export default function ActiveBillsList({
                   Single Date
                 </Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={[
                   styles.modeButton,
@@ -566,10 +581,10 @@ export default function ActiveBillsList({
                 onPress={() => setDateFilterMode('range')}
                 activeOpacity={0.7}
               >
-                <Icon 
-                  name="calendar" 
-                  size={18} 
-                  color={dateFilterMode === 'range' ? '#FFFFFF' : '#666666'} 
+                <Icon
+                  name="calendar"
+                  size={18}
+                  color={dateFilterMode === 'range' ? '#FFFFFF' : '#666666'}
                 />
                 <Text
                   style={[
@@ -581,7 +596,7 @@ export default function ActiveBillsList({
                 </Text>
               </TouchableOpacity>
             </View>
-            
+
             <View style={styles.dateInputsContainer}>
               {dateFilterMode === 'single' ? (
                 // Single Date Mode
@@ -593,7 +608,9 @@ export default function ActiveBillsList({
                     activeOpacity={0.7}
                   >
                     <Icon name="calendar" size={20} color="#FF8C42" />
-                    <Text style={styles.dateInputText}>{formatDate(selectedDate)}</Text>
+                    <Text style={styles.dateInputText}>
+                      {formatDate(selectedDate)}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -610,10 +627,12 @@ export default function ActiveBillsList({
                       activeOpacity={0.7}
                     >
                       <Icon name="calendar" size={20} color="#FF8C42" />
-                      <Text style={styles.dateInputText}>{formatDate(startDate)}</Text>
+                      <Text style={styles.dateInputText}>
+                        {formatDate(startDate)}
+                      </Text>
                     </TouchableOpacity>
                   </View>
-                  
+
                   <View style={styles.dateInputWrapper}>
                     <Text style={styles.dateLabel}>To Date</Text>
                     <TouchableOpacity
@@ -625,13 +644,15 @@ export default function ActiveBillsList({
                       activeOpacity={0.7}
                     >
                       <Icon name="calendar" size={20} color="#FF8C42" />
-                      <Text style={styles.dateInputText}>{formatDate(endDate)}</Text>
+                      <Text style={styles.dateInputText}>
+                        {formatDate(endDate)}
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </>
               )}
             </View>
-            
+
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.modalCancelButton}
@@ -640,7 +661,7 @@ export default function ActiveBillsList({
               >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={styles.modalApplyButton}
                 onPress={applyDateFilter}
@@ -1076,7 +1097,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  
+
   // Date Range Modal
   modalOverlay: {
     flex: 1,

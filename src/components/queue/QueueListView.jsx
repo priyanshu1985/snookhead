@@ -18,6 +18,7 @@ export default function QueueListView({
   onRefresh,
   onAddPress,
   onRemovePress,
+  onEditPress,
   navigation,
 }) {
   const renderQueueItem = ({ item, index }) => (
@@ -34,6 +35,12 @@ export default function QueueListView({
         <Text style={styles.queuePhone}>
           {item.customer_phone || item.phone || 'No phone'}
         </Text>
+        {item.estimated_wait_minutes !== undefined && item.estimated_wait_minutes !== null && (
+          <View style={styles.waitTimeContainer}>
+            <Icon name="time-outline" size={14} color="#666" />
+            <Text style={styles.waitTimeText}> Wait: ~{item.estimated_wait_minutes} mins</Text>
+          </View>
+        )}
       </View>
       <View style={styles.queueStatus}>
         <View style={[styles.statusBadge, styles.statusWaiting]}>
@@ -42,12 +49,20 @@ export default function QueueListView({
           </Text>
         </View>
       </View>
-      <TouchableOpacity
-        style={styles.removeButton}
-        onPress={() => onRemovePress(item)}
-      >
-        <Icon name="close-circle-outline" size={22} color="#FF6B6B" />
-      </TouchableOpacity>
+      <View style={styles.queueActions}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => onEditPress && onEditPress(item)}
+        >
+          <Icon name="pencil-outline" size={22} color="#4CAF50" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => onRemovePress(item)}
+        >
+          <Icon name="close-circle-outline" size={22} color="#FF6B6B" />
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 
@@ -291,8 +306,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#666666',
   },
-  removeButton: {
-    padding: 4,
+  queueActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionButton: {
+    padding: 6,
+    marginLeft: 4,
+  },
+  waitTimeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  waitTimeText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
   },
 
   // Center States

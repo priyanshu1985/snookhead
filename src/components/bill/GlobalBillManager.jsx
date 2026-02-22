@@ -5,11 +5,12 @@ import { useAuth } from '../../context/AuthContext';
 import { API_URL } from '../../config';
 import eventEmitter from '../../utils/eventEmitter';
 
-const POLL_INTERVAL = 1000; // Check every 1 second
+const POLL_INTERVAL = 1000; // Check every 1 second for immediate response
 
 export default function GlobalBillManager() {
   const { isAuthenticated } = useAuth();
   const intervalRef = useRef(null);
+  const processingSessionsRef = useRef(new Set()); // Track sessions being processed
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -55,10 +56,10 @@ export default function GlobalBillManager() {
       const now = new Date();
 
       sessions.forEach(async session => {
-        // Only check 'timer' (Countdown/Set Time) sessions
+        // Only check 'set_time' (Countdown) sessions
         if (
-          session.booking_type === 'timer' ||
-          session.bookingtype === 'timer'
+          session.booking_type === 'set_time' ||
+          session.bookingtype === 'set_time'
         ) {
           const startTime = new Date(session.start_time || session.starttime);
           const duration = parseInt(
@@ -67,15 +68,22 @@ export default function GlobalBillManager() {
 
           if (duration > 0) {
             const endTime = new Date(startTime.getTime() + duration * 60000);
+            const activeId = session.active_id || session.activeid;
 
-            // If time has expired (with a small buffer of e.g. 5 seconds to avoid race conditions with UI)
-            if (endTime <= now) {
+            // If time has expired and not already being processed
+            if (
+              endTime <= now &&
+              !processingSessionsRef.current.has(activeId)
+            ) {
               console.log(
-                `[GlobalBillManager] Session ${
-                  session.active_id || session.activeid
-                } expired. Auto-releasing...`,
+                `[GlobalBillManager] Session ${activeId} expired. Auto-releasing...`,
               );
+              processingSessionsRef.current.add(activeId);
               await autoReleaseSession(session, token);
+              // Keep in set for 5 seconds to avoid duplicate calls
+              setTimeout(() => {
+                processingSessionsRef.current.delete(activeId);
+              }, 5000);
             }
           }
         }
