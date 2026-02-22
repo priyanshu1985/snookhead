@@ -151,53 +151,53 @@ router.post(
       });
 
       let conflictingReservation = null;
-      
+
       // Debug logging to file
       const logPath = path.join(__dirname, '..', 'debug_conflict.log');
       const debugData = {
-          body: req.body,
-          tableId: table_id,
-          checkingAgainst: tableReservations.map(r => ({ id: r.id, time: r.reservationtime }))
+        body: req.body,
+        tableId: table_id,
+        checkingAgainst: tableReservations.map(r => ({ id: r.id, time: r.reservationtime }))
       };
       if (fs.existsSync(path.dirname(logPath))) {
-          fs.appendFileSync(logPath, JSON.stringify(debugData, null, 2) + '\n\n');
+        fs.appendFileSync(logPath, JSON.stringify(debugData, null, 2) + '\n\n');
       }
 
       console.log(`[Start Session] Request Body:`, JSON.stringify(req.body, null, 2));
 
       for (const r of tableReservations) {
-          // Check if this is the SAME reservation we are fulfilling
-          // Use loose equality for safety or explicit string conversion
-          const isSelf = req.body.reservationId && (String(r.id) === String(req.body.reservationId));
-          
-          if (isSelf) {
-               console.log(`[Conflict Check] Skipping self (Res ID ${r.id})`);
-               continue; // Valid fulfillment, ignore this reservation
-          }
-          
-          const rTime = new Date(r.reservationtime || r.reservation_time || r.fromTime);
-          if (rTime < new Date(now.getTime() - 40 * 60000)) {
-            console.log(`[Conflict Check] Skipping stale reservation ${r.id} (older than 40m)`);
-            continue; // Ignore stale (older than 40m)
-          }
+        // Check if this is the SAME reservation we are fulfilling
+        // Use loose equality for safety or explicit string conversion
+        const isSelf = req.body.reservationId && (String(r.id) === String(req.body.reservationId));
 
-          // Conflict Logic:
-          // Does this reservation start overlaps with the session we are about to start?
-          // Session: Now -> Now + Duration
-          // Reservation: rTime
-          // If reservation starts within our proposed session window, it's a conflict
-          if (rTime < proposedEnd && rTime > new Date(now.getTime() - 15 * 60000)) { // Overlap check
-              console.log(`[Conflict Detected] Res ${r.id} (${rTime.toLocaleTimeString()}) overlaps with session end ${proposedEnd.toLocaleTimeString()}`);
-              conflictingReservation = r; // Mark as conflicting
-              break; // Found a conflict, no need to check further
-          }
+        if (isSelf) {
+          console.log(`[Conflict Check] Skipping self (Res ID ${r.id})`);
+          continue; // Valid fulfillment, ignore this reservation
+        }
+
+        const rTime = new Date(r.reservationtime || r.reservation_time || r.fromTime);
+        if (rTime < new Date(now.getTime() - 40 * 60000)) {
+          console.log(`[Conflict Check] Skipping stale reservation ${r.id} (older than 40m)`);
+          continue; // Ignore stale (older than 40m)
+        }
+
+        // Conflict Logic:
+        // Does this reservation start overlaps with the session we are about to start?
+        // Session: Now -> Now + Duration
+        // Reservation: rTime
+        // If reservation starts within our proposed session window, it's a conflict
+        if (rTime < proposedEnd && rTime > new Date(now.getTime() - 15 * 60000)) { // Overlap check
+          console.log(`[Conflict Detected] Res ${r.id} (${rTime.toLocaleTimeString()}) overlaps with session end ${proposedEnd.toLocaleTimeString()}`);
+          conflictingReservation = r; // Mark as conflicting
+          break; // Found a conflict, no need to check further
+        }
       }
 
       if (conflictingReservation) {
         const rTime = new Date(
           conflictingReservation.reservationtime ||
-            conflictingReservation.reservationtime ||
-            conflictingReservation.fromTime,
+          conflictingReservation.reservationtime ||
+          conflictingReservation.fromTime,
         );
         return res.status(409).json({
           error: "Conflict",
@@ -269,6 +269,10 @@ router.post(
             frame_count || (queueEntry ? queueEntry.frame_count : null),
           // bookingsource removed due to schema constraint
           created_by: req.user.id, // Track who started the session
+          current_frame_start_time:
+            (booking_type || (queueEntry ? queueEntry.booking_type : "timer")) === "frame"
+              ? startTime
+              : null,
           food_orders:
             food_orders ||
             (queueEntry ? queueEntry.food_orders : []) ||
@@ -277,18 +281,18 @@ router.post(
         req.stationId,
       );
       const session = await ActiveTable.create(sessionData);
-      
+
       // Update Reservation Status if applicable
       if (req.body.reservationId) {
-          try {
-             await Reservation.update(
-                 { status: 'active' },
-                 { where: { id: req.body.reservationId } }
-             );
-             console.log(`[Start Session] Set Reservation ${req.body.reservationId} to active`);
-          } catch (resErr) {
-             console.error("Failed to update reservation status:", resErr);
-          }
+        try {
+          await Reservation.update(
+            { status: 'active' },
+            { where: { id: req.body.reservationId } }
+          );
+          console.log(`[Start Session] Set Reservation ${req.body.reservationId} to active`);
+        } catch (resErr) {
+          console.error("Failed to update reservation status:", resErr);
+        }
       }
 
       // Check for existing pending order if coming from queue
@@ -315,7 +319,7 @@ router.post(
         // create order linked to this session with station_id
         const orderData = addStationToData(
           {
-            userId: user_id ?? req.user.id ?? null,
+            userId: req.user.id ?? null,
             personName: customer_name || "Table Customer",
             total: 0,
             status: "pending",
@@ -775,14 +779,21 @@ router.put(
 
       // Whitelist allowed updates
       const allowedUpdates = {};
-      if (updates.frame_count !== undefined)
+      if (updates.frame_count !== undefined) {
         allowedUpdates.framecount = updates.frame_count; // REVERTED
+      }
       if (updates.booking_end_time !== undefined)
         allowedUpdates.bookingendtime = updates.booking_end_time; // REVERTED
       if (updates.duration_minutes !== undefined)
         allowedUpdates.durationminutes = updates.duration_minutes; // REVERTED
       if (updates.food_orders !== undefined)
         allowedUpdates.food_orders = updates.food_orders; // New persistent cart
+
+      // Custom logic for "Add Next Frame" action
+      if (updates.add_next_frame) {
+        allowedUpdates.framecount = (session.framecount || session.frame_count || 0) + 1;
+        allowedUpdates.current_frame_start_time = new Date();
+      }
 
       if (Object.keys(allowedUpdates).length === 0) {
         return res.status(400).json({ error: "No valid fields to update" });

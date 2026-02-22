@@ -76,8 +76,6 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
     for (const cartItem of cart) {
       const { item, qty } = cartItem;
 
-      // Find menu item in database with station filter
-      const menuWhere = addStationFilter({ id: item.id }, req.stationId);
       const menuItem = await MenuItem.findOne({ where: menuWhere });
       if (!menuItem) {
         return res.status(404).json({
@@ -85,11 +83,30 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         });
       }
 
-      const priceEach = Number(menuItem.price) || 0;
+      // Check if variation was chosen
+      const { getSupabase: getDb } = await import("../config/supabase.js");
+      let priceEach = Number(menuItem.price) || 0;
+      let inventoryMultiplier = 1;
+      let itemNameForLog = menuItem.name;
+
+      if (item.variation_id) {
+        const { data: variation } = await getDb()
+          .from('menu_item_variations')
+          .select('*')
+          .eq('id', item.variation_id)
+          .single();
+
+        if (variation) {
+          priceEach = Number(variation.selling_price);
+          inventoryMultiplier = Number(variation.inventory_multiplier) || 1;
+          itemNameForLog = `${menuItem.name} (${variation.variation_name})`;
+        }
+      }
+
       const itemTotal = priceEach * qty;
       calculatedTotal += itemTotal;
 
-      // Create OrderItem
+      // Create OrderItem (TODO: add variation_id to schema if needed, but for now we store the updated price)
       await OrderItem.create({
         orderId: order.id,
         menuItemId: item.id,
@@ -117,15 +134,16 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
           if (inventoryItem) {
             // Strict check? We already checked menu item (which should be synced).
             // But let's double check here to be safe against race conditions.
-            if (inventoryItem.currentquantity < qty) {
-              throw new Error(`Insufficient inventory for ${menuName}. Available: ${inventoryItem.currentquantity}`);
+            const totalDeductionNeeded = qty * inventoryMultiplier;
+            if (inventoryItem.currentquantity < totalDeductionNeeded) {
+              throw new Error(`Insufficient inventory for ${itemNameForLog}. Required: ${totalDeductionNeeded}, Available: ${inventoryItem.currentquantity}`);
             }
 
             // Deduct stock
-            await inventoryItem.decrement('currentquantity', { by: qty });
-            console.log(`Deducted ${qty} from inventory for ${menuName}`);
+            await inventoryItem.decrement('currentquantity', { by: totalDeductionNeeded });
+            console.log(`Deducted ${totalDeductionNeeded} from inventory for ${itemNameForLog}`);
           } else {
-            console.warn(`No inventory item found for ${menuName}, skipping inventory deduction.`);
+            console.warn(`No inventory item found for ${itemNameForLog}, skipping inventory deduction.`);
           }
         }
       } catch (invErr) {
@@ -138,7 +156,8 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       }
 
       if (menuItem.stock !== undefined) {
-        const newStock = Math.max(0, menuItem.stock - qty);
+        const totalDeductionNeeded = qty * inventoryMultiplier;
+        const newStock = Math.max(0, menuItem.stock - totalDeductionNeeded);
         await MenuItem.update(
           { stock: newStock },
           { where: { id: menuItem.id } },

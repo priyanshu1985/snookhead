@@ -16,13 +16,13 @@ function getDateRange(period, customStart, customEnd) {
 
   // If custom period is provided, use it
   if (period === 'custom' && customStart && customEnd) {
-      startDate = new Date(customStart);
-      endDate = new Date(customEnd);
-      // Ensure end date includes the full day
-      endDate.setHours(23, 59, 59, 999);
-      // Ensure start date starts at beginning of day
-      startDate.setHours(0, 0, 0, 0);
-      return { startDate, endDate };
+    startDate = new Date(customStart);
+    endDate = new Date(customEnd);
+    // Ensure end date includes the full day
+    endDate.setHours(23, 59, 59, 999);
+    // Ensure start date starts at beginning of day
+    startDate.setHours(0, 0, 0, 0);
+    return { startDate, endDate };
   }
 
   switch (period.toLowerCase()) {
@@ -173,7 +173,7 @@ router.get("/stats", auth, stationContext, async (req, res) => {
         bgColor: "#FFEBEE",
         trendColor: creditMembers > 0 ? "#FF5252" : "#4CAF50",
         positive: false,
-        isAlert:creditMembers > 0,
+        isAlert: creditMembers > 0,
       },
     ];
 
@@ -195,7 +195,7 @@ router.get("/game-utilization", auth, stationContext, async (req, res) => {
     let gamesQuery = supabase.from("games").select("game_id:gameid, game_name:gamename, image_key");
     gamesQuery = applyStationFilter(gamesQuery, req.stationId);
     const { data: games, error: gamesError } = await gamesQuery;
-    
+
     if (gamesError) throw gamesError;
 
     // Calculate usage and revenue for each game
@@ -208,7 +208,7 @@ router.get("/game-utilization", auth, stationContext, async (req, res) => {
           .eq("gameid", game.game_id)
           .gte("starttime", startDate.toISOString())
           .lte("starttime", endDate.toISOString());
-        
+
         sessionQuery = applyStationFilter(sessionQuery, req.stationId);
         const { count: sessionCount } = await sessionQuery;
 
@@ -218,7 +218,7 @@ router.get("/game-utilization", auth, stationContext, async (req, res) => {
           .select("activeid", { count: "exact", head: true })
           .gte("starttime", startDate.toISOString())
           .lte("starttime", endDate.toISOString());
-        
+
         totalSessionsQuery = applyStationFilter(totalSessionsQuery, req.stationId);
         const { count: totalSessions } = await totalSessionsQuery;
 
@@ -301,10 +301,10 @@ router.get("/revenue", auth, stationContext, async (req, res) => {
       .gte("createdat", startDate.toISOString())
       .lte("createdat", endDate.toISOString())
       .eq("status", "paid");
-    
+
     revenueQuery = applyStationFilter(revenueQuery, req.stationId);
     const { data: revenueData, error: revenueError } = await revenueQuery;
-    
+
     if (revenueError) throw revenueError;
 
     const totalRevenue = (revenueData || []).reduce((sum, bill) => sum + (Number(bill.totalamount) || 0), 0);
@@ -321,10 +321,10 @@ router.get("/revenue", auth, stationContext, async (req, res) => {
       .gte("createdat", prevStartDate.toISOString())
       .lte("createdat", prevEndDate.toISOString())
       .eq("status", "paid");
-    
+
     prevRevenueQuery = applyStationFilter(prevRevenueQuery, req.stationId);
     const { data: prevRevenueData } = await prevRevenueQuery;
-    
+
     const prevRevenue = (prevRevenueData || []).reduce((sum, bill) => sum + (Number(bill.totalamount) || 0), 0);
 
     // Calculate revenue trend
@@ -341,15 +341,15 @@ router.get("/revenue", auth, stationContext, async (req, res) => {
     // We will do it in JS.
     const revenueBreakdownMap = {};
     (revenueData || []).forEach(bill => {
-        // Adjust date logic if needed, simplify to YYYY-MM-DD
-        const dateKey = new Date(bill.createdat || new Date()).toISOString().split('T')[0]; 
-        if (!revenueBreakdownMap[dateKey]) {
-            revenueBreakdownMap[dateKey] = { date: dateKey, revenue: 0, count: 0 };
-        }
-        revenueBreakdownMap[dateKey].revenue += Number(bill.totalamount) || 0;
-        revenueBreakdownMap[dateKey].count += 1;
+      // Adjust date logic if needed, simplify to YYYY-MM-DD
+      const dateKey = new Date(bill.createdat || new Date()).toISOString().split('T')[0];
+      if (!revenueBreakdownMap[dateKey]) {
+        revenueBreakdownMap[dateKey] = { date: dateKey, revenue: 0, count: 0 };
+      }
+      revenueBreakdownMap[dateKey].revenue += Number(bill.totalamount) || 0;
+      revenueBreakdownMap[dateKey].count += 1;
     });
-    
+
     const revenueBreakdown = Object.values(revenueBreakdownMap).sort((a, b) => a.date.localeCompare(b.date));
 
     res.json({
@@ -386,14 +386,14 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     const prevEndDate = new Date(startDate);
 
     // ===== STATS - filters applied manually via supabase chain helpers =====
-    
+
     // Active Wallets
     let activeWalletsQuery = supabase
       .from("wallets")
       .select("*", { count: "exact", head: true })
       .gt("balance", 0);
     activeWalletsQuery = applyStationFilter(activeWalletsQuery, req.stationId);
-    
+
     // Prev Active Wallets
     let prevActiveWalletsQuery = supabase
       .from("wallets")
@@ -409,7 +409,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       .gte("created_at", startDate.toISOString())
       .lte("created_at", endDate.toISOString());
     newMembersQuery = applyStationFilter(newMembersQuery, req.stationId);
-    
+
     // Prev New Members
     let prevNewMembersQuery = supabase
       .from("customers")
@@ -417,7 +417,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       .gte("created_at", prevStartDate.toISOString())
       .lte("created_at", prevEndDate.toISOString());
     prevNewMembersQuery = applyStationFilter(prevNewMembersQuery, req.stationId);
-    
+
     // Inactive Wallets
     let inactiveWalletsQuery = supabase
       .from("wallets")
@@ -446,7 +446,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       .select("*", { count: "exact", head: true })
       .lt("balance", 0)
       .lt("created_at", startDate.toISOString());
-     prevCreditMembersQuery = applyStationFilter(prevCreditMembersQuery, req.stationId);
+    prevCreditMembersQuery = applyStationFilter(prevCreditMembersQuery, req.stationId);
 
     // Total Revenue (bills paid in dates) - Get tablecharges and menucharges
     let revenueQuery = supabase
@@ -532,99 +532,99 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     const gamesMap = gamesList.reduce((acc, g) => ({ ...acc, [g.gameid]: g }), {});
 
     // Calculate Occupancy Rate
-    const occupancyRate = (totalTables || 0) > 0 
-        ? Math.round(((activeTables || 0) / (totalTables || 1)) * 100) 
-        : 0;
+    const occupancyRate = (totalTables || 0) > 0
+      ? Math.round(((activeTables || 0) / (totalTables || 1)) * 100)
+      : 0;
 
     // --- FINANCIAL BREAKDOWNS ---
     const bills = revenueData || [];
-    
+
     // 1. Fetch related sessions
     const sessionIds = [...new Set(bills.map(b => b.sessionid).filter(Boolean))];
     let sessionsMap = {};
     if (sessionIds.length > 0) {
-        const { data: sessions } = await supabase
-            .from("activetables")
-            .select("activeid, gameid") 
-            .in("activeid", sessionIds);
-        
-        (sessions || []).forEach(s => sessionsMap[s.activeid] = s);
+      const { data: sessions } = await supabase
+        .from("activetables")
+        .select("activeid, gameid")
+        .in("activeid", sessionIds);
+
+      (sessions || []).forEach(s => sessionsMap[s.activeid] = s);
     }
 
     // 2. Aggregate
     const breakdown = {
-        flow: { dashboard: 0, queue: 0, reservation: 0 },
-        bookingType: { timer: 0, set: 0, frame: 0 },
-        foodSource: { table: 0, order_screen: 0 },
-        paymentMode: { cash: 0, upi: 0, wallet: 0 },
-        gameReal: {}
+      flow: { dashboard: 0, queue: 0, reservation: 0 },
+      bookingType: { timer: 0, set: 0, frame: 0 },
+      foodSource: { table: 0, order_screen: 0 },
+      paymentMode: { cash: 0, upi: 0, wallet: 0 },
+      gameReal: {}
     };
 
     const totalRevenue = bills.reduce((sum, bill) => {
-        const amount = Number(bill.totalamount) || 0;
-        const tableCharges = Number(bill.tablecharges) || 0;
-        const menuCharges = Number(bill.menucharges) || 0;
-        
-        let details = {};
-        try {
-           details = typeof bill.details === 'string' ? JSON.parse(bill.details) : (bill.details || {});
-        } catch (e) {
-           console.warn(`Failed to parse details for bill ${bill.id}:`, e);
-           details = {};
-        }
-        
-        const session = sessionsMap[bill.sessionid];
+      const amount = Number(bill.totalamount) || 0;
+      const tableCharges = Number(bill.tablecharges) || 0;
+      const menuCharges = Number(bill.menucharges) || 0;
 
-        let source = details.booking_source || 'dashboard';
-        if (source === 'dashboard' || source === 'queue' || source === 'reservation') {
+      let details = {};
+      try {
+        details = typeof bill.details === 'string' ? JSON.parse(bill.details) : (bill.details || {});
+      } catch (e) {
+        console.warn(`Failed to parse details for bill ${bill.id}:`, e);
+        details = {};
+      }
+
+      const session = sessionsMap[bill.sessionid];
+
+      let source = details.booking_source || 'dashboard';
+      if (source === 'dashboard' || source === 'queue' || source === 'reservation') {
+      } else {
+        source = 'dashboard';
+      }
+      breakdown.flow[source] = (breakdown.flow[source] || 0) + amount;
+
+      let bType = details.booking_type || 'timer';
+      if (['timer', 'set', 'frame'].includes(bType)) {
+      } else {
+        bType = 'timer';
+      }
+      breakdown.bookingType[bType] = (breakdown.bookingType[bType] || 0) + tableCharges;
+
+      if (menuCharges > 0) {
+        if (bill.sessionid) {
+          breakdown.foodSource.table += menuCharges;
         } else {
-             source = 'dashboard';
+          breakdown.foodSource.order_screen += menuCharges;
         }
-        breakdown.flow[source] = (breakdown.flow[source] || 0) + amount;
+      }
 
-        let bType = details.booking_type || 'timer';
-        if (['timer', 'set', 'frame'].includes(bType)) {
-        } else {
-             bType = 'timer';
-        }
-        breakdown.bookingType[bType] = (breakdown.bookingType[bType] || 0) + tableCharges;
+      if (session && session.gameid) {
+        breakdown.gameReal[session.gameid] = (breakdown.gameReal[session.gameid] || 0) + tableCharges;
+      }
 
-        if (menuCharges > 0) {
-            if (bill.sessionid) {
-                breakdown.foodSource.table += menuCharges;
-            } else {
-                breakdown.foodSource.order_screen += menuCharges;
-            }
-        }
+      let pMode = (bill.paymentmethod || 'cash').toLowerCase();
+      if (pMode === 'online' || pMode === 'card') pMode = 'upi';
+      if (breakdown.paymentMode[pMode] !== undefined) {
+        breakdown.paymentMode[pMode] += amount;
+      } else {
+        breakdown.paymentMode['cash'] += amount;
+      }
 
-        if (session && session.gameid) {
-             breakdown.gameReal[session.gameid] = (breakdown.gameReal[session.gameid] || 0) + tableCharges;
-        }
-
-        let pMode = (bill.paymentmethod || 'cash').toLowerCase();
-        if (pMode === 'online' || pMode === 'card') pMode = 'upi';
-        if (breakdown.paymentMode[pMode] !== undefined) {
-            breakdown.paymentMode[pMode] += amount;
-        } else {
-             breakdown.paymentMode['cash'] += amount;
-        }
-
-        return sum + amount;
+      return sum + amount;
     }, 0);
-    
+
     const gameRevenue = bills.reduce((sum, b) => sum + (Number(b.tablecharges) || 0), 0);
     const foodRevenue = bills.reduce((sum, b) => sum + (Number(b.menucharges) || 0), 0);
-    
+
     const validDurationBills = bills.filter(b => b.sessionduration > 0);
     const avgSessionDuration = validDurationBills.length > 0
-        ? Math.round(validDurationBills.reduce((sum, b) => sum + b.sessionduration, 0) / validDurationBills.length)
-        : 0;
+      ? Math.round(validDurationBills.reduce((sum, b) => sum + b.sessionduration, 0) / validDurationBills.length)
+      : 0;
 
     // --- EMPLOYEE SHIFT PERFORMANCE ---
     // Fetch all shifts in this period 
     let shiftsQuery = supabase
-        .from("shifts")
-        .select(`
+      .from("shifts")
+      .select(`
             id, 
             user_id, 
             check_in_time, 
@@ -633,68 +633,69 @@ router.get("/summary", auth, stationContext, async (req, res) => {
             status,
             users!inner(name, role, stationid)
         `)
-        .gte("check_in_time", startDate.toISOString())
-        .lte("check_in_time", endDate.toISOString())
-        .order("check_in_time", { ascending: false });
-    
+      .gte("check_in_time", startDate.toISOString())
+      .lte("check_in_time", endDate.toISOString())
+      .order("check_in_time", { ascending: false });
+
     if (req.stationId) {
-        shiftsQuery.eq("users.stationid", req.stationId);
+      shiftsQuery.eq("users.stationid", req.stationId);
     }
 
     const { data: shiftsData } = await shiftsQuery;
 
     const employee_shifts = (shiftsData || []).map(shift => {
-        const shiftStart = new Date(shift.check_in_time);
-        const shiftEnd = shift.check_out_time ? new Date(shift.check_out_time) : new Date();
-        
-        // Find bills generated by this user DURING this shift
-        // Logic: Bill created_by == shift.user_id AND created_at within shift time
-        const shiftBills = bills.filter(b => {
-             const billTime = new Date(b.createdAt);
-             // Safety check for created_by presence (added in recent migration)
-             // If b.created_by is missing, we can't attribute it.
-             if (b.created_by !== shift.user_id) return false;
-             return billTime >= shiftStart && billTime <= shiftEnd;
-        });
+      const shiftStart = new Date(shift.check_in_time);
+      const shiftEnd = shift.check_out_time ? new Date(shift.check_out_time) : new Date();
 
-        const billsGenerated = shiftBills.length;
-        const totalRevenue = shiftBills.reduce((sum, b) => sum + (Number(b.totalamount) || 0), 0);
-        
-        // Calculate duration formatted
-        let durationStr = "Active";
-        if (shift.total_hours) {
-            durationStr = `${shift.total_hours} hrs`;
-        } else if (shift.check_out_time) {
-            const diff = (new Date(shift.check_out_time) - shiftStart) / (1000 * 60 * 60);
-            durationStr = `${diff.toFixed(2)} hrs`;
-        } else {
-             // Active
-             const diff = (new Date() - shiftStart) / (1000 * 60 * 60);
-             durationStr = `${diff.toFixed(2)} hrs (Active)`;
-        }
+      // Find bills generated by this user DURING this shift
+      // Logic: Bill created_by == shift.user_id AND created_at within shift time
+      const shiftBills = bills.filter(b => {
+        const billTime = new Date(b.createdAt);
+        // Safety check for created_by presence (added in recent migration)
+        // If b.created_by is missing, we can't attribute it.
+        if (b.created_by !== shift.user_id) return false;
+        return billTime >= shiftStart && billTime <= shiftEnd;
+      });
 
-        return {
-            id: shift.id,
-            name: shift.users?.name || "Unknown",
-            role: shift.users?.role || "Staff",
-            date: shiftStart.toLocaleDateString(),
-            time: `${shiftStart.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${shift.check_out_time ? new Date(shift.check_out_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Active'}`,
-            duration: durationStr,
-            bills_generated: billsGenerated,
-            revenue: totalRevenue,
-            revenueFormatted: `₹${totalRevenue.toFixed(2)}`
-        };
+      const billsGenerated = shiftBills.length;
+      const totalRevenue = shiftBills.reduce((sum, b) => sum + (Number(b.totalamount) || 0), 0);
+
+      // Calculate duration formatted
+      let durationStr = "Active";
+      if (shift.total_hours) {
+        durationStr = `${shift.total_hours} hrs`;
+      } else if (shift.check_out_time) {
+        const diff = (new Date(shift.check_out_time) - shiftStart) / (1000 * 60 * 60);
+        durationStr = `${diff.toFixed(2)} hrs`;
+      } else {
+        // Active
+        const diff = (new Date() - shiftStart) / (1000 * 60 * 60);
+        durationStr = `${diff.toFixed(2)} hrs (Active)`;
+      }
+
+      return {
+        id: shift.id,
+        user_id: shift.user_id,
+        name: shift.users?.name || "Unknown",
+        role: shift.users?.role || "Staff",
+        date: shiftStart.toLocaleDateString(),
+        time: `${shiftStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${shift.check_out_time ? new Date(shift.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active'}`,
+        duration: durationStr,
+        bills_generated: billsGenerated,
+        revenue: totalRevenue,
+        revenueFormatted: `₹${totalRevenue.toFixed(2)}`
+      };
     });
 
     const hoursMap = new Array(24).fill(0);
     bills.forEach(b => {
-        const date = new Date(b.createdAt);
-        const hour = date.getHours();
-        hoursMap[hour]++;
+      const date = new Date(b.createdAt);
+      const hour = date.getHours();
+      hoursMap[hour]++;
     });
     const peakHourVal = Math.max(...hoursMap);
     const peakHourIndex = hoursMap.indexOf(peakHourVal);
-    const peakHourLabel = `${peakHourIndex}:00 - ${peakHourIndex+1}:00`;
+    const peakHourLabel = `${peakHourIndex}:00 - ${peakHourIndex + 1}:00`;
 
     const prevRevenueVal = (prevRevenueData || []).reduce((sum, b) => sum + (Number(b.totalamount) || 0), 0);
     // Total Expenses
@@ -703,12 +704,12 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       .select("amount")
       .gte("date", startDate.toISOString().split('T')[0])
       .lte("date", endDate.toISOString().split('T')[0]);
-    
+
     // Filter expenses by station
     if (req.stationId) {
-         expensesQuery.eq("station_id", req.stationId);
+      expensesQuery.eq("station_id", req.stationId);
     }
-    
+
     const { data: expensesData } = await expensesQuery;
     let totalExpenses = (expensesData || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
@@ -717,59 +718,59 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     // Ideally we need the owner ID. `req.user.id` is the caller.
     // If caller is owner, we fetch their employees.
     if (req.user.role === 'owner') {
-        const { data: employees } = await supabase
-            .from("users")
-            .select("id, salary_type, salary_amount")
-            .eq("owner_id", req.user.id);
-        
-        // This is an estimation. 
-        // For 'monthly': (Salary * Months in period) OR (Salary / 30 * Days in period)
-        // For 'hourly': Need shift info. For simplicity now, let's assume standard 8h/day, 5days/week if hourly?
-        // Or just use salary_amount as estimated monthly cost for simplicity if they entered it as 'monthly equivalent'?
-        // The prompt asked for "as per employee timing shift the expense will be calculated".
-        // Real shift calculation requires: Shifts table.
-        // Let's fetch shifts too if possible, or simplifying:
-        // We will do a pro-rata calculation based on period length in days.
-        
-        const periodDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) || 1;
-        
-        // Fetch shifts for these employees to get hours? 
-        // Let's do a simple estimation first to avoid complex join query unless critical.
-        // User request: "as per employee timing shift"
-        // Let's try to get shifts.
-        const employeeIds = (employees || []).map(e => e.id);
-        let shiftMap = {};
-        if (employeeIds.length > 0) {
-            const { data: shifts } = await supabase.from("shifts").select("user_id, start_time, end_time, work_days").in("user_id", employeeIds);
-            (shifts || []).forEach(s => shiftMap[s.user_id] = s);
-        }
+      const { data: employees } = await supabase
+        .from("users")
+        .select("id, salary_type, salary_amount")
+        .eq("owner_id", req.user.id);
 
-        let labourCost = 0;
-        (employees || []).forEach(emp => {
-            const salary = Number(emp.salary_amount) || 0;
-            if (emp.salary_type === 'monthly') {
-                labourCost += (salary / 30) * periodDays;
-            } else if (emp.salary_type === 'hourly') {
-                const shift = shiftMap[emp.id];
-                if (shift) {
-                   // Calculate hours
-                   const start = new Date(`1970-01-01T${shift.start_time}`);
-                   const end = new Date(`1970-01-01T${shift.end_time}`);
-                   const hours = (end - start) / (1000 * 60 * 60); // e.g. 8
-                   
-                   // Calculate working days in period
-                   // This is complex (e.g. how many Mondays in this date range?)
-                   // Simplified: periodDays * (workDays.length / 7)
-                   // If work_days is array ['Mon', 'Tue']
-                   const daysPerWeek = Array.isArray(shift.work_days) ? shift.work_days.length : 5;
-                   const workingDaysEst = periodDays * (daysPerWeek / 7);
-                   
-                   labourCost += salary * hours * workingDaysEst;
-                }
-            }
-        });
-        
-        totalExpenses += labourCost;
+      // This is an estimation. 
+      // For 'monthly': (Salary * Months in period) OR (Salary / 30 * Days in period)
+      // For 'hourly': Need shift info. For simplicity now, let's assume standard 8h/day, 5days/week if hourly?
+      // Or just use salary_amount as estimated monthly cost for simplicity if they entered it as 'monthly equivalent'?
+      // The prompt asked for "as per employee timing shift the expense will be calculated".
+      // Real shift calculation requires: Shifts table.
+      // Let's fetch shifts too if possible, or simplifying:
+      // We will do a pro-rata calculation based on period length in days.
+
+      const periodDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) || 1;
+
+      // Fetch shifts for these employees to get hours? 
+      // Let's do a simple estimation first to avoid complex join query unless critical.
+      // User request: "as per employee timing shift"
+      // Let's try to get shifts.
+      const employeeIds = (employees || []).map(e => e.id);
+      let shiftMap = {};
+      if (employeeIds.length > 0) {
+        const { data: shifts } = await supabase.from("shifts").select("user_id, start_time, end_time, work_days").in("user_id", employeeIds);
+        (shifts || []).forEach(s => shiftMap[s.user_id] = s);
+      }
+
+      let labourCost = 0;
+      (employees || []).forEach(emp => {
+        const salary = Number(emp.salary_amount) || 0;
+        if (emp.salary_type === 'monthly') {
+          labourCost += (salary / 30) * periodDays;
+        } else if (emp.salary_type === 'hourly') {
+          const shift = shiftMap[emp.id];
+          if (shift) {
+            // Calculate hours
+            const start = new Date(`1970-01-01T${shift.start_time}`);
+            const end = new Date(`1970-01-01T${shift.end_time}`);
+            const hours = (end - start) / (1000 * 60 * 60); // e.g. 8
+
+            // Calculate working days in period
+            // This is complex (e.g. how many Mondays in this date range?)
+            // Simplified: periodDays * (workDays.length / 7)
+            // If work_days is array ['Mon', 'Tue']
+            const daysPerWeek = Array.isArray(shift.work_days) ? shift.work_days.length : 5;
+            const workingDaysEst = periodDays * (daysPerWeek / 7);
+
+            labourCost += salary * hours * workingDaysEst;
+          }
+        }
+      });
+
+      totalExpenses += labourCost;
     }
 
     const expenses = totalExpenses;
@@ -788,8 +789,8 @@ router.get("/summary", auth, stationContext, async (req, res) => {
         const { count: sessionCount } = await sessionCountQuery;
 
         const usage = (totalSessions || 0) > 0
-            ? Math.round(((sessionCount || 0) / (totalSessions || 1)) * 100)
-            : 0;
+          ? Math.round(((sessionCount || 0) / (totalSessions || 1)) * 100)
+          : 0;
 
         const realRevenue = breakdown.gameReal[game.gameid] || 0;
 
@@ -830,20 +831,20 @@ router.get("/summary", auth, stationContext, async (req, res) => {
           positive: lowStockCount === 0
         },
         {
-           title: "Inactive Wallets",
-           value: inactiveWallets,
-           trend: calculateTrend(inactiveWallets, prevInactiveWallets),
-           positive: inactiveWallets <= prevInactiveWallets
+          title: "Inactive Wallets",
+          value: inactiveWallets,
+          trend: calculateTrend(inactiveWallets, prevInactiveWallets),
+          positive: inactiveWallets <= prevInactiveWallets
         },
         {
-           title: "Credit Members",
-           value: creditMembers,
-           trend: calculateTrend(creditMembers, prevCreditMembers),
-           positive: creditMembers <= prevCreditMembers
+          title: "Credit Members",
+          value: creditMembers,
+          trend: calculateTrend(creditMembers, prevCreditMembers),
+          positive: creditMembers <= prevCreditMembers
         }
       ],
       gameData: gameData.slice(0, 5),
-      chartData: gameData.slice(0, 5).map((g,i) => ({ game:g.name, value:g.usage, color: colors[i%colors.length] })),
+      chartData: gameData.slice(0, 5).map((g, i) => ({ game: g.name, value: g.usage, color: colors[i % colors.length] })),
       summary: {
         totalRevenue,
         totalRevenueFormatted: `₹${totalRevenue.toFixed(2)}`,
@@ -868,11 +869,11 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching dashboard summary:", error);
-    res.status(500).json({ 
-        error: error.message, 
-        details: error.details, 
-        hint: error.hint,
-        code: error.code
+    res.status(500).json({
+      error: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code
     });
   }
 });
@@ -880,101 +881,101 @@ router.get("/summary", auth, stationContext, async (req, res) => {
 
 // GET /api/owner/employees/:id/activity
 router.get("/employees/:id/activity", auth, stationContext, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { startDate, endDate } = req.query; // Expect ISO strings or handle defaults
-        const supabase = getSupabase();
-        
-        let start = startDate ? new Date(startDate) : new Date();
-        let end = endDate ? new Date(endDate) : new Date();
-        
-        // If not provided, default to today
-        if (!startDate) {
-            start.setHours(0,0,0,0);
-            end.setHours(23,59,59,999);
-        }
+  try {
+    const { id } = req.params;
+    const { startDate, endDate } = req.query; // Expect ISO strings or handle defaults
+    const supabase = getSupabase();
 
-        const startIso = start.toISOString();
-        const endIso = end.toISOString();
+    let start = startDate ? new Date(startDate) : new Date();
+    let end = endDate ? new Date(endDate) : new Date();
 
-        // 1. Fetch Active Tables started by this user
-        // Note: created_by might be null for old records
-        const activeTablesQuery = supabase
-            .from('activetables')
-            .select('*', { count: 'exact', head: true })
-            .eq('created_by', id)
-            .gte('start_time', startIso)
-            .lte('start_time', endIso);
-            
-        // 2. Fetch Bills generated by this user
-        const billsQuery = supabase
-            .from('bills')
-            .select('total_amount', { count: 'exact' })
-            .eq('created_by', id)
-            .gte('createdAt', startIso)
-            .lte('createdAt', endIso);
-
-        // 3. Fetch Orders placed by this user (if we decide to track order placement separately)
-        // Currently 'orders' has 'userId' which is customer. We added 'created_by' in migration.
-        const ordersQuery = supabase
-            .from('orders')
-            .select('total', { count: 'exact' })
-            .eq('created_by', id)
-            .gte('createdAt', startIso)
-            .lte('createdAt', endIso);
-
-        // 4. Fetch Shifts (Attendance)
-        const shiftsQuery = supabase
-            .from('shifts')
-            .select('*')
-            .eq('user_id', id)
-            .gte('check_in_time', startIso)
-            .lte('check_in_time', endIso);
-
-        const [
-            { count: tablesCount },
-            { data: bills, count: billsCount },
-            { data: orders, count: ordersCount },
-            { data: shifts }
-        ] = await Promise.all([
-            activeTablesQuery,
-            billsQuery,
-            ordersQuery,
-            shiftsQuery
-        ]);
-
-        const totalBillAmount = (bills || []).reduce((sum, b) => sum + (Number(b.total_amount) || 0), 0);
-        const totalOrderAmount = (orders || []).reduce((sum, o) => sum + (Number(o.total) || 0), 0);
-
-        // Calculate hours worked in this period
-        let totalHours = 0;
-        (shifts || []).forEach(s => {
-             if (s.total_hours) {
-                 totalHours += Number(s.total_hours);
-             } else if (s.check_in_time && s.check_out_time) {
-                 const diff = new Date(s.check_out_time) - new Date(s.check_in_time);
-                 totalHours += diff / (1000 * 60 * 60);
-             } else if (s.check_in_time && s.status === 'active') {
-                 // Ongoing shift
-                 const diff = new Date() - new Date(s.check_in_time);
-                 totalHours += diff / (1000 * 60 * 60);
-             }
-        });
-
-        res.json({
-            tables_booked: tablesCount || 0,
-            bills_generated: billsCount || 0,
-            bill_revenue: totalBillAmount,
-            orders_placed: ordersCount || 0,
-            order_revenue: totalOrderAmount,
-            hours_worked: totalHours.toFixed(2),
-            shifts: shifts
-        });
-
-    } catch (err) {
-        console.error("Error fetching employee activity:", err);
-        res.status(500).json({ error: err.message });
+    // If not provided, default to today
+    if (!startDate) {
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
     }
+
+    const startIso = start.toISOString();
+    const endIso = end.toISOString();
+
+    // 1. Fetch Active Tables started by this user
+    // Note: created_by might be null for old records
+    const activeTablesQuery = supabase
+      .from('activetables')
+      .select('*', { count: 'exact', head: true })
+      .eq('created_by', id)
+      .gte('start_time', startIso)
+      .lte('start_time', endIso);
+
+    // 2. Fetch Bills generated by this user
+    const billsQuery = supabase
+      .from('bills')
+      .select('total_amount', { count: 'exact' })
+      .eq('created_by', id)
+      .gte('createdAt', startIso)
+      .lte('createdAt', endIso);
+
+    // 3. Fetch Orders placed by this user (if we decide to track order placement separately)
+    // Currently 'orders' has 'userId' which is customer. We added 'created_by' in migration.
+    const ordersQuery = supabase
+      .from('orders')
+      .select('total', { count: 'exact' })
+      .eq('created_by', id)
+      .gte('createdAt', startIso)
+      .lte('createdAt', endIso);
+
+    // 4. Fetch Shifts (Attendance)
+    const shiftsQuery = supabase
+      .from('shifts')
+      .select('*')
+      .eq('user_id', id)
+      .gte('check_in_time', startIso)
+      .lte('check_in_time', endIso);
+
+    const [
+      { count: tablesCount },
+      { data: bills, count: billsCount },
+      { data: orders, count: ordersCount },
+      { data: shifts }
+    ] = await Promise.all([
+      activeTablesQuery,
+      billsQuery,
+      ordersQuery,
+      shiftsQuery
+    ]);
+
+    const totalBillAmount = (bills || []).reduce((sum, b) => sum + (Number(b.total_amount) || 0), 0);
+    const totalOrderAmount = (orders || []).reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
+    // Calculate hours worked in this period
+    let totalHours = 0;
+    (shifts || []).forEach(s => {
+      if (s.total_hours) {
+        totalHours += Number(s.total_hours);
+      } else if (s.check_in_time && s.check_out_time) {
+        const diff = new Date(s.check_out_time) - new Date(s.check_in_time);
+        totalHours += diff / (1000 * 60 * 60);
+      } else if (s.check_in_time && s.status === 'active') {
+        // Ongoing shift
+        const diff = new Date() - new Date(s.check_in_time);
+        totalHours += diff / (1000 * 60 * 60);
+      }
+    });
+
+    res.json({
+      tables_booked: tablesCount || 0,
+      bills_generated: billsCount || 0,
+      bill_revenue: totalBillAmount,
+      orders_placed: ordersCount || 0,
+      order_revenue: totalOrderAmount,
+      hours_worked: totalHours.toFixed(2),
+      shifts: shifts
+    });
+
+  } catch (err) {
+    console.error("Error fetching employee activity:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

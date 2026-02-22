@@ -115,6 +115,18 @@ router.post("/login", async (req, res) => {
     // Return user info (exclude sensitive data)
     const { passwordHash: _, ...userWithoutPassword } = freshUser;
 
+    // Attach stationphotourl to user object for frontend consumption
+    if (freshUser.stationid) {
+      try {
+        const station = await Station.findByPk(freshUser.stationid);
+        if (station && station.stationphotourl) {
+          userWithoutPassword.stationphotourl = station.stationphotourl;
+        }
+      } catch (err) {
+        console.error("Failed to fetch station photo during login", err);
+      }
+    }
+
     res.json({
       success: true,
       accessToken,
@@ -288,7 +300,21 @@ router.post("/verify-otp", async (req, res) => {
     await tokenStore.setRefreshToken(freshUserForToken.id, refreshToken);
 
     // Return user info (exclude sensitive data)
-    const { passwordHash: _, ...userWithoutPassword } = freshUserForToken;
+    const { passwordHash: _, ...userWithoutPassword } = freshUserForToken
+      ? freshUserForToken.toJSON()
+      : {};
+
+    // Attach stationphotourl to user object for frontend consumption
+    if (freshUserForToken && freshUserForToken.stationid) {
+      try {
+        const station = await Station.findByPk(freshUserForToken.stationid);
+        if (station && station.stationphotourl) {
+          userWithoutPassword.stationphotourl = station.stationphotourl;
+        }
+      } catch (err) {
+        console.error("Failed to fetch station photo during OTP verify", err);
+      }
+    }
 
     res.json({
       message: "Email verified successfully. Welcome!",
@@ -403,6 +429,11 @@ router.get("/me", auth, async (req, res) => {
 
     const { password, ...userWithoutPassword } = user;
 
+    // Attach stationphotourl to user object for frontend consumption
+    if (stationInfo && stationInfo.stationphotourl) {
+      userWithoutPassword.stationphotourl = stationInfo.stationphotourl;
+    }
+
     res.json({
       user: userWithoutPassword,
       station: stationInfo,
@@ -415,6 +446,47 @@ router.get("/me", auth, async (req, res) => {
     });
   } catch (err) {
     console.error("Get user error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// @route   PUT /api/auth/profile
+// @desc    Update current user and station info
+// @access  Private
+router.put("/profile", auth, async (req, res) => {
+  try {
+    const { name, phone, stationname, locationcity, locationstate, stationphotourl } = req.body;
+
+    // 1. Update User info
+    const userUpdate = {};
+    if (name !== undefined) userUpdate.name = name;
+    if (phone !== undefined) userUpdate.phone = phone;
+
+    if (Object.keys(userUpdate).length > 0) {
+      await User.update(userUpdate, { where: { id: req.user.id } });
+    }
+
+    // 2. Update Station info if the user has a station
+    const user = await User.findByPk(req.user.id);
+    if (user && user.stationid) {
+      const stationUpdate = {};
+
+      // Keep ownername in sync with User name if updated
+      if (name !== undefined) stationUpdate.ownername = name;
+      if (phone !== undefined) stationUpdate.ownerphone = phone;
+      if (stationname !== undefined) stationUpdate.stationname = stationname;
+      if (locationcity !== undefined) stationUpdate.locationcity = locationcity;
+      if (locationstate !== undefined) stationUpdate.locationstate = locationstate;
+      if (stationphotourl !== undefined) stationUpdate.stationphotourl = stationphotourl;
+
+      if (Object.keys(stationUpdate).length > 0) {
+        await Station.update(stationUpdate, { where: { id: user.stationid } });
+      }
+    }
+
+    res.json({ success: true, message: "Profile updated successfully." });
+  } catch (err) {
+    console.error("Update profile error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });

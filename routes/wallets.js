@@ -422,7 +422,7 @@ router.post(
   authorize("staff", "admin", "owner"),
   async (req, res) => {
     try {
-      const { customer_id, amount } = req.body;
+      const { customer_id, amount, note } = req.body;
 
       if (!amount || amount <= 0) {
         return res.status(400).json({ error: "Invalid amount" });
@@ -460,6 +460,19 @@ router.post(
         description: "Money Deducted via Panel",
         createdAt: new Date(),
       });
+      await WalletTransaction.create(
+        {
+          walletid: wallet.id,
+          customerid: wallet.customerid,
+          amount: amount,
+          balancebefore: wallet.balance,
+          balanceafter: newBalance,
+          stationid: req.stationId,
+          type: "DEDUCT",
+          description: note || "Money Deducted via Panel",
+          createdAt: new Date()
+        }
+      );
 
       // Update local object for response
       wallet.balance = newBalance;

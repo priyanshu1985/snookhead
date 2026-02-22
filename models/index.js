@@ -306,6 +306,52 @@ const models = {
     },
   },
 
+  MenuItemVariation: {
+    tableName: "menu_item_variations",
+    async findAll(filter = {}) {
+      let query = getDb()
+        .from(this.tableName)
+        .select("*");
+      if (filter.where) {
+        Object.keys(filter.where).forEach((key) => {
+          query = query.eq(key, filter.where[key]);
+        });
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+
+    async create(variationData) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .insert(variationData)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+
+    async update(variationData, filter) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .update(variationData)
+        .match(filter.where || filter)
+        .select();
+      if (error) throw error;
+      return data;
+    },
+
+    async destroy(filter) {
+      const { error } = await getDb()
+        .from(this.tableName)
+        .delete()
+        .match(filter.where || filter);
+      if (error) throw error;
+      return true;
+    },
+  },
+
   Order: {
     tableName: "orders", // Fixed: should be plural to match actual database table
     async findAll(filter = {}) {
@@ -1295,6 +1341,7 @@ export const {
   Shift,
   WalletTransaction,
   InventoryLog,
+  MenuItemVariation,
 } = models;
 
 export default models;
