@@ -57,13 +57,13 @@ export default function AfterBooking({ route, navigation }) {
   const isCountdownMode =
     timeOption === 'Set Time' || (!isStopwatchMode && !isFrameMode);
   const [menuItems, setMenuItems] = useState([]);
-  
+
   // Two-Tier Category States
   const [mainCategories, setMainCategories] = useState([]);
   const [selectedMainCategory, setSelectedMainCategory] = useState('');
   const [subCategories, setSubCategories] = useState([]);
   const [selectedSubCategory, setSelectedSubCategory] = useState('');
-  
+
   const [loading, setLoading] = useState(false);
   const [billItems, setBillItems] = useState([]);
   const [totalBill, setTotalBill] = useState(0);
@@ -476,10 +476,15 @@ export default function AfterBooking({ route, navigation }) {
       // 1. Extract Main Categories
       const uniqueMainCats = Array.from(
         new Set(
-          menuItems.map(m => (m.item_type || 'prepared').toLowerCase()).filter(Boolean),
+          menuItems
+            .map(m => (m.item_type || 'prepared').toLowerCase())
+            .filter(Boolean),
         ),
       );
-      if (uniqueMainCats.length && !uniqueMainCats.includes(selectedMainCategory)) {
+      if (
+        uniqueMainCats.length &&
+        !uniqueMainCats.includes(selectedMainCategory)
+      ) {
         setMainCategories(uniqueMainCats);
         setSelectedMainCategory(uniqueMainCats[0]);
       } else if (uniqueMainCats.length) {
@@ -487,21 +492,28 @@ export default function AfterBooking({ route, navigation }) {
       }
 
       // 2. Extract Sub Categories
-      const activeMainCat = uniqueMainCats.includes(selectedMainCategory) ? selectedMainCategory : (uniqueMainCats[0] || 'prepared');
+      const activeMainCat = uniqueMainCats.includes(selectedMainCategory)
+        ? selectedMainCategory
+        : uniqueMainCats[0] || 'prepared';
       const relevantSubCats = Array.from(
         new Set(
           menuItems
-            .filter(m => (m.item_type || 'prepared').toLowerCase() === activeMainCat)
+            .filter(
+              m => (m.item_type || 'prepared').toLowerCase() === activeMainCat,
+            )
             .map(m => (m.category || '').toLowerCase())
             .filter(Boolean),
         ),
       );
-      
+
       setSubCategories(prevSubCats => {
-        if (relevantSubCats.length > 0 && !relevantSubCats.includes(selectedSubCategory)) {
-           setSelectedSubCategory(relevantSubCats[0]);
+        if (
+          relevantSubCats.length > 0 &&
+          !relevantSubCats.includes(selectedSubCategory)
+        ) {
+          setSelectedSubCategory(relevantSubCats[0]);
         } else if (relevantSubCats.length === 0) {
-           setSelectedSubCategory('');
+          setSelectedSubCategory('');
         }
         return relevantSubCats;
       });
@@ -773,8 +785,12 @@ export default function AfterBooking({ route, navigation }) {
   // Get filtered menu items according to selected main and subcategories
   const getFilteredMenuItems = () => {
     return menuItems.filter(item => {
-      const matchMain = (item.item_type || 'prepared').toLowerCase() === (selectedMainCategory || 'prepared').toLowerCase();
-      const matchSub = (item.category || '').toLowerCase() === (selectedSubCategory || '').toLowerCase();
+      const matchMain =
+        (item.item_type || 'prepared').toLowerCase() ===
+        (selectedMainCategory || 'prepared').toLowerCase();
+      const matchSub =
+        (item.category || '').toLowerCase() ===
+        (selectedSubCategory || '').toLowerCase();
       return matchMain && matchSub;
     });
   };
@@ -1294,14 +1310,16 @@ export default function AfterBooking({ route, navigation }) {
                 key={cat}
                 style={[
                   styles.mainCategoryButton,
-                  selectedMainCategory === cat && styles.mainCategoryButtonActive,
+                  selectedMainCategory === cat &&
+                    styles.mainCategoryButtonActive,
                 ]}
                 onPress={() => setSelectedMainCategory(cat)}
               >
                 <Text
                   style={[
                     styles.mainCategoryText,
-                    selectedMainCategory === cat && styles.mainCategoryTextActive,
+                    selectedMainCategory === cat &&
+                      styles.mainCategoryTextActive,
                   ]}
                 >
                   {cat.charAt(0).toUpperCase() + cat.slice(1)}
@@ -1320,14 +1338,16 @@ export default function AfterBooking({ route, navigation }) {
                   key={category}
                   style={[
                     styles.categoryButton,
-                    selectedSubCategory === category && styles.categoryButtonActive,
+                    selectedSubCategory === category &&
+                      styles.categoryButtonActive,
                   ]}
                   onPress={() => setSelectedSubCategory(category)}
                 >
                   <Text
                     style={[
                       styles.categoryText,
-                      selectedSubCategory === category && styles.categoryTextActive,
+                      selectedSubCategory === category &&
+                        styles.categoryTextActive,
                     ]}
                   >
                     {category}
@@ -1509,15 +1529,24 @@ export default function AfterBooking({ route, navigation }) {
             )}
           </View>
         )}
-
       </ScrollView>
 
       {/* Fixed Bottom Button */}
-      <View style={[styles.fixedBottomContainer, { flexDirection: 'row', gap: 12, paddingHorizontal: 20 }]}>
+      <View
+        style={[
+          styles.fixedBottomContainer,
+          { flexDirection: 'row', gap: 12, paddingHorizontal: 20 },
+        ]}
+      >
         <TouchableOpacity
           style={[
             styles.generateBillButton,
-            { flex: 1, backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#FF8C42' }
+            {
+              flex: 1,
+              backgroundColor: '#FFFFFF',
+              borderWidth: 2,
+              borderColor: '#FF8C42',
+            },
           ]}
           onPress={handleShowBillPreview}
           disabled={isCalculatingBill}
@@ -1954,7 +1983,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF5EE',
     borderColor: '#FF8C42',
   },
-  
+
   // Main Categories
   mainCategoriesContainer: {
     flexDirection: 'row',
@@ -1983,7 +2012,7 @@ const styles = StyleSheet.create({
   mainCategoryTextActive: {
     color: '#FFFFFF',
   },
-  
+
   categoryText: {
     fontSize: 13,
     color: '#696969',
@@ -2005,21 +2034,22 @@ const styles = StyleSheet.create({
   foodCard: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 12,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 8,
     elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
     borderWidth: 1,
     borderColor: '#F0F0F0',
   },
   foodImageContainer: {
     position: 'relative',
-    width: 100,
-    height: 100,
-    borderRadius: 12,
+    width: 64,
+    height: 64,
+    borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#F5F5F5',
   },
@@ -2035,14 +2065,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   foodEmoji: {
-    fontSize: 36,
+    fontSize: 24, // reduced emoji size
   },
   vegIndicator: {
     position: 'absolute',
-    top: 6,
-    left: 6,
-    width: 16,
-    height: 16,
+    top: 4,
+    left: 4,
+    width: 14,
+    height: 14,
     borderWidth: 1.5,
     borderRadius: 3,
     backgroundColor: '#FFFFFF',
@@ -2050,38 +2080,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   vegDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   foodCardContent: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 10,
     justifyContent: 'space-between',
   },
   foodCardHeader: {
     flex: 1,
   },
   foodCardName: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: '#1C1C1C',
-    marginBottom: 4,
+    marginBottom: 2,
     letterSpacing: 0.2,
   },
   foodCardDescription: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#93959F',
-    lineHeight: 16,
+    lineHeight: 14,
   },
   foodCardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 8,
+    marginTop: 6,
   },
   foodCardPrice: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: '#1C1C1C',
   },
@@ -2092,24 +2122,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#FF8C42',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 16,
+    borderRadius: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
     position: 'relative',
   },
   addBtnText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#FF8C42',
     letterSpacing: 0.5,
   },
   addBtnPlus: {
     position: 'absolute',
-    top: -6,
-    right: -6,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    top: -4,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#FF8C42',
@@ -2121,20 +2151,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FF8C42',
-    borderRadius: 8,
+    borderRadius: 6,
     overflow: 'hidden',
   },
   quantityBtnCompact: {
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
     justifyContent: 'center',
     alignItems: 'center',
   },
   quantityTextCompact: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#FFFFFF',
-    minWidth: 24,
+    minWidth: 20,
     textAlign: 'center',
   },
 

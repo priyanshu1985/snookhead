@@ -143,7 +143,7 @@ export default function ScannerScreen({ navigation, route }) {
 
       if (response.ok && result.wallet && result.customer) {
         // Check if customer is active
-        if (!result.customer.is_active) {
+        if (!result.customer.isactive) {
           Alert.alert(
             'Wallet Deactivated',
             'Owner has deactivated your wallet. Please contact the owner to activate your account.',

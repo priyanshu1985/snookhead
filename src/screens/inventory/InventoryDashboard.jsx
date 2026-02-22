@@ -12,11 +12,12 @@ import {
   TextInput,
   Linking,
   Modal,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useFocusEffect } from '@react-navigation/native';
-import { menuAPI } from '../../services/api';
+import { menuAPI, inventoryAPI } from '../../services/api';
 import { Picker } from '@react-native-picker/picker';
 
 const InventoryDashboard = ({ navigation }) => {
@@ -32,6 +33,12 @@ const InventoryDashboard = ({ navigation }) => {
     operation: 'add',
     reason: '',
   });
+
+  // History Modal States
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyData, setHistoryData] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
 
   const filters = ['All', 'Low Stock', 'Out of Stock'];
 
@@ -68,6 +75,11 @@ const InventoryDashboard = ({ navigation }) => {
   };
 
   const filteredItems = inventoryItems.filter(item => {
+    // Only show packed items in inventory tracking
+    if (item.item_type?.toLowerCase() !== 'packed') {
+      return false;
+    }
+
     const itemName = item.name || item.item_name || '';
     const matchesSearch = itemName
       .toLowerCase()
@@ -146,44 +158,128 @@ const InventoryDashboard = ({ navigation }) => {
     setShowQuantityModal(true);
   };
 
-  const InventoryItemCard = ({ item }) => (
-    <View style={styles.itemCard}>
-      <View style={styles.itemImageContainer}>
-        <Icon name="inventory-2" size={30} color="#FF8C42" />
-      </View>
+  const handleViewHistory = async item => {
+    setSelectedHistoryItem(item);
+    setShowHistoryModal(true);
+    setHistoryLoading(true);
+    setHistoryData([]); // Clear old data
 
-      <View style={styles.itemDetails}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.stockInfo}>
-          In Stock: <Text style={styles.stockNumber}>{item.stock}</Text> |
-          Threshold:{' '}
-          <Text style={styles.thresholdNumber}>{item.threshold}</Text>
-        </Text>
-        <Text style={styles.mrpText}>Price: ₹{item.price || 0}</Text>
+    try {
+      const response = await inventoryAPI.getHistory({
+        itemId: item.id,
+        limit: 50,
+      });
 
-        <View style={styles.quantityContainer}>
-          <Text style={styles.qtyLabel}>Qty:</Text>
+      if (response && response.success) {
+        setHistoryData(response.data || []);
+      } else {
+        setHistoryData([]);
+      }
+    } catch (error) {
+      console.error('Error fetching inventory history:', error);
+      Alert.alert('Error', 'Failed to load item history.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const InventoryItemCard = ({ item, index }) => {
+    // Determine stock color
+    const isLowStock = item.stock <= item.threshold;
+    const isOutOfStock = item.stock <= 0;
+    const stockColor = isOutOfStock
+      ? '#F44336'
+      : isLowStock
+      ? '#FF9800'
+      : '#4CAF50';
+
+    return (
+      <View style={styles.itemCard}>
+        {/* Left Index Circle */}
+        <View style={styles.indexCircleContainer}>
+          <View style={styles.indexCircle}>
+            <Text style={styles.indexCircleText}>{index + 1}</Text>
+          </View>
         </View>
 
-        <View style={styles.actionButtons}>
+        {/* Middle Details (Icon + Title + Price String) */}
+        <View style={styles.itemDetails}>
+          <View style={styles.itemDetailsTop}>
+            <Icon name="adjust" size={12} color="#FF8C42" style={styles.detailsIcon} />
+            <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+          </View>
+          <Text style={styles.pricingText}>
+            ₹{item.price || 0}
+            <Text style={styles.bulletSeparator}> • </Text>
+            Buy: ₹{item.purchasePrice || 0}
+          </Text>
+        </View>
+
+        {/* Right Stock Number */}
+        <View style={styles.stockCountContainer}>
+          <Text style={[styles.largeStockNumber, { color: stockColor }]}>
+            {item.stock}
+          </Text>
+        </View>
+
+        {/* Actions (History icon + Add Stock button) */}
+        <View style={styles.rightActionContainer}>
+          <TouchableOpacity
+            style={styles.historyMenuButton}
+            onPress={() => handleViewHistory(item)}
+          >
+            <Icon name="history" size={18} color="#666" />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.restockButton}
             onPress={() => restockItem(item)}
           >
-            <Text style={styles.restockButtonText}>Restock Item</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.callButton}
-            onPress={() => callSupplier(item.supplier_contact)}
-          >
-            <Icon name="call" size={16} color="#fff" />
-            <Text style={styles.callButtonText}>Call supplier</Text>
+            <Text style={styles.restockButtonText}>+ Add Stock</Text>
           </TouchableOpacity>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
+
+  const renderHistoryItem = ({ item }) => {
+    const isAdd = item.action === 'stock_added' || item.action === 'restock';
+    const isSubtract = item.action === 'stock_removed' || item.action === 'sale';
+    const operator = isAdd ? '+' : isSubtract ? '-' : '';
+    const color = isAdd ? '#4CAF50' : isSubtract ? '#F44336' : '#FF9800';
+
+    return (
+      <View style={styles.historyItemCard}>
+        <View style={styles.historyItemHeader}>
+          <Text style={styles.historyItemAction}>
+            {item.action ? item.action.replace('_', ' ').toUpperCase() : 'UPDATE'}
+          </Text>
+          <Text style={styles.historyItemDate}>
+            {new Date(item.created_at).toLocaleDateString()}{' '}
+            {new Date(item.created_at).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </Text>
+        </View>
+
+        <View style={styles.historyItemBody}>
+          <View>
+            <Text style={styles.historyItemReason}>
+              {item.reason || 'No reason provided'}
+            </Text>
+            {item.user_name && (
+              <Text style={styles.historyItemUser}>By: {item.user_name}</Text>
+            )}
+          </View>
+          <Text style={[styles.historyItemQty, { color }]}>
+            {operator}
+            {item.quantity_change}
+          </Text>
+        </View>
+      </View>
+    );
+  };
 
   if (loading && inventoryItems.length === 0) {
     return (
@@ -266,8 +362,8 @@ const InventoryDashboard = ({ navigation }) => {
           }
           showsVerticalScrollIndicator={false}
         >
-          {filteredItems.map(item => (
-            <InventoryItemCard key={item.id} item={item} />
+          {filteredItems.map((item, index) => (
+            <InventoryItemCard key={item.id} item={item} index={index} />
           ))}
 
           {filteredItems.length === 0 && (
@@ -384,6 +480,53 @@ const InventoryDashboard = ({ navigation }) => {
           </View>
         </Modal>
 
+        {/* History Modal */}
+        <Modal
+          visible={showHistoryModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowHistoryModal(false)}
+        >
+          <View style={styles.historyOverlay}>
+            <View style={styles.historyContent}>
+              <View style={styles.historyHeader}>
+                <Text style={styles.historyTitle}>
+                  {selectedHistoryItem
+                    ? `${selectedHistoryItem.name} History`
+                    : 'Item History'}
+                </Text>
+                <TouchableOpacity onPress={() => setShowHistoryModal(false)}>
+                  <Icon name="close" size={24} color="#333" />
+                </TouchableOpacity>
+              </View>
+
+              {historyLoading ? (
+                <View style={styles.historyLoadingContainer}>
+                  <ActivityIndicator size="large" color="#FF8C42" />
+                  <Text style={styles.historyLoadingText}>
+                    Loading history...
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={historyData}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderHistoryItem}
+                  contentContainerStyle={styles.historyListContent}
+                  ListEmptyComponent={
+                    <View style={styles.historyEmptyContainer}>
+                      <Icon name="history" size={48} color="#ccc" />
+                      <Text style={styles.historyEmptyText}>
+                        No history records found
+                      </Text>
+                    </View>
+                  }
+                />
+              )}
+            </View>
+          </View>
+        </Modal>
+
         {/* Add New Item Button area used to be here */}
       </View>
     </SafeAreaView>
@@ -483,83 +626,90 @@ const styles = StyleSheet.create({
   itemCard: {
     flexDirection: 'row',
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  itemImageContainer: {
-    width: 60,
-    height: 60,
-    backgroundColor: '#f5f5f5',
     borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF8C42',
+    alignItems: 'center',
+  },
+  indexCircleContainer: {
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
   },
+  indexCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FF8C42',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  indexCircleText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   itemDetails: {
     flex: 1,
+    justifyContent: 'center',
+  },
+  itemDetailsTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  detailsIcon: {
+    marginRight: 6,
   },
   itemName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    flexShrink: 1,
+  },
+  pricingText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  bulletSeparator: {
+    color: '#999',
+  },
+  stockCountContainer: {
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    width: 50,
+  },
+  largeStockNumber: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
+    fontWeight: '700',
   },
-  stockInfo: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 4,
-  },
-  stockNumber: {
-    fontWeight: '600',
-    color: '#333',
-  },
-  thresholdNumber: {
-    fontWeight: '600',
-    color: '#333',
-  },
-  mrpText: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 8,
-  },
-  quantityContainer: {
-    marginBottom: 12,
-  },
-  qtyLabel: {
-    fontSize: 13,
-    color: '#666',
-  },
-  actionButtons: {
+  rightActionContainer: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    marginLeft: 16,
+  },
+  historyMenuButton: {
+    width: 34,
+    height: 34,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
   },
   restockButton: {
     backgroundColor: '#FF8C42',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  restockButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  callButton: {
-    backgroundColor: '#4CAF50',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    borderRadius: 4,
   },
-  callButtonText: {
+  restockButtonText: {
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
@@ -701,6 +851,100 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 16,
+  },
+
+  historyOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  historyContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: '75%',
+    padding: 20,
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  historyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+  },
+  historyLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  historyLoadingText: {
+    marginTop: 12,
+    color: '#666',
+    fontSize: 16,
+  },
+  historyEmptyContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  historyEmptyText: {
+    marginTop: 12,
+    color: '#999',
+    fontSize: 15,
+  },
+  historyListContent: {
+    paddingBottom: 20,
+  },
+  historyItemCard: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+  },
+  historyItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  historyItemAction: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#666',
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  historyItemDate: {
+    fontSize: 12,
+    color: '#999',
+  },
+  historyItemBody: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  historyItemReason: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 4,
+  },
+  historyItemUser: {
+    fontSize: 12,
+    color: '#666',
+  },
+  historyItemQty: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
 

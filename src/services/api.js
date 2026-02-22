@@ -800,6 +800,15 @@ export const inventoryAPI = {
     return await makeRequest('/api/inventory/alerts/low-stock');
   },
 
+  // Get stock history for an item or globally
+  getHistory: async (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    const url = queryString
+      ? `/api/inventory/history?${queryString}`
+      : '/api/inventory/history';
+    return await makeRequest(url);
+  },
+
   // Bulk operations
   bulkUpdate: async updates => {
     return await makeRequest('/api/inventory/bulk-update', {

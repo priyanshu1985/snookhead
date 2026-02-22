@@ -168,7 +168,23 @@ export default function OrdersScreen({ navigation }) {
       }
       return [...arr, { item: food, qty: 1 }];
     });
-    setShowConfirmModal(true);
+  };
+
+  const handleRemoveFood = id => {
+    setCartItems(prev => {
+      const arr = Array.isArray(prev) ? prev : [];
+      const idx = arr.findIndex(ci => ci.item.id === id);
+      if (idx !== -1) {
+        const clone = [...arr];
+        if (clone[idx].qty > 1) {
+          clone[idx] = { ...clone[idx], qty: clone[idx].qty - 1 };
+          return clone;
+        } else {
+          return clone.filter(ci => ci.item.id !== id);
+        }
+      }
+      return prev;
+    });
   };
 
   const handleConfirmFood = async () => {
@@ -377,47 +393,93 @@ export default function OrdersScreen({ navigation }) {
             )}
           </View>
 
-          {/* Food Grid from menuItems */}
-          <FlatList
-            data={filteredFoodItems}
-            keyExtractor={item =>
-              item.id ? String(item.id) : String(item.name)
-            }
-            numColumns={2}
-            columnWrapperStyle={styles.foodRow}
-            contentContainerStyle={styles.foodListContent}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.foodCard}
-                onPress={() => handleAddFood(item)}
-              >
-                {item.imageUrl || item.imageurl ? (
-                  <Image
-                    source={{
-                      uri: getMenuImageUrl(item.imageUrl || item.imageurl),
-                    }}
-                    style={styles.foodImage}
-                    resizeMode="cover"
-                    onError={e =>
-                      console.log('Menu image error:', e.nativeEvent.error)
-                    }
-                  />
-                ) : (
-                  <View style={[styles.foodImage, styles.foodImagePlaceholder]}>
-                    <Icon name="fast-food-outline" size={32} color="#FF8C42" />
+          {/* Food List from menuItems */}
+          <View style={styles.foodListContainer}>
+            <FlatList
+              data={filteredFoodItems}
+              keyExtractor={item =>
+                item.id ? String(item.id) : String(item.name)
+              }
+              contentContainerStyle={styles.foodListContent}
+              renderItem={({ item }) => {
+                const cartItem = cartItems.find(ci => ci.item.id === item.id);
+                return (
+                  <View style={styles.foodCard}>
+                    {/* Food Image */}
+                    <View style={styles.foodImageContainer}>
+                      {item.imageUrl || item.imageurl ? (
+                        <Image
+                          source={{
+                            uri: getMenuImageUrl(item.imageUrl || item.imageurl),
+                          }}
+                          style={styles.foodImage}
+                          resizeMode="cover"
+                          onError={e =>
+                            console.log('Menu image error:', e.nativeEvent.error)
+                          }
+                        />
+                      ) : (
+                        <View style={styles.foodImagePlaceholder}>
+                          <Icon name="fast-food-outline" size={32} color="#FF8C42" />
+                        </View>
+                      )}
+                      {/* Veg/Non-veg indicator */}
+                      <View style={[styles.vegIndicator, { borderColor: '#0F8A0F' }]}>
+                        <View style={[styles.vegDot, { backgroundColor: '#0F8A0F' }]} />
+                      </View>
+                    </View>
+
+                    {/* Food Details */}
+                    <View style={styles.foodCardContent}>
+                      <View style={styles.foodCardHeader}>
+                        <Text style={styles.foodName}>{item.name}</Text>
+                        {item.description && (
+                          <Text style={styles.foodDescription} numberOfLines={2}>
+                            {item.description}
+                          </Text>
+                        )}
+                      </View>
+
+                      <View style={styles.foodCardFooter}>
+                        <Text style={styles.foodPrice}>₹ {item.price}</Text>
+
+                        {/* Add/Quantity Controls */}
+                        {cartItem ? (
+                          <View style={styles.quantityControlsCompact}>
+                            <TouchableOpacity
+                              style={styles.quantityBtnCompact}
+                              onPress={() => handleRemoveFood(item.id)}
+                            >
+                              <Icon name="remove" size={16} color="#FFFFFF" />
+                            </TouchableOpacity>
+                            <Text style={styles.quantityTextCompact}>
+                              {cartItem.qty}
+                            </Text>
+                            <TouchableOpacity
+                              style={styles.quantityBtnCompact}
+                              onPress={() => handleAddFood(item)}
+                            >
+                              <Icon name="add" size={16} color="#FFFFFF" />
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.addBtnCompact}
+                            onPress={() => handleAddFood(item)}
+                          >
+                            <Text style={styles.addBtnText}>ADD</Text>
+                            <View style={styles.addBtnPlus}>
+                              <Icon name="add" size={12} color="#FF8C42" />
+                            </View>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
                   </View>
-                )}
-                <Text style={styles.foodName}>{item.name}</Text>
-                <Text style={styles.foodPrice}>₹ {item.price}</Text>
-                <TouchableOpacity
-                  style={styles.addButton}
-                  onPress={() => handleAddFood(item)}
-                >
-                  <Icon name="add" size={18} color="#FF8C42" />
-                </TouchableOpacity>
-              </TouchableOpacity>
-            )}
-          />
+                );
+              }}
+            />
+          </View>
         </>
       ) : (
         <>
@@ -437,6 +499,26 @@ export default function OrdersScreen({ navigation }) {
             searchQuery={searchQuery}
           />
         </>
+      )}
+
+      {/* Sticky Bottom Cart Summary */}
+      {cartItems.length > 0 && !showConfirmModal && (
+        <View style={styles.stickyCartContainer}>
+          <View style={styles.stickyCartInfo}>
+            <Text style={styles.stickyCartItems}>
+              {cartItems.reduce((acc, ci) => acc + ci.qty, 0)} ITEM
+              {cartItems.reduce((acc, ci) => acc + ci.qty, 0) > 1 ? 'S' : ''}
+            </Text>
+            <Text style={styles.stickyCartPrice}>₹ {cartTotal}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.stickyCartBtn}
+            onPress={() => setShowConfirmModal(true)}
+          >
+            <Text style={styles.stickyCartBtnText}>View Cart</Text>
+            <Icon name="chevron-forward" size={16} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Confirm Modal - Replaced with Absolute View */}
@@ -702,62 +784,194 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Food List
-  foodListContent: {
-    padding: 16,
-    paddingTop: 12,
-  },
-  foodRow: {
-    justifyContent: 'space-between',
-    marginBottom: 14,
+  foodListContainer: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    gap: 8,
+    paddingBottom: 100, // padding for sticky cart
   },
   foodCard: {
-    flex: 1,
+    flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 14,
-    marginHorizontal: 6,
-    alignItems: 'center',
-    elevation: 3,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 8,
+    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+  },
+  foodImageContainer: {
+    position: 'relative',
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#F5F5F5',
   },
   foodImage: {
-    width: 100,
-    height: 80,
-    borderRadius: 12,
-    marginBottom: 10,
-    backgroundColor: '#FFF8F5',
+    width: '100%',
+    height: '100%',
   },
   foodImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#FFF5EE',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFF8F5',
+  },
+  vegIndicator: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    width: 14,
+    height: 14,
+    borderWidth: 1.5,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vegDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  foodCardContent: {
+    flex: 1,
+    marginLeft: 10,
+    justifyContent: 'space-between',
+  },
+  foodCardHeader: {
+    flex: 1,
   },
   foodName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1A1A1A',
-    marginBottom: 4,
-    textAlign: 'center',
+    color: '#1C1C1C',
+    marginBottom: 2,
+    letterSpacing: 0.2,
+  },
+  foodDescription: {
+    fontSize: 11,
+    color: '#93959F',
+    lineHeight: 14,
+  },
+  foodCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
   },
   foodPrice: {
-    fontSize: 15,
-    color: '#FF8C42',
-    marginBottom: 10,
+    fontSize: 14,
     fontWeight: '700',
+    color: '#1C1C1C',
   },
-  addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFF8F5',
-    borderWidth: 2,
-    borderColor: '#FF8C42',
+  // Compact Add Button
+  addBtnCompact: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FF8C42',
+    borderRadius: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    position: 'relative',
+  },
+  addBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FF8C42',
+    letterSpacing: 0.5,
+  },
+  addBtnPlus: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FF8C42',
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Quantity Controls
+  quantityControlsCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF8C42',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  quantityBtnCompact: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quantityTextCompact: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    minWidth: 20,
+    textAlign: 'center',
+  },
+
+  // Sticky Cart Summary
+  stickyCartContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FF8C42',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    zIndex: 99,
+  },
+  stickyCartInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  stickyCartItems: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    opacity: 0.9,
+  },
+  stickyCartPrice: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  stickyCartBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 4,
+  },
+  stickyCartBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 
   // Modal

@@ -12,7 +12,13 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Audio } from 'expo-av';
 
-export default function TableCard({ table, color, gameImageUrl, onPress, onLongPress }) {
+export default function TableCard({
+  table,
+  color,
+  gameImageUrl,
+  onPress,
+  onLongPress,
+}) {
   const [isPortrait, setIsPortrait] = React.useState(false);
   const [currentTime, setCurrentTime] = React.useState(Date.now());
   if (!table) return null;
@@ -102,7 +108,6 @@ export default function TableCard({ table, color, gameImageUrl, onPress, onLongP
     useNativeDriver: true,
     easing: Easing.out(Easing.ease),
   }).start();
-
 
   // Update timer every second for occupied tables AND reserved tables with upcoming reservations
   React.useEffect(() => {
@@ -410,8 +415,6 @@ export default function TableCard({ table, color, gameImageUrl, onPress, onLongP
                 {table.name || `Table ${table.id}`}
               </Text>
             </View>
-
-
           </View>
         </View>
       )}

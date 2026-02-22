@@ -345,72 +345,87 @@ export default function TableOrder({ route, navigation }) {
         </ScrollView>
       )}
 
-      {/* Menu Grid */}
-      <FlatList
-        data={filteredItems}
-        keyExtractor={item => String(item.id || item.name)}
-        numColumns={2}
-        columnWrapperStyle={styles.gridRow}
-        contentContainerStyle={styles.gridContent}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.foodCard}
-            activeOpacity={0.8}
-            onPress={() => handleAddFood(item)}
-          >
-            <View style={styles.imageContainer}>
-              {item.image ? (
-                <Image source={{ uri: item.image }} style={styles.foodImage} />
-              ) : (
-                <View
-                  style={[styles.foodImage, { backgroundColor: '#FFF8F0' }]}
-                >
-                  <Icon name="fast-food-outline" size={40} color="#FF8C42" />
-                </View>
-              )}
-            </View>
-            <Text style={styles.foodName}>{item.name}</Text>
-            <Text style={styles.foodPrice}>₹{item.price}</Text>
-
-            {(() => {
-              const cartItem = cartItems.find(ci => ci.item.id === item.id);
-              if (cartItem) {
-                return (
-                  <View style={styles.quantityControls}>
-                    <TouchableOpacity
-                      style={styles.qtyButton}
-                      onPress={() => handleDecreaseFood(item)}
-                    >
-                      <Icon name="remove" size={16} color="#FF8C42" />
-                    </TouchableOpacity>
-                    <Text style={styles.qtyText}>{cartItem.qty}</Text>
-                    <TouchableOpacity
-                      style={styles.qtyButton}
-                      onPress={() => handleAddFood(item)}
-                    >
-                      <Icon name="add" size={16} color="#FF8C42" />
-                    </TouchableOpacity>
+      {/* Menu List */}
+      <View style={styles.foodListContainer}>
+        <FlatList
+          data={filteredItems}
+          keyExtractor={item => String(item.id || item.name)}
+          contentContainerStyle={styles.foodListContent}
+          renderItem={({ item }) => {
+            const cartItem = cartItems.find(ci => ci.item.id === item.id);
+            return (
+              <View style={styles.foodCard}>
+                {/* Food Image */}
+                <View style={styles.foodImageContainer}>
+                  {item.image ? (
+                    <Image source={{ uri: item.image }} style={styles.foodImage} />
+                  ) : (
+                    <View style={styles.foodImagePlaceholder}>
+                      <Icon name="fast-food-outline" size={32} color="#FF8C42" />
+                    </View>
+                  )}
+                  {/* Veg/Non-veg indicator */}
+                  <View style={[styles.vegIndicator, { borderColor: '#0F8A0F' }]}>
+                    <View style={[styles.vegDot, { backgroundColor: '#0F8A0F' }]} />
                   </View>
-                );
-              }
-              return (
-                <TouchableOpacity
-                  style={styles.addButton}
-                  onPress={() => handleAddFood(item)}
-                >
-                  <Icon name="add" size={18} color="#FF8C42" />
-                </TouchableOpacity>
-              );
-            })()}
+                </View>
 
-          </TouchableOpacity>
-        )}
-        ListEmptyComponent={
-          <View style={{ flex: 1, alignItems: 'center', marginTop: 40 }}>
-            <Text style={{ color: '#999', fontSize: 16 }}>No items found</Text>
-          </View>
-        }
-      />
+                {/* Food Details */}
+                <View style={styles.foodCardContent}>
+                  <View style={styles.foodCardHeader}>
+                    <Text style={styles.foodName}>{item.name}</Text>
+                    {item.description && (
+                      <Text style={styles.foodDescription} numberOfLines={2}>
+                        {item.description}
+                      </Text>
+                    )}
+                  </View>
+
+                  <View style={styles.foodCardFooter}>
+                    <Text style={styles.foodPrice}>₹{item.price}</Text>
+
+                    {/* Add/Quantity Controls */}
+                    {cartItem ? (
+                      <View style={styles.quantityControlsCompact}>
+                        <TouchableOpacity
+                          style={styles.quantityBtnCompact}
+                          onPress={() => handleDecreaseFood(item)}
+                        >
+                          <Icon name="remove" size={16} color="#FFFFFF" />
+                        </TouchableOpacity>
+                        <Text style={styles.quantityTextCompact}>
+                          {cartItem.qty}
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.quantityBtnCompact}
+                          onPress={() => handleAddFood(item)}
+                        >
+                          <Icon name="add" size={16} color="#FFFFFF" />
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.addBtnCompact}
+                        onPress={() => handleAddFood(item)}
+                      >
+                        <Text style={styles.addBtnText}>ADD</Text>
+                        <View style={styles.addBtnPlus}>
+                          <Icon name="add" size={12} color="#FF8C42" />
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              </View>
+            );
+          }}
+          ListEmptyComponent={
+            <View style={{ flex: 1, alignItems: 'center', marginTop: 40 }}>
+              <Text style={{ color: '#999', fontSize: 16 }}>No items found</Text>
+            </View>
+          }
+        />
+      </View>
 
       {/* Confirm Button (Fixed at Bottom) */}
       {cartItems.length > 0 && (
@@ -608,85 +623,145 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  gridContent: {
-    padding: 12,
-  },
-  gridRow: {
-    justifyContent: 'space-between',
-    marginBottom: 12,
+  // Food List Container
+  foodListContainer: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    gap: 8,
+    paddingBottom: 100, // padding for sticky cart
+    flex: 1,
   },
   foodCard: {
-    flex: 1,
-    backgroundColor: '#fff',
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: 12,
-    marginHorizontal: 4,
-    alignItems: 'center',
+    padding: 10,
+    marginBottom: 8,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
-  imageContainer: {
-    width: '100%',
-    height: 100,
+  foodImageContainer: {
+    position: 'relative',
+    width: 64,
+    height: 64,
     borderRadius: 8,
     overflow: 'hidden',
-    marginBottom: 8,
-    backgroundColor: '#FFF8F0',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
   },
   foodImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
-  foodName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  foodPrice: {
-    fontSize: 13,
-    color: '#FF8C42',
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  addButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FFF8F0',
-    borderWidth: 1.5,
-    borderColor: '#FF8C42',
+  foodImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#FFF5EE',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  quantityControls: {
+  vegIndicator: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    width: 14,
+    height: 14,
+    borderWidth: 1.5,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vegDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  foodCardContent: {
+    flex: 1,
+    marginLeft: 10,
+    justifyContent: 'space-between',
+  },
+  foodCardHeader: {
+    flex: 1,
+  },
+  foodName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1C1C1C',
+    marginBottom: 2,
+    letterSpacing: 0.2,
+  },
+  foodDescription: {
+    fontSize: 11,
+    color: '#93959F',
+    lineHeight: 14,
+  },
+  foodCardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginTop: 4,
+    justifyContent: 'space-between',
+    marginTop: 6,
   },
-  qtyButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#FFF8F0',
+  foodPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1C1C1C',
+  },
+  // Compact Add Button
+  addBtnCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FF8C42',
+    borderRadius: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    position: 'relative',
+  },
+  addBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FF8C42',
+    letterSpacing: 0.5,
+  },
+  addBtnPlus: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#FF8C42',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  qtyText: {
-    fontSize: 14,
+  // Quantity Controls
+  quantityControlsCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF8C42',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  quantityBtnCompact: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quantityTextCompact: {
+    fontSize: 13,
     fontWeight: '700',
-    color: '#333',
-    minWidth: 16,
+    color: '#FFFFFF',
+    minWidth: 20,
     textAlign: 'center',
   },
 

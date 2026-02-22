@@ -62,6 +62,13 @@ export default function ActiveBillsList({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [filterByDate, setFilterByDate] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Date range states
+  const [startDate, setStartDate] = useState(new Date());
+  const [endDate, setEndDate] = useState(new Date());
+  const [selectingDateType, setSelectingDateType] = useState('start'); // 'start' or 'end'
+  const [showDateRangeModal, setShowDateRangeModal] = useState(false);
+  const [dateFilterMode, setDateFilterMode] = useState('single'); // 'single' or 'range'
 
   // Fetch active bills from backend
   const fetchActiveBills = async (showRefreshing = false) => {
@@ -187,11 +194,33 @@ export default function ActiveBillsList({
     }, []),
   );
 
-  // Filter bills based on search text and date
+  // Filter bills based on search text and date range
   const filteredBills = allBills.filter(bill => {
     // Date filter
-    if (filterByDate && !isSameDay(bill.rawDate, selectedDate)) {
-      return false;
+    if (filterByDate) {
+      const billDate = new Date(bill.rawDate);
+      billDate.setHours(0, 0, 0, 0);
+      
+      if (dateFilterMode === 'single') {
+        // Single date mode - exact match
+        const selected = new Date(selectedDate);
+        selected.setHours(0, 0, 0, 0);
+        
+        if (billDate.getTime() !== selected.getTime()) {
+          return false;
+        }
+      } else {
+        // Date range mode
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        
+        if (billDate < start || billDate > end) {
+          return false;
+        }
+      }
     }
 
     // Search filter
@@ -205,19 +234,42 @@ export default function ActiveBillsList({
     );
   });
 
-  // Handle date change
+  // Handle date change for date picker
   const handleDateChange = (event, date) => {
     setShowDatePicker(Platform.OS === 'ios');
     if (date) {
-      setSelectedDate(date);
-      setFilterByDate(true);
+      if (dateFilterMode === 'single') {
+        setSelectedDate(date);
+      } else {
+        if (selectingDateType === 'start') {
+          setStartDate(date);
+        } else {
+          setEndDate(date);
+        }
+      }
     }
   };
-
+  
+  // Apply date filter
+  const applyDateFilter = () => {
+    if (dateFilterMode === 'range') {
+      // Ensure start date is before or equal to end date
+      if (startDate > endDate) {
+        Alert.alert('Invalid Date Range', 'Start date must be before or equal to end date.');
+        return;
+      }
+    }
+    setFilterByDate(true);
+    setShowDateRangeModal(false);
+  };
+  
   // Clear date filter
   const clearDateFilter = () => {
     setFilterByDate(false);
     setSelectedDate(new Date());
+    setStartDate(new Date());
+    setEndDate(new Date());
+    setShowDateRangeModal(false);
   };
 
   // Handle pull to refresh
@@ -240,19 +292,17 @@ export default function ActiveBillsList({
       />
 
       <View style={styles.cardContent}>
-        <View style={styles.cardLeft}>
-          <Text style={styles.date}>{item.date}</Text>
+        {/* Row 1: Customer Name and Amount */}
+        <View style={styles.row}>
           <Text style={styles.customerName} numberOfLines={1}>
             {item.customerName}
           </Text>
-          <Text style={styles.mobile}>{item.mobile}</Text>
-          <Text style={styles.billNumber} numberOfLines={1}>
-            {item.billNumber}
-          </Text>
-        </View>
-
-        <View style={styles.cardRight}>
           <Text style={styles.amount}>{item.amountDisplay}</Text>
+        </View>
+        
+        {/* Row 2: Mobile and Status */}
+        <View style={styles.row}>
+          <Text style={styles.mobile}>{item.mobile}</Text>
           <View
             style={[
               styles.statusBadge,
@@ -340,7 +390,7 @@ export default function ActiveBillsList({
             styles.dateSelector,
             filterByDate && styles.dateSelectorActive,
           ]}
-          onPress={() => setShowDatePicker(true)}
+          onPress={() => setShowDateRangeModal(true)}
           activeOpacity={0.7}
         >
           <Icon
@@ -354,7 +404,11 @@ export default function ActiveBillsList({
               filterByDate && styles.dateSelectorTextActive,
             ]}
           >
-            {formatDate(selectedDate)}
+            {filterByDate 
+              ? (dateFilterMode === 'single' 
+                  ? formatDate(selectedDate) 
+                  : `${formatDate(startDate).slice(0, 5)} - ${formatDate(endDate).slice(0, 5)}`)
+              : formatDate(new Date())}
           </Text>
           {filterByDate && (
             <TouchableOpacity
@@ -373,7 +427,8 @@ export default function ActiveBillsList({
         <View style={styles.filterInfo}>
           <Text style={styles.filterInfoText}>
             Showing {filteredBills.length} of {allBills.length} bills
-            {filterByDate && ` for ${formatDate(selectedDate)}`}
+            {filterByDate && dateFilterMode === 'single' && ` for ${formatDate(selectedDate)}`}
+            {filterByDate && dateFilterMode === 'range' && ` from ${formatDate(startDate)} to ${formatDate(endDate)}`}
             {searchText && ` matching "${searchText}"`}
           </Text>
           <TouchableOpacity
@@ -451,13 +506,152 @@ export default function ActiveBillsList({
       {/* Date Picker Modal */}
       {showDatePicker && (
         <DateTimePicker
-          value={selectedDate}
+          value={dateFilterMode === 'single' ? selectedDate : (selectingDateType === 'start' ? startDate : endDate)}
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={handleDateChange}
           maximumDate={new Date()}
         />
       )}
+      
+      {/* Date Range Selection Modal */}
+      <Modal
+        visible={showDateRangeModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDateRangeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.dateRangeModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter by Date</Text>
+              <TouchableOpacity
+                onPress={() => setShowDateRangeModal(false)}
+                activeOpacity={0.7}
+              >
+                <Icon name="close" size={24} color="#666666" />
+              </TouchableOpacity>
+            </View>
+            
+            {/* Mode Selector */}
+            <View style={styles.modeSelectorContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.modeButton,
+                  dateFilterMode === 'single' && styles.modeButtonActive,
+                ]}
+                onPress={() => setDateFilterMode('single')}
+                activeOpacity={0.7}
+              >
+                <Icon 
+                  name="calendar-outline" 
+                  size={18} 
+                  color={dateFilterMode === 'single' ? '#FFFFFF' : '#666666'} 
+                />
+                <Text
+                  style={[
+                    styles.modeButtonText,
+                    dateFilterMode === 'single' && styles.modeButtonTextActive,
+                  ]}
+                >
+                  Single Date
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[
+                  styles.modeButton,
+                  dateFilterMode === 'range' && styles.modeButtonActive,
+                ]}
+                onPress={() => setDateFilterMode('range')}
+                activeOpacity={0.7}
+              >
+                <Icon 
+                  name="calendar" 
+                  size={18} 
+                  color={dateFilterMode === 'range' ? '#FFFFFF' : '#666666'} 
+                />
+                <Text
+                  style={[
+                    styles.modeButtonText,
+                    dateFilterMode === 'range' && styles.modeButtonTextActive,
+                  ]}
+                >
+                  Date Range
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.dateInputsContainer}>
+              {dateFilterMode === 'single' ? (
+                // Single Date Mode
+                <View style={styles.dateInputWrapper}>
+                  <Text style={styles.dateLabel}>Select Date</Text>
+                  <TouchableOpacity
+                    style={styles.dateInput}
+                    onPress={() => setShowDatePicker(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Icon name="calendar" size={20} color="#FF8C42" />
+                    <Text style={styles.dateInputText}>{formatDate(selectedDate)}</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                // Date Range Mode
+                <>
+                  <View style={styles.dateInputWrapper}>
+                    <Text style={styles.dateLabel}>From Date</Text>
+                    <TouchableOpacity
+                      style={styles.dateInput}
+                      onPress={() => {
+                        setSelectingDateType('start');
+                        setShowDatePicker(true);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Icon name="calendar" size={20} color="#FF8C42" />
+                      <Text style={styles.dateInputText}>{formatDate(startDate)}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  
+                  <View style={styles.dateInputWrapper}>
+                    <Text style={styles.dateLabel}>To Date</Text>
+                    <TouchableOpacity
+                      style={styles.dateInput}
+                      onPress={() => {
+                        setSelectingDateType('end');
+                        setShowDatePicker(true);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Icon name="calendar" size={20} color="#FF8C42" />
+                      <Text style={styles.dateInputText}>{formatDate(endDate)}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setShowDateRangeModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.modalApplyButton}
+                onPress={applyDateFilter}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalApplyText}>Apply Filter</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -633,9 +827,9 @@ const styles = StyleSheet.create({
   // Bill Card
   billCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 13,
     elevation: 3,
     shadowColor: '#000',
     shadowOpacity: 0.08,
@@ -658,29 +852,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF8C42',
   },
   cardContent: {
+    marginTop: 2,
+  },
+  row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginTop: 4,
-  },
-  cardLeft: {
-    flex: 1,
-    paddingRight: 16,
-    borderRightWidth: 1,
-    borderRightColor: '#F0F0F0',
+    alignItems: 'center',
+    marginBottom: 6,
   },
   date: {
     fontSize: 11,
     color: '#999999',
-    marginBottom: 6,
+    marginBottom: 8,
     fontWeight: '500',
   },
   customerName: {
     fontSize: 16,
     fontWeight: '700',
     color: '#1A1A1A',
-    marginBottom: 6,
     lineHeight: 22,
+    flex: 1,
+    marginRight: 12,
   },
   items: {
     fontSize: 13,
@@ -692,7 +884,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999999',
     fontWeight: '400',
-    marginBottom: 4,
+    flex: 1,
+    marginRight: 12,
   },
   billNumber: {
     fontSize: 11,
@@ -742,11 +935,7 @@ const styles = StyleSheet.create({
     color: '#444444',
     lineHeight: 16,
   },
-  cardRight: {
-    alignItems: 'flex-end',
-    minWidth: 130,
-    paddingLeft: 16,
-  },
+
   billLabel: {
     fontSize: 9,
     color: '#BBBBBB',
@@ -762,10 +951,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   amount: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#1A1A1A',
-    marginBottom: 10,
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -887,5 +1075,120 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  
+  // Date Range Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  dateRangeModal: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    padding: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  modeSelectorContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F0F0F0',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 20,
+    gap: 4,
+  },
+  modeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 6,
+  },
+  modeButtonActive: {
+    backgroundColor: '#FF8C42',
+  },
+  modeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666666',
+  },
+  modeButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  dateInputsContainer: {
+    marginBottom: 20,
+  },
+  dateInputWrapper: {
+    marginBottom: 16,
+  },
+  dateLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666666',
+    marginBottom: 8,
+  },
+  dateInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    gap: 10,
+  },
+  dateInputText: {
+    fontSize: 15,
+    color: '#1A1A1A',
+    fontWeight: '500',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancelButton: {
+    flex: 1,
+    backgroundColor: '#F0F0F0',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#666666',
+  },
+  modalApplyButton: {
+    flex: 1,
+    backgroundColor: '#FF8C42',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalApplyText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

@@ -297,7 +297,7 @@ export default function QueueScreen({ navigation, route }) {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <Header navigation={navigation} />
       <QueueListView
         queueData={queueData}
@@ -568,7 +568,7 @@ export default function QueueScreen({ navigation, route }) {
           </TouchableWithoutFeedback>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
