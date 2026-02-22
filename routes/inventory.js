@@ -479,13 +479,21 @@ router.patch("/:id/quantity", auth, stationContext, async (req, res) => {
   try {
     const { Inventory } = await getModels();
     const { id } = req.params;
-    const { quantity_change, operation = "add", reason } = req.body;
+    const { quantity_change, operation = "add", reason, inventory_multiplier } = req.body;
 
     if (!quantity_change || isNaN(quantity_change) || quantity_change <= 0) {
       return res.status(400).json({
         error: "Valid quantity_change is required",
       });
     }
+
+    // Apply variation multiplication if provided (e.g., adding 2 Boxes * 20 multiplier = 40 items)
+    let multiplier = 1;
+    if (inventory_multiplier && !isNaN(inventory_multiplier)) {
+      multiplier = parseFloat(inventory_multiplier);
+    }
+
+    const actual_quantity_change = Math.ceil(parseInt(quantity_change) * multiplier);
 
     // Apply station filter
     const where = addStationFilter({ id }, req.stationId);
@@ -498,9 +506,9 @@ router.patch("/:id/quantity", auth, stationContext, async (req, res) => {
 
     let newQuantity;
     if (operation === "add") {
-      newQuantity = item.currentquantity + parseInt(quantity_change);
+      newQuantity = item.currentquantity + actual_quantity_change;
     } else if (operation === "subtract") {
-      newQuantity = item.currentquantity - parseInt(quantity_change);
+      newQuantity = item.currentquantity - actual_quantity_change;
     } else {
       return res.status(400).json({
         error: 'Operation must be "add" or "subtract"',
@@ -535,7 +543,9 @@ router.patch("/:id/quantity", auth, stationContext, async (req, res) => {
       data: updatedItem,
       change_summary: {
         operation,
-        quantity_change: parseInt(quantity_change),
+        input_quantity: parseInt(quantity_change),
+        multiplier_applied: multiplier,
+        actual_quantity_change: actual_quantity_change,
         previous_quantity: item.currentquantity,
         new_quantity: newQuantity,
         reason: reason || null,
