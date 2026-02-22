@@ -10,8 +10,11 @@ import {
   RefreshControl,
   StatusBar,
   Animated,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { LineChart } from 'react-native-chart-kit';
 import Icon from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { ownerAPI } from '../../services/api';
@@ -109,7 +112,14 @@ export default function OwnerDashboard({ navigation, inTabbedView = false }) {
   const [revenueBreakdown, setRevenueBreakdown] = useState(null);
   const [operationalInsights, setOperationalInsights] = useState(null);
 
-  const periods = ['Day', 'Week', 'Month'];
+  // Custom Date Range State
+  const [customStartDate, setCustomStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 7)));
+  const [customEndDate, setCustomEndDate] = useState(new Date());
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+  const [revenueTrendData, setRevenueTrendData] = useState(null);
+
+  const periods = ['Day', 'Week', 'Month', 'Custom'];
 
   const getGameIcon = gameName => {
     const name = gameName.toLowerCase();
@@ -125,7 +135,28 @@ export default function OwnerDashboard({ navigation, inTabbedView = false }) {
   const fetchDashboardData = useCallback(async () => {
     try {
       const period = selectedPeriod.toLowerCase();
-      const data = await ownerAPI.getSummary(period);
+      
+      let startStr = null;
+      let endStr = null;
+      if (period === 'custom') {
+        startStr = customStartDate.toISOString();
+        endStr = customEndDate.toISOString();
+      }
+
+      const data = await ownerAPI.getSummary(period, startStr, endStr);
+
+      // Fetch Revenue Data specifically for the LineChart
+      try {
+         const revDataResponse = await ownerAPI.getRevenue(period, startStr, endStr);
+         if (revDataResponse && revDataResponse.revenueBreakdown && revDataResponse.revenueBreakdown.length > 0) {
+            setRevenueTrendData(revDataResponse.revenueBreakdown);
+         } else {
+            setRevenueTrendData(null);
+         }
+      } catch (e) {
+         console.warn("Failed to fetch revenue trend data:", e);
+         setRevenueTrendData(null);
+      }
 
       // Financial Metrics Stats (Top Cards)
       const formattedStats = [
@@ -231,15 +262,21 @@ export default function OwnerDashboard({ navigation, inTabbedView = false }) {
       // Format game revenue data
       setGameData(games.slice(0, 5));
 
-      // Set current date
-      setCurrentDate(
-        data.currentDate ||
-          new Date().toLocaleDateString('en-US', {
-            month: 'long',
-            day: 'numeric',
-            year: 'numeric',
-          }),
-      );
+      // Set current date string based on selection
+      if (period === 'custom') {
+         setCurrentDate(
+            `${customStartDate.toLocaleDateString()} - ${customEndDate.toLocaleDateString()}`
+         );
+      } else {
+         setCurrentDate(
+            data.currentDate ||
+            new Date().toLocaleDateString('en-US', {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+            }),
+         );
+      }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       // Set default empty data on error
@@ -319,6 +356,16 @@ export default function OwnerDashboard({ navigation, inTabbedView = false }) {
     setRefreshing(false);
   }, [fetchDashboardData]);
 
+  const onStartDateChange = (event, selectedDate) => {
+    setShowStartPicker(Platform.OS === 'ios');
+    if (selectedDate) setCustomStartDate(selectedDate);
+  };
+
+  const onEndDateChange = (event, selectedDate) => {
+    setShowEndPicker(Platform.OS === 'ios');
+    if (selectedDate) setCustomEndDate(selectedDate);
+  };
+
   return inTabbedView ? (
     // When inside tabs, just return the content without SafeAreaView
     <View style={styles.tabbedContainer}>
@@ -369,6 +416,67 @@ export default function OwnerDashboard({ navigation, inTabbedView = false }) {
                   </TouchableOpacity>
                 ))}
               </View>
+
+                {/* Custom Date Pickers (Shown if Custom is selected) */}
+                {selectedPeriod === 'Custom' && (
+                  <View style={styles.customDateContainer}>
+                    <View style={styles.datePickerWrapper}>
+                      <Text style={styles.datePickerLabel}>Start Date</Text>
+                      <TouchableOpacity
+                        style={styles.datePickerBtn}
+                        onPress={() => setShowStartPicker(true)}
+                      >
+                        <Icon name="calendar-outline" size={16} color="#FF8C42" />
+                        <Text style={styles.datePickerBtnText}>
+                          {customStartDate.toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <Icon name="arrow-forward-outline" size={16} color="#ccc" style={{ marginTop: 22, marginHorizontal: 10 }} />
+
+                    <View style={styles.datePickerWrapper}>
+                      <Text style={styles.datePickerLabel}>End Date</Text>
+                      <TouchableOpacity
+                        style={styles.datePickerBtn}
+                        onPress={() => setShowEndPicker(true)}
+                      >
+                        <Icon name="calendar-outline" size={16} color="#FF8C42" />
+                        <Text style={styles.datePickerBtnText}>
+                          {customEndDate.toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {showStartPicker && (
+                      <DateTimePicker
+                        value={customStartDate}
+                        mode="date"
+                        display="default"
+                        onChange={onStartDateChange}
+                        maximumDate={customEndDate}
+                      />
+                    )}
+                    {showEndPicker && (
+                      <DateTimePicker
+                        value={customEndDate}
+                        mode="date"
+                        display="default"
+                        onChange={onEndDateChange}
+                        minimumDate={customStartDate}
+                        maximumDate={new Date()}
+                      />
+                    )}
+                  </View>
+                )}
             </View>
 
             {/* Stats Grid */}
@@ -466,6 +574,51 @@ export default function OwnerDashboard({ navigation, inTabbedView = false }) {
                 <Text style={styles.sectionTitle}>
                   📈 Detailed Revenue Analysis
                 </Text>
+
+                {/* --- Revenue Trend Line Chart --- */}
+                {revenueTrendData && revenueTrendData.length > 0 && (
+                   <View style={styles.trendChartContainer}>
+                     <Text style={styles.trendChartTitle}>Revenue Trends</Text>
+                     <LineChart
+                       data={{
+                         labels: revenueTrendData.map(item => {
+                             // Format label based on period (e.g. DD/MM for custom/week, or HH:mm for day)
+                             if (selectedPeriod === 'Day') return item.date.substring(11, 16);
+                             return item.date.substring(5, 10);
+                         }),
+                         datasets: [
+                           {
+                             data: revenueTrendData.map(item => item.revenue)
+                           }
+                         ]
+                       }}
+                       width={width - 32 - 40} // card width minus padding. padding=20 on analysisCard
+                       height={220}
+                       yAxisLabel="₹"
+                       chartConfig={{
+                         backgroundColor: '#ffffff',
+                         backgroundGradientFrom: '#ffffff',
+                         backgroundGradientTo: '#ffffff',
+                         decimalPlaces: 0, 
+                         color: (opacity = 1) => `rgba(255, 140, 66, ${opacity})`,
+                         labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                         style: {
+                           borderRadius: 16
+                         },
+                         propsForDots: {
+                           r: "4",
+                           strokeWidth: "2",
+                           stroke: "#FF8C42"
+                         }
+                       }}
+                       bezier
+                       style={{
+                         marginVertical: 8,
+                         borderRadius: 16
+                       }}
+                     />
+                   </View>
+                )}
 
                 {/* Revenue by Flow */}
                 <View style={styles.analysisCard}>
@@ -716,6 +869,67 @@ export default function OwnerDashboard({ navigation, inTabbedView = false }) {
                     </TouchableOpacity>
                   ))}
                 </View>
+
+                {/* Custom Date Pickers (Shown if Custom is selected) */}
+                {selectedPeriod === 'Custom' && (
+                  <View style={styles.customDateContainer}>
+                    <View style={styles.datePickerWrapper}>
+                      <Text style={styles.datePickerLabel}>Start Date</Text>
+                      <TouchableOpacity
+                        style={styles.datePickerBtn}
+                        onPress={() => setShowStartPicker(true)}
+                      >
+                        <Icon name="calendar-outline" size={16} color="#FF8C42" />
+                        <Text style={styles.datePickerBtnText}>
+                          {customStartDate.toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <Icon name="arrow-forward-outline" size={16} color="#ccc" style={{ marginTop: 22, marginHorizontal: 10 }} />
+
+                    <View style={styles.datePickerWrapper}>
+                      <Text style={styles.datePickerLabel}>End Date</Text>
+                      <TouchableOpacity
+                        style={styles.datePickerBtn}
+                        onPress={() => setShowEndPicker(true)}
+                      >
+                        <Icon name="calendar-outline" size={16} color="#FF8C42" />
+                        <Text style={styles.datePickerBtnText}>
+                          {customEndDate.toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {showStartPicker && (
+                      <DateTimePicker
+                        value={customStartDate}
+                        mode="date"
+                        display="default"
+                        onChange={onStartDateChange}
+                        maximumDate={customEndDate}
+                      />
+                    )}
+                    {showEndPicker && (
+                      <DateTimePicker
+                        value={customEndDate}
+                        mode="date"
+                        display="default"
+                        onChange={onEndDateChange}
+                        minimumDate={customStartDate}
+                        maximumDate={new Date()}
+                      />
+                    )}
+                  </View>
+                )}
               </View>
 
               {/* Stats Grid */}
@@ -821,6 +1035,51 @@ export default function OwnerDashboard({ navigation, inTabbedView = false }) {
                   <Text style={styles.sectionTitle}>
                     📈 Detailed Revenue Analysis
                   </Text>
+
+                  {/* --- Revenue Trend Line Chart --- */}
+                  {revenueTrendData && revenueTrendData.length > 0 && (
+                     <View style={styles.trendChartContainer}>
+                       <Text style={styles.trendChartTitle}>Revenue Trends</Text>
+                       <LineChart
+                         data={{
+                           labels: revenueTrendData.map(item => {
+                               // Format label based on period (e.g. DD/MM for custom/week, or HH:mm for day)
+                               if (selectedPeriod === 'Day') return item.date.substring(11, 16);
+                               return item.date.substring(5, 10);
+                           }),
+                           datasets: [
+                             {
+                               data: revenueTrendData.map(item => item.revenue)
+                             }
+                           ]
+                         }}
+                         width={width - 32 - 40} // card width minus padding. padding=20 on analysisCard
+                         height={220}
+                         yAxisLabel="₹"
+                         chartConfig={{
+                           backgroundColor: '#ffffff',
+                           backgroundGradientFrom: '#ffffff',
+                           backgroundGradientTo: '#ffffff',
+                           decimalPlaces: 0, 
+                           color: (opacity = 1) => `rgba(255, 140, 66, ${opacity})`,
+                           labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                           style: {
+                             borderRadius: 16
+                           },
+                           propsForDots: {
+                             r: "4",
+                             strokeWidth: "2",
+                             stroke: "#FF8C42"
+                           }
+                         }}
+                         bezier
+                         style={{
+                           marginVertical: 8,
+                           borderRadius: 16
+                         }}
+                       />
+                     </View>
+                  )}
 
                   {/* Revenue by Flow */}
                   <View style={styles.analysisCard}>
@@ -1110,6 +1369,47 @@ const styles = StyleSheet.create({
   periodTextActive: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  // Custom Date Styles
+  customDateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    marginBottom: 16,
+    width: '100%',
+    paddingHorizontal: 8,
+  },
+  datePickerWrapper: {
+    flex: 1,
+  },
+  datePickerLabel: {
+    fontSize: 12,
+    color: '#777',
+    marginBottom: 6,
+    fontWeight: '600',
+    paddingLeft: 4,
+  },
+  datePickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  datePickerBtnText: {
+    fontSize: 14,
+    color: '#333',
+    marginLeft: 8,
+    fontWeight: '500',
   },
   statsGrid: {
     flexDirection: 'row',

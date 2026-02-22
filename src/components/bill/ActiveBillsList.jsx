@@ -10,6 +10,7 @@ import {
   Alert,
   Modal,
   Platform,
+  Animated,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -49,10 +50,13 @@ const isSameDay = (date1, date2) => {
   );
 };
 
+const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
+
 export default function ActiveBillsList({
   onShowHistory,
   onBillClick,
   navigation,
+  route,
 }) {
   const [searchText, setSearchText] = useState('');
   const [allBills, setAllBills] = useState([]);
@@ -69,6 +73,38 @@ export default function ActiveBillsList({
   const [selectingDateType, setSelectingDateType] = useState('start'); // 'start' or 'end'
   const [showDateRangeModal, setShowDateRangeModal] = useState(false);
   const [dateFilterMode, setDateFilterMode] = useState('single'); // 'single' or 'range'
+
+  // Animation values
+  const blinkAnim = React.useRef(new Animated.Value(0)).current;
+  const [highlightedId, setHighlightedId] = useState(null);
+
+  useEffect(() => {
+    if (route?.params?.highlightedBillId) {
+      setHighlightedId(String(route.params.highlightedBillId));
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(blinkAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: false,
+          }),
+          Animated.timing(blinkAnim, {
+            toValue: 0,
+            duration: 500,
+            useNativeDriver: false,
+          }),
+        ]),
+        { iterations: 5 } // 5 times * 1s loop = 5 seconds
+      ).start(() => {
+        setHighlightedId(null);
+      });
+    }
+  }, [route?.params?.highlightedBillId]);
+
+  const blinkBackgroundColor = blinkAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#FFFFFF', '#FFDDC1'], // White to light orange
+  });
 
   // Fetch active bills from backend
   const fetchActiveBills = async (showRefreshing = false) => {
@@ -275,18 +311,22 @@ export default function ActiveBillsList({
     setShowDateRangeModal(false);
   };
 
-  // Handle pull to refresh
   const handleRefresh = () => {
     fetchActiveBills(true);
   };
 
-  const renderBillCard = ({ item }) => (
-    <TouchableOpacity
-      style={styles.billCard}
-      onPress={() => onBillClick(item)}
-      activeOpacity={0.7}
-    >
-      {/* Status Indicator */}
+  const renderBillCard = ({ item }) => {
+    const isHighlighted = item.id === highlightedId || item.billNumber === highlightedId;
+    return (
+      <AnimatedTouchableOpacity
+        style={[
+          styles.billCard,
+          isHighlighted && { backgroundColor: blinkBackgroundColor },
+        ]}
+        onPress={() => onBillClick(item)}
+        activeOpacity={0.7}
+      >
+        {/* Status Indicator */}
       <View
         style={[
           styles.statusIndicator,
@@ -323,8 +363,9 @@ export default function ActiveBillsList({
       <View style={styles.tapIndicator}>
         <Icon name="chevron-forward" size={16} color="#CCCCCC" />
       </View>
-    </TouchableOpacity>
+    </AnimatedTouchableOpacity>
   );
+};
 
   return (
     <View style={styles.container}>

@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useContext } from 'react';
-import { MemberContext } from '../../context/MemberContext';
+import React, { useEffect, useState } from 'react';
+import { useMember } from '../../context/MemberContext';
 import {
   View,
   Text,
@@ -28,7 +28,7 @@ const getAuthToken = async () => {
 };
 
 const Members = ({ navigation }) => {
-  const { refreshMembers } = useContext(MemberContext) || {};
+  const { refreshMembers } = useMember() || {};
   const [members, setMembers] = useState([]);
   const [filteredMembers, setFilteredMembers] = useState([]);
   const [loading, setLoading] = useState(true);

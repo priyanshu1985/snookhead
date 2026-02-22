@@ -11,8 +11,11 @@ import {
   ActivityIndicator,
   RefreshControl,
   StatusBar,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { launchImageLibrary } from 'react-native-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { employeeAPI, attendanceAPI } from '../../services/api';
@@ -32,7 +35,9 @@ export default function EmployeeManagement({ navigation }) {
     role: 'staff',
     salary_type: 'monthly',
     salary_amount: '',
+    profile_pic: null,
   });
+  const [profilePics, setProfilePics] = useState({});
 
   // Attendance states
   const [attendanceModalVisible, setAttendanceModalVisible] = useState(false);
@@ -54,6 +59,16 @@ export default function EmployeeManagement({ navigation }) {
         emp => emp.role === 'staff' || emp.role === 'manager',
       );
       setEmployees(filteredEmployees);
+
+      // Load profile pictures from AsyncStorage
+      try {
+        const storedPics = await AsyncStorage.getItem('@employee_profile_pics');
+        if (storedPics) {
+          setProfilePics(JSON.parse(storedPics));
+        }
+      } catch (e) {
+        console.error('Failed to load profile pics:', e);
+      }
     } catch (error) {
       console.error('Error fetching employees:', error);
       Alert.alert('Error', 'Failed to load employees');
@@ -77,6 +92,7 @@ export default function EmployeeManagement({ navigation }) {
       role: 'staff',
       salary_type: 'monthly',
       salary_amount: '',
+      profile_pic: null,
     });
     setSelectedEmployee(null);
     setEditMode(false);
@@ -99,6 +115,7 @@ export default function EmployeeManagement({ navigation }) {
       salary_amount: employee.salary_amount
         ? String(employee.salary_amount)
         : '',
+      profile_pic: profilePics[employee.id] || null,
     });
     setEditMode(true);
     setModalVisible(true);
@@ -135,6 +152,35 @@ export default function EmployeeManagement({ navigation }) {
     return true;
   };
 
+  const handlePickImage = async () => {
+    try {
+      const options = {
+        mediaType: 'photo',
+        quality: 0.8,
+        includeBase64: false,
+      };
+
+      const result = await launchImageLibrary(options);
+
+      if (result.didCancel) {
+        return;
+      }
+
+      if (result.errorCode) {
+        console.error('ImagePicker Error:', result.errorMessage);
+        Alert.alert('Error', 'Failed to pick image');
+        return;
+      }
+
+      if (result.assets && result.assets.length > 0) {
+        setFormData({ ...formData, profile_pic: result.assets[0].uri });
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
   const handleSave = async () => {
     if (!validateForm()) return;
 
@@ -149,15 +195,26 @@ export default function EmployeeManagement({ navigation }) {
         salary_amount: parseFloat(formData.salary_amount) || 0,
       };
 
+      let employeeIdToSave;
+
       if (editMode) {
         // Update employee
         await employeeAPI.update(selectedEmployee.id, payload);
+        employeeIdToSave = selectedEmployee.id;
         Alert.alert('Success', 'Employee updated successfully');
       } else {
         // Create new employee
         payload.password = formData.password;
-        await employeeAPI.create(payload);
+        const newEmp = await employeeAPI.create(payload);
+        employeeIdToSave = newEmp.id;
         Alert.alert('Success', 'Employee created successfully');
+      }
+
+      // Save Profile Picture offline mapping
+      if (formData.profile_pic) {
+        const updatedPics = { ...profilePics, [employeeIdToSave]: formData.profile_pic };
+        setProfilePics(updatedPics);
+        await AsyncStorage.setItem('@employee_profile_pics', JSON.stringify(updatedPics));
       }
 
       setModalVisible(false);
@@ -287,9 +344,13 @@ export default function EmployeeManagement({ navigation }) {
         activeOpacity={0.7}
       >
         <View style={styles.avatarContainer}>
-          <Text style={styles.avatarText}>
-            {getInitials(item.name).toUpperCase()}
-          </Text>
+          {profilePics[item.id] ? (
+            <Image source={{ uri: profilePics[item.id] }} style={styles.profilePic} />
+          ) : (
+            <Text style={styles.avatarText}>
+              {getInitials(item.name).toUpperCase()}
+            </Text>
+          )}
         </View>
         <View style={styles.employeeInfo}>
           <Text style={styles.employeeName}>{item.name}</Text>
@@ -373,6 +434,25 @@ export default function EmployeeManagement({ navigation }) {
             </View>
 
             <View style={styles.formContainer}>
+              {/* Profile Picture */}
+              <View style={styles.profilePicPickerContainer}>
+                <TouchableOpacity onPress={handlePickImage} style={styles.profilePicWrapper}>
+                  {formData.profile_pic ? (
+                    <Image source={{ uri: formData.profile_pic }} style={styles.largeProfilePic} />
+                  ) : (
+                    <View style={styles.profilePicPlaceholder}>
+                      <Icon name="camera-outline" size={32} color="#999" />
+                      <Text style={styles.profilePicPlaceholderText}>Add Photo</Text>
+                    </View>
+                  )}
+                  {formData.profile_pic && (
+                    <View style={styles.editPicBadge}>
+                      <Icon name="pencil" size={14} color="#FFF" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+
               {/* Name */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Name *</Text>
@@ -796,6 +876,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    overflow: 'hidden',
+  },
+  profilePic: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 24,
   },
   avatarText: {
     color: '#FFFFFF',
@@ -876,6 +962,41 @@ const styles = StyleSheet.create({
   formContainer: {
     paddingHorizontal: 20,
     paddingVertical: 16,
+  },
+  profilePicPickerContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  profilePicWrapper: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  largeProfilePic: {
+    width: '100%',
+    height: '100%',
+  },
+  profilePicPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profilePicPlaceholderText: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 4,
+  },
+  editPicBadge: {
+    position: 'absolute',
+    bottom: 0,
+    width: '100%',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    paddingVertical: 4,
   },
   inputGroup: {
     marginBottom: 16,

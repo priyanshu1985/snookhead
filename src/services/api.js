@@ -621,23 +621,39 @@ export const ownerAPI = {
   },
 
   // Dashboard - Get stats
-  getStats: async (period = 'day') => {
-    return await makeRequest(`/api/owner/dashboard/stats?period=${period}`);
+  getStats: async (period = 'day', startDate, endDate) => {
+    let url = `/api/owner/dashboard/stats?period=${period}`;
+    if (startDate && endDate) {
+      url += `&startDate=${startDate}&endDate=${endDate}`;
+    }
+    return await makeRequest(url);
   },
 
   // Dashboard - Get game utilization
-  getGameUtilization: async () => {
-    return await makeRequest('/api/owner/dashboard/game-utilization');
+  getGameUtilization: async (period = 'week', startDate, endDate) => {
+    let url = `/api/owner/dashboard/game-utilization?period=${period}`;
+    if (startDate && endDate) {
+      url += `&startDate=${startDate}&endDate=${endDate}`;
+    }
+    return await makeRequest(url);
   },
 
   // Dashboard - Get revenue data
-  getRevenue: async (period = 'week') => {
-    return await makeRequest(`/api/owner/dashboard/revenue?period=${period}`);
+  getRevenue: async (period = 'week', startDate, endDate) => {
+    let url = `/api/owner/dashboard/revenue?period=${period}`;
+    if (startDate && endDate) {
+      url += `&startDate=${startDate}&endDate=${endDate}`;
+    }
+    return await makeRequest(url);
   },
 
   // Dashboard - Get complete summary
-  getSummary: async (period = 'day') => {
-    return await makeRequest(`/api/owner/dashboard/summary?period=${period}`);
+  getSummary: async (period = 'day', startDate, endDate) => {
+    let url = `/api/owner/dashboard/summary?period=${period}`;
+    if (startDate && endDate) {
+      url += `&startDate=${startDate}&endDate=${endDate}`;
+    }
+    return await makeRequest(url);
   },
 };
 

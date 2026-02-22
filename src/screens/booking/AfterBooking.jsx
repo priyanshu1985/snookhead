@@ -388,7 +388,7 @@ export default function AfterBooking({ route, navigation }) {
                   await new Promise(resolve => setTimeout(resolve, 500));
                   navigation.navigate('MainTabs', {
                     screen: 'Bill',
-                    params: { forceRefresh: Date.now() },
+                    params: { forceRefresh: Date.now(), highlightedBillId: result.bill?.id },
                   });
                 },
               },
@@ -397,7 +397,10 @@ export default function AfterBooking({ route, navigation }) {
         } else {
           // For unpaid sessions, navigate to Bill screen without alert
           await new Promise(resolve => setTimeout(resolve, 300));
-          navigation.navigate('MainTabs', { screen: 'Bill' });
+          navigation.navigate('MainTabs', {
+            screen: 'Bill',
+            params: { highlightedBillId: result.bill?.id },
+          });
         }
       } else {
         console.error('Silent bill generation failed:', result.error);
@@ -1116,7 +1119,7 @@ export default function AfterBooking({ route, navigation }) {
                     await new Promise(resolve => setTimeout(resolve, 500));
                     navigation.navigate('MainTabs', {
                       screen: 'Bill',
-                      params: { forceRefresh: Date.now() },
+                      params: { forceRefresh: Date.now(), highlightedBillId: result.bill?.id },
                     });
                   },
                 },
@@ -1124,7 +1127,10 @@ export default function AfterBooking({ route, navigation }) {
             );
           } else {
             await new Promise(resolve => setTimeout(resolve, 300));
-            navigation.navigate('MainTabs', { screen: 'Bill' });
+            navigation.navigate('MainTabs', {
+              screen: 'Bill',
+              params: { highlightedBillId: result.bill?.id },
+            });
           }
         }
       } else {

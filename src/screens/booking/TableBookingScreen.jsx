@@ -13,12 +13,14 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Vibration,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../config';
 import MemberAutocomplete from '../../components/member/MemberAutocomplete';
+import Sound from 'react-native-sound';
 
 // Move OUTSIDE component
 const getNextDates = () => {
@@ -81,7 +83,7 @@ export default function TableBookingScreen({ route, navigation }) {
 
   // Menu items state (similar to AfterBooking)
   const [menuItems, setMenuItems] = useState([]);
-  
+
   // Two-tier category state for matching OrdersScreen
   const [selectedMainCategory, setSelectedMainCategory] = useState('prepared');
   const [selectedSubCategory, setSelectedSubCategory] = useState('');
@@ -96,6 +98,49 @@ export default function TableBookingScreen({ route, navigation }) {
   const [conflictDetails, setConflictDetails] = useState(null);
   const [alternativeTables, setAlternativeTables] = useState([]);
   const [alternativeTimes, setAlternativeTimes] = useState([]);
+
+  // Enable playback in silence mode (iOS)
+  React.useEffect(() => {
+    Sound.setCategory('Playback');
+  }, []);
+
+  // Play booking success sound
+  const playBookingSuccessSound = () => {
+    try {
+      // Load the sound file (you can add your own sound file in android/app/src/main/res/raw/)
+      // For now using system notification sound
+      const successSound = new Sound(
+        'notification.mp3',
+        Sound.MAIN_BUNDLE,
+        error => {
+          if (error) {
+            console.log('Failed to load sound', error);
+            // Fallback to vibration only
+            Vibration.vibrate([0, 100, 50, 100]);
+            return;
+          }
+
+          // Play the sound
+          successSound.play(success => {
+            if (success) {
+              console.log('Successfully finished playing');
+            } else {
+              console.log('Playback failed');
+            }
+            // Release the sound resource
+            successSound.release();
+          });
+        },
+      );
+
+      // Also vibrate for tactile feedback
+      Vibration.vibrate([0, 100, 50, 100]);
+    } catch (error) {
+      console.log('Sound error:', error);
+      // Fallback to vibration only
+      Vibration.vibrate([0, 100, 50, 100]);
+    }
+  };
 
   // ===== DATA AND CONSTANTS AFTER HOOKS =====
   const { table, gameType, color, selectedFoodItems } = route.params || {};
@@ -120,38 +165,47 @@ export default function TableBookingScreen({ route, navigation }) {
   }, [selectedFoodItems]);
 
   // Helper to parse categories from items
-  const parseCategories = (items) => {
+  const parseCategories = items => {
     // 1. Extract Main Categories (item_type)
     const uniqueMainCats = Array.from(
       new Set(
-        items.map(m => (m.item_type || 'prepared').toLowerCase()).filter(Boolean),
+        items
+          .map(m => (m.item_type || 'prepared').toLowerCase())
+          .filter(Boolean),
       ),
     );
     if (uniqueMainCats.length) {
       setMainCategories(uniqueMainCats);
       // Don't auto-switch main category if one is already selected, unless it's invalid
       if (!uniqueMainCats.includes(selectedMainCategory)) {
-         setSelectedMainCategory(uniqueMainCats[0]);
+        setSelectedMainCategory(uniqueMainCats[0]);
       }
     }
 
     // 2. Extract Sub Categories (category) based on currently selected Main Category
-    const activeMainCat = uniqueMainCats.includes(selectedMainCategory) ? selectedMainCategory : (uniqueMainCats[0] || 'prepared');
-    
+    const activeMainCat = uniqueMainCats.includes(selectedMainCategory)
+      ? selectedMainCategory
+      : uniqueMainCats[0] || 'prepared';
+
     const relevantSubCats = Array.from(
       new Set(
         items
-          .filter(m => (m.item_type || 'prepared').toLowerCase() === activeMainCat)
+          .filter(
+            m => (m.item_type || 'prepared').toLowerCase() === activeMainCat,
+          )
           .map(m => (m.category || '').toLowerCase())
           .filter(Boolean),
       ),
     );
-    
+
     setSubCategories(relevantSubCats);
-    if (relevantSubCats.length > 0 && !relevantSubCats.includes(selectedSubCategory)) {
-       setSelectedSubCategory(relevantSubCats[0]);
+    if (
+      relevantSubCats.length > 0 &&
+      !relevantSubCats.includes(selectedSubCategory)
+    ) {
+      setSelectedSubCategory(relevantSubCats[0]);
     } else if (relevantSubCats.length === 0) {
-       setSelectedSubCategory('');
+      setSelectedSubCategory('');
     }
   };
 
@@ -200,8 +254,6 @@ export default function TableBookingScreen({ route, navigation }) {
       setAvailabilityStatus('unchecked'); // Immediate bookings don't need pre-check
     }
   }, [selectedDate, selectedTime, timerDuration]);
-
-
 
   // Check availability for selected date/time/table
   const checkAvailability = async () => {
@@ -488,8 +540,13 @@ export default function TableBookingScreen({ route, navigation }) {
   // Get filtered menu items by category
   const getFilteredMenuItems = () => {
     return menuItems.filter(item => {
-      const matchesMainCat = (item.item_type || 'prepared').toLowerCase() === selectedMainCategory.toLowerCase();
-      const matchesSubCat = !selectedSubCategory || (item.category || '').toLowerCase() === selectedSubCategory.toLowerCase();
+      const matchesMainCat =
+        (item.item_type || 'prepared').toLowerCase() ===
+        selectedMainCategory.toLowerCase();
+      const matchesSubCat =
+        !selectedSubCategory ||
+        (item.category || '').toLowerCase() ===
+          selectedSubCategory.toLowerCase();
       return matchesMainCat && matchesSubCat;
     });
   };
@@ -720,6 +777,9 @@ export default function TableBookingScreen({ route, navigation }) {
       throw new Error(result.error || 'Booking failed');
     }
 
+    // Play success sound + vibration
+    playBookingSuccessSound();
+
     // Pass the newly created session and cart to AfterBooking instantly
     navigation.replace('AfterBooking', {
       table: safeTable,
@@ -799,6 +859,9 @@ export default function TableBookingScreen({ route, navigation }) {
         throw new Error(result.error || 'Reservation failed');
       }
 
+      // Play success sound for reservation
+      playBookingSuccessSound();
+
       Alert.alert(
         'Reservation Created!',
         `Reservation has been created for ${customerDetails.name} on ${selectedDateInfo.label} at ${selectedTime}.`,
@@ -836,20 +899,43 @@ export default function TableBookingScreen({ route, navigation }) {
       </View>
 
       {/* Navigation Tabs */}
-      <View style={{ flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' }}>
-        <TouchableOpacity style={{ flex: 1, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: '#FF8C42', alignItems: 'center' }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          backgroundColor: '#fff',
+          borderBottomWidth: 1,
+          borderBottomColor: '#eee',
+        }}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            paddingVertical: 12,
+            borderBottomWidth: 2,
+            borderBottomColor: '#FF8C42',
+            alignItems: 'center',
+          }}
+        >
           <Text style={{ color: '#FF8C42', fontWeight: '600' }}>Table</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={{ flex: 1, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: 'transparent', alignItems: 'center' }}
-          onPress={() => navigation.navigate('TableBookingOrders', {
-            tableId: safeTable.id,
-            tableName: safeTable.name,
-            table: safeTable,
-            gameType: safeGameType,
-            color,
-            existingCart: billItems,
-          })}
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            paddingVertical: 12,
+            borderBottomWidth: 2,
+            borderBottomColor: 'transparent',
+            alignItems: 'center',
+          }}
+          onPress={() =>
+            navigation.navigate('TableBookingOrders', {
+              tableId: safeTable.id,
+              tableName: safeTable.name,
+              table: safeTable,
+              gameType: safeGameType,
+              color,
+              existingCart: billItems,
+            })
+          }
         >
           <Text style={{ color: '#666', fontWeight: '600' }}>Food</Text>
         </TouchableOpacity>
@@ -859,7 +945,6 @@ export default function TableBookingScreen({ route, navigation }) {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-
         {/* Queue Banner */}
         {safeTable.bookingType === 'queue' && (
           <View
@@ -886,19 +971,27 @@ export default function TableBookingScreen({ route, navigation }) {
         {/* Customer Name */}
         <Text style={styles.sectionTitle}>Customer Details</Text>
         <View style={{ marginBottom: 24, zIndex: 10 }}>
-          <Text style={styles.inputLabel}>Select or Enter Customer (Optional)</Text>
+          <Text style={styles.inputLabel}>
+            Select or Enter Customer (Optional)
+          </Text>
           <MemberAutocomplete
             value={customerDetails.name}
-            onChangeText={(text) => setCustomerDetails({...customerDetails, name: text, phone: customerDetails.phone})}
-            onSelectMember={(member) => {
+            onChangeText={text =>
+              setCustomerDetails({
+                ...customerDetails,
+                name: text,
+                phone: customerDetails.phone,
+              })
+            }
+            onSelectMember={member => {
               setCustomerDetails({
                 name: member.name,
                 phone: member.phone || '',
               });
             }}
-            onCreateNewMember={(text) => {
+            onCreateNewMember={text => {
               // Just allow them to type it in normally, it will be treated as walk-in or new
-              setCustomerDetails({...customerDetails, name: text});
+              setCustomerDetails({ ...customerDetails, name: text });
             }}
             placeholder="Search Name or Phone"
           />
@@ -907,7 +1000,6 @@ export default function TableBookingScreen({ route, navigation }) {
         {/* Since phone input isn't visible here immediately, if they want to enter a phone manually,
             we might need a separate phone input. If there's none currently, we might just use the
             autocomplete for name/phone together. Let's see if there's a phone input for future bookings. */}
-
 
         {/* Time Selection */}
         <Text style={styles.sectionTitle}>Select Time</Text>
@@ -1095,15 +1187,17 @@ export default function TableBookingScreen({ route, navigation }) {
         <View style={[styles.foodHeader, { marginBottom: 16 }]}>
           <Text style={styles.sectionTitle}>Food Orders</Text>
           <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-            <TouchableOpacity 
-              onPress={() => navigation.navigate('TableBookingOrders', {
-                tableId: safeTable.id,
-                tableName: safeTable.name,
-                table: safeTable,
-                gameType: safeGameType,
-                color,
-                existingCart: billItems,
-              })}
+            <TouchableOpacity
+              onPress={() =>
+                navigation.navigate('TableBookingOrders', {
+                  tableId: safeTable.id,
+                  tableName: safeTable.name,
+                  table: safeTable,
+                  gameType: safeGameType,
+                  color,
+                  existingCart: billItems,
+                })
+              }
               style={{
                 backgroundColor: '#FF8C42',
                 borderRadius: 8,
@@ -1115,7 +1209,9 @@ export default function TableBookingScreen({ route, navigation }) {
               }}
             >
               <Icon name="fast-food-outline" size={18} color="#FFFFFF" />
-              <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>Add Items</Text>
+              <Text style={{ color: '#FFFFFF', fontWeight: 'bold' }}>
+                Add Items
+              </Text>
             </TouchableOpacity>
 
             {billItems.length > 0 && (
@@ -1884,7 +1980,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     marginTop: 0,
   },
-  
+
   // Main Categories
   mainCategoriesGrid: {
     flexDirection: 'row',

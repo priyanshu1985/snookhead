@@ -63,6 +63,7 @@ export default function BillScreen({ navigation, route }) {
             onShowHistory={handleShowHistory}
             onBillClick={handleActiveBillClick}
             navigation={navigation}
+            route={route}
           />
         );
 
@@ -100,6 +101,7 @@ export default function BillScreen({ navigation, route }) {
             onShowHistory={handleShowHistory}
             onBillClick={handleActiveBillClick}
             navigation={navigation}
+            route={route}
           />
         );
     }

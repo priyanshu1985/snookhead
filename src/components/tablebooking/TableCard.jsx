@@ -10,7 +10,8 @@ import {
   Vibration,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Audio } from 'expo-av';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Sound from 'react-native-sound';
 
 export default function TableCard({
   table,
@@ -32,7 +33,6 @@ export default function TableCard({
 
   const [fadeAnim] = React.useState(new Animated.Value(0));
   const [urgentAlert, setUrgentAlert] = React.useState(false);
-  const [sound, setSound] = React.useState();
   const [isMuted, setIsMuted] = React.useState(false);
   const urgentAlertRef = useRef(false);
 
@@ -109,6 +109,41 @@ export default function TableCard({
     easing: Easing.out(Easing.ease),
   }).start();
 
+  // Highlight/Blinking animation for 3-minute warning
+  const highlightAnim = React.useRef(new Animated.Value(0)).current;
+  const animLoopRef = React.useRef(null);
+  const [hasPlayedSound, setHasPlayedSound] = React.useState(false);
+
+  // Load mute state from AsyncStorage
+  React.useEffect(() => {
+    if (!table.sessionId) return;
+    const loadMuteState = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(`muted_${table.sessionId}`);
+        if (stored === 'true') {
+          setIsMuted(true);
+        }
+      } catch (err) {
+        console.log('Error loading mute state:', err);
+      }
+    };
+    loadMuteState();
+  }, [table.sessionId]);
+
+  const toggleMute = async () => {
+    if (!table.sessionId) return;
+    try {
+      const newState = !isMuted;
+      setIsMuted(newState);
+      await AsyncStorage.setItem(
+        `muted_${table.sessionId}`,
+        newState ? 'true' : 'false',
+      );
+    } catch (err) {
+      console.log('Error toggling mute state:', err);
+    }
+  };
+
   // Update timer every second for occupied tables AND reserved tables with upcoming reservations
   React.useEffect(() => {
     // Update for occupied tables or reserved tables
@@ -162,12 +197,12 @@ export default function TableCard({
       // Use booking end time for countdown
       const endTime = new Date(table.bookingEndTime).getTime();
       const remaining = Math.max(0, Math.floor((endTime - currentTime) / 1000));
-
       if (remaining <= 0) {
         return {
           text: 'Expired',
           isExpired: true,
           isWarning: false,
+          isCriticalWarning: false,
           seconds: 0,
         };
       }
@@ -188,6 +223,7 @@ export default function TableCard({
         text,
         isExpired: false,
         isWarning: remaining <= 300, // Warning when less than 5 minutes
+        isCriticalWarning: remaining <= 180, // Critical warning when <= 3 minutes
         seconds: remaining,
       };
     } else if (table.durationMinutes && table.startTime) {
@@ -201,6 +237,7 @@ export default function TableCard({
           text: 'Expired',
           isExpired: true,
           isWarning: false,
+          isCriticalWarning: false,
           seconds: 0,
         };
       }
@@ -221,6 +258,7 @@ export default function TableCard({
         text,
         isExpired: false,
         isWarning: remaining <= 300,
+        isCriticalWarning: remaining <= 180,
         seconds: remaining,
       };
     } else if (table.startTime) {
@@ -244,15 +282,129 @@ export default function TableCard({
         text,
         isExpired: false,
         isWarning: false,
+        isCriticalWarning: false,
         isElapsed: true,
         seconds: elapsed,
       };
     }
 
-    return { text: '0m', isExpired: false, isWarning: false, seconds: 0 };
+    return {
+      text: '0m',
+      isExpired: false,
+      isWarning: false,
+      isCriticalWarning: false,
+      seconds: 0,
+    };
   };
 
   const timerInfo = getRemainingTime();
+
+  // Handle sound + vibration for critical warning
+  React.useEffect(() => {
+    // Only play sound if:
+    // 1. We are in critical warning
+    // 2. We haven't played alert yet during this session
+    // 3. We are not muted
+    if (timerInfo.isCriticalWarning && !hasPlayedSound && !isMuted) {
+      console.log(`[TableCard] Playing warning sound for table ${table.name}`);
+      try {
+        // Enable playback in silence mode
+        Sound.setCategory('Playback');
+
+        // Load warning sound (you can add your own sound file in android/app/src/main/res/raw/)
+        const warningSound = new Sound(
+          'alarm.mp3',
+          Sound.MAIN_BUNDLE,
+          error => {
+            if (error) {
+              console.log('[TableCard] Failed to load sound', error);
+              // Fallback to vibration only
+              Vibration.vibrate([0, 200, 100, 200, 100, 200]);
+              return;
+            }
+
+            // Set volume to max for urgency
+            warningSound.setVolume(1.0);
+
+            // Play the sound
+            warningSound.play(success => {
+              if (success) {
+                console.log('[TableCard] Warning sound played successfully');
+              } else {
+                console.log('[TableCard] Warning sound playback failed');
+              }
+              // Release the sound resource
+              warningSound.release();
+            });
+          },
+        );
+
+        // Vibration pattern: 3 strong pulses
+        Vibration.vibrate([0, 200, 100, 200, 100, 200]);
+        setHasPlayedSound(true);
+      } catch (error) {
+        console.log('[TableCard] Error with sound/vibration:', error);
+        // Fallback to vibration only
+        Vibration.vibrate([0, 200, 100, 200, 100, 200]);
+        setHasPlayedSound(true);
+      }
+    } else if (!timerInfo.isCriticalWarning && hasPlayedSound) {
+      // Reset if we go out of critical warning (e.g., table updated)
+      setHasPlayedSound(false);
+    }
+  }, [timerInfo.isCriticalWarning, hasPlayedSound, isMuted, table.name]);
+
+  // Handle blinking animation
+  React.useEffect(() => {
+    if (timerInfo.isCriticalWarning && timerInfo.seconds > 0) {
+      // Speed up animation as time decreases (max 2000ms, min 200ms)
+      // At 180s: ~1.5s per cycle. At 1s: ~200ms per cycle
+      const duration = Math.max(
+        200,
+        Math.min(1500, (timerInfo.seconds / 180) * 1500),
+      );
+
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(highlightAnim, {
+            toValue: 1,
+            duration: duration / 2,
+            useNativeDriver: false,
+          }),
+          Animated.timing(highlightAnim, {
+            toValue: 0,
+            duration: duration / 2,
+            useNativeDriver: false,
+          }),
+        ]),
+      );
+
+      loop.start();
+      animLoopRef.current = loop;
+    } else {
+      if (animLoopRef.current) {
+        animLoopRef.current.stop();
+        animLoopRef.current = null;
+      }
+      highlightAnim.setValue(0);
+    }
+
+    return () => {
+      if (animLoopRef.current) {
+        animLoopRef.current.stop();
+      }
+    };
+  }, [timerInfo.isCriticalWarning, timerInfo.seconds, highlightAnim]);
+
+  const animatedBorderColor = highlightAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(255, 69, 58, 0.2)', 'rgba(255, 69, 58, 1)'], // Reddish glow
+  });
+
+  const animatedBackgroundColor = highlightAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(255, 255, 255, 1)', 'rgba(255, 235, 238, 1)'], // Light red bg flash
+  });
 
   const handlePress = () => {
     console.log('TableCard pressed:', {
@@ -275,9 +427,20 @@ export default function TableCard({
     }
   };
 
+  const AnimatedTouchableOpacity =
+    Animated.createAnimatedComponent(TouchableOpacity);
+
   return (
-    <TouchableOpacity
-      style={[styles.card, isOccupied && styles.cardOccupied]}
+    <AnimatedTouchableOpacity
+      style={[
+        styles.card,
+        isOccupied && styles.cardOccupied,
+        timerInfo.isCriticalWarning && {
+          borderColor: animatedBorderColor,
+          backgroundColor: animatedBackgroundColor,
+          borderWidth: 2,
+        },
+      ]}
       activeOpacity={0.85}
       onPress={handlePress}
       onLongPress={() => {
@@ -286,6 +449,24 @@ export default function TableCard({
         }
       }}
     >
+      {/* Mute Bell Icon for Critical Warnings */}
+      {timerInfo.isCriticalWarning && table.sessionId && (
+        <TouchableOpacity
+          style={styles.muteButton}
+          onPress={e => {
+            e.stopPropagation();
+            toggleMute();
+          }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Icon
+            name={isMuted ? 'volume-mute-outline' : 'notifications'}
+            size={20}
+            color={isMuted ? '#999' : '#FF3B30'}
+          />
+        </TouchableOpacity>
+      )}
+
       {/* Safety Check: If table data is corrupt, show error */}
       {!table || !table.name ? (
         <View
@@ -418,7 +599,7 @@ export default function TableCard({
           </View>
         </View>
       )}
-    </TouchableOpacity>
+    </AnimatedTouchableOpacity>
   );
 }
 
@@ -588,5 +769,19 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
     paddingHorizontal: 8,
+  },
+  muteButton: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    zIndex: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 15,
+    padding: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
   },
 });

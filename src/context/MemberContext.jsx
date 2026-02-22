@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
 
-const MemberContext = createContext();
+export const MemberContext = createContext();
 
 export const MemberProvider = ({ children }) => {
   const [members, setMembers] = useState([]);
@@ -18,7 +18,7 @@ export const MemberProvider = ({ children }) => {
         setLoading(false);
         return;
       }
-      
+
       const response = await fetch(`${API_URL}/api/customer`, {
         headers: {
           'Content-Type': 'application/json',
