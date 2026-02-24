@@ -15,7 +15,7 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 import MenuItemCard from '../menu/MenuItemCard';
 import VariationModal from '../menu/VariationModal';
 

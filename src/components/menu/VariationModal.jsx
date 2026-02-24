@@ -60,11 +60,11 @@ export default function VariationModal({
 
           {/* Variations List */}
           <ScrollView style={styles.variationsList}>
-            {menuItem.variations?.map((variant) => {
-              const isSelected = selectedVariation?.id === variant.id;
+            {menuItem.variations?.map((variant, index) => {
+              const isSelected = selectedVariation === variant;
               return (
                 <TouchableOpacity
-                  key={variant.id}
+                  key={index}
                   style={[
                     styles.variationRow,
                     isSelected && styles.variationRowSelected,

@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 import eventEmitter from '../../utils/eventEmitter';
 
 const POLL_INTERVAL = 1000; // Check every 1 second for immediate response

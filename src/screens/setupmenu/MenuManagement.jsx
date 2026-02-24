@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 import ImageSelector from '../../components/ImageSelector';
 
 async function getAuthToken() {

@@ -19,7 +19,7 @@ import { useAuth } from '../../context/AuthContext';
 import Header from '../../components/common/Header';
 import DashboardCard from '../../components/tablebooking/DashboardCard';
 import { COLORS, SPACING } from '../../theme';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 import {
   ordersAPI,
   tablesAPI,

@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 import eventEmitter from '../../utils/eventEmitter';
 
 const ReservationFormModal = ({ visible, onClose, onSuccess }) => {

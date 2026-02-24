@@ -16,7 +16,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 import { useAuth } from '../../context/AuthContext';
 
 const { width, height } = Dimensions.get('window');

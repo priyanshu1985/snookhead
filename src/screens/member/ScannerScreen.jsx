@@ -17,7 +17,7 @@ import { Camera } from 'react-native-camera-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import Header from '../../components/common/Header';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 
 export default function ScannerScreen({ navigation, route }) {
   const [hasPermission, setHasPermission] = useState(null);

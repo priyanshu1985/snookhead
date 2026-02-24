@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../config';
+import { API_URL } from '../../config';
 
 // Store original fetch to avoid infinite recursion
 const originalFetch = global.fetch;

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');

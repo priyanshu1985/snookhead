@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../config';
+import { API_URL } from '../../config';
 
 /**
  * Enhanced API client with automatic token refresh using Axios-like interceptor pattern

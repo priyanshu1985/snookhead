@@ -2,7 +2,7 @@
 // Handles automatic assignment of queue members to tables when they become available
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../config';
+import { API_URL } from '../../config';
 
 /**
  * Get the next queue member waiting for a specific table WITHOUT auto-assigning

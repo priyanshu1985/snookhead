@@ -14,7 +14,7 @@ import {
   ScrollView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 
 const ORANGE = '#F08626';
 const DARK_BLUE = '#1A1A2E';

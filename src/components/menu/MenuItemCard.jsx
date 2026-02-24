@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 
 // Helper to get full menu image URL
 const getMenuImageUrl = (imageKey) => {

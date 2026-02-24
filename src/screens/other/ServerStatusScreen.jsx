@@ -9,7 +9,7 @@ import {
   ScrollView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 
 const ServerStatusScreen = ({ navigation }) => {
   const [testing, setTesting] = useState(false);

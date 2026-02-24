@@ -17,7 +17,7 @@ import {
   useNavigation,
   useFocusEffect,
 } from '@react-navigation/native';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 import Header from '../../components/common/Header';
 import ActiveOrders from '../../components/orders/ActiveOrders';
 import MenuItemCard from '../../components/menu/MenuItemCard';

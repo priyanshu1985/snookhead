@@ -14,7 +14,7 @@ import {
 import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { API_URL } from '../config';
+import { API_URL } from '../../config';
 
 const { width } = Dimensions.get('window');
 const IMAGE_SIZE = (width - 120) / 3; // 3 columns with padding for modal

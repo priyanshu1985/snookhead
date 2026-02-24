@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import QueueListView from '../../components/queue/QueueListView';
 import Header from '../../components/common/Header';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 import MemberAutocomplete from '../../components/member/MemberAutocomplete';
 
 // Helper function to get auth token

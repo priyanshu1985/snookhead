@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from './apiClient';
-import { API_URL } from '../config';
+import { API_URL } from '../../config';
 
 // Helper function to get auth token (backward compatibility)
 const getAuthToken = async () => {

@@ -18,7 +18,7 @@ import Header from '../../components/common/Header';
 import HeaderTabs from '../../components/common/HeaderTabs';
 import TableCard from '../../components/tablebooking/TableCard';
 import BillPreviewModal from '../../components/tablebooking/BillPreviewModal';
-import { API_URL } from '../../config';
+import { API_URL } from '../../../config';
 import eventEmitter from '../../utils/eventEmitter';
 import {
   startQueueMonitoring,
