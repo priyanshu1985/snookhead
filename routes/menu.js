@@ -152,28 +152,7 @@ router.get("/", auth, stationContext, async (req, res) => {
       return res.json(items);
     }
 
-    // For web/admin, return detailed format
-    // BEFORE RETURNING, let's attach variants
-    try {
-      const allItemIds = items.map(i => i.id);
-      if (allItemIds.length > 0) {
-        const { data: variants } = await getDb()
-          .from('menu_item_variations')
-          .select('*')
-          .in('menu_item_id', allItemIds);
-
-        if (variants && variants.length > 0) {
-          items.forEach(item => {
-            item.variations = variants.filter(v => v.menu_item_id === item.id);
-          });
-        } else {
-          items.forEach(item => { item.variations = []; });
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch variants:", err);
-    }
-
+    // Variations are now included automatically by Sequelize since it's a JSONB column on MenuItem
     res.json({
       success: true,
       total: total,
@@ -200,13 +179,7 @@ router.get("/:id", auth, stationContext, async (req, res) => {
     const item = await MenuItem.findOne({ where });
     if (!item) return res.status(404).json({ error: "Menu item not found" });
 
-    // Fetch variations
-    const { data: variations } = await getDb()
-      .from('menu_item_variations')
-      .select('*')
-      .eq('menu_item_id', item.id);
-
-    item.variations = variations || [];
+    // Variations are automatically included by Sequelize
 
     res.json(item);
   } catch (err) {
@@ -244,35 +217,13 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         imageUrl: req.body.image_url || req.body.imageUrl, // imageUrl -> imageUrl
         is_available:
           req.body.is_available !== undefined ? req.body.is_available : true,
+        variations: req.body.variations || [],
       },
       req.stationId,
       "stationid",
     );
 
     const item = await MenuItem.create(itemData);
-
-    // Save variations if provided
-    let createdVariations = [];
-    if (req.body.variations && Array.isArray(req.body.variations) && req.body.variations.length > 0) {
-      const variationsData = req.body.variations.map(v => ({
-        menu_item_id: item.id,
-        variation_name: v.variation_name,
-        selling_price: v.selling_price,
-        cost_price: v.cost_price || 0,
-        inventory_multiplier: v.inventory_multiplier || 1
-      }));
-
-      const { data, error } = await getDb()
-        .from('menu_item_variations')
-        .insert(variationsData)
-        .select();
-
-      if (!error && data) {
-        createdVariations = data;
-      }
-    }
-
-    item.variations = createdVariations;
 
     res.status(201).json({
       message: "Menu item created successfully",
@@ -328,38 +279,16 @@ router.put(
       if (req.body.is_available !== undefined) {
         updateData.is_available = req.body.is_available;
       }
+      
+      // Update variations JSON
+      if (req.body.variations && Array.isArray(req.body.variations)) {
+        updateData.variations = req.body.variations;
+      }
 
       console.log("Updating menu item with:", updateData);
 
       await MenuItem.update(updateData, { where: { id: req.params.id } });
       const updatedItem = await MenuItem.findByPk(req.params.id);
-
-      // Handle variations update (delete existing, insert new for simplicity, or upsert)
-      if (req.body.variations && Array.isArray(req.body.variations)) {
-        // Delete old variations
-        await getDb().from('menu_item_variations').delete().eq('menu_item_id', req.params.id);
-
-        // Insert new variations if array isn't empty
-        if (req.body.variations.length > 0) {
-          const variationsData = req.body.variations.map(v => ({
-            menu_item_id: req.params.id,
-            variation_name: v.variation_name,
-            selling_price: v.selling_price,
-            cost_price: v.cost_price || 0,
-            inventory_multiplier: v.inventory_multiplier || 1
-          }));
-
-          await getDb().from('menu_item_variations').insert(variationsData);
-        }
-      }
-
-      // Fetch fresh variations for response
-      const { data: variants } = await getDb()
-        .from('menu_item_variations')
-        .select('*')
-        .eq('menu_item_id', req.params.id);
-
-      updatedItem.variations = variants || [];
 
       res.json({
         message: "Menu item updated successfully",
