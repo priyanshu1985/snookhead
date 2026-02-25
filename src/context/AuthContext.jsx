@@ -51,9 +51,10 @@ export const AuthProvider = ({ children }) => {
         // If access token is expired, apiClient will auto-refresh using the refresh token
         try {
           const userInfo = await apiClient.get('/api/auth/me');
-          if (userInfo.success) {
-            setUser(userInfo.user);
-            await AsyncStorage.setItem('userData', JSON.stringify(userInfo.user));
+          if (userInfo.user) {
+            const userData = { ...userInfo.user, station: userInfo.station };
+            setUser(userData);
+            await AsyncStorage.setItem('userData', JSON.stringify(userData));
           }
         } catch (error) {
           console.log('Token validation failed:', error.message);
@@ -136,8 +137,9 @@ export const AuthProvider = ({ children }) => {
 
         // Update user info if provided
         if (data.user) {
-          setUser(data.user);
-          await AsyncStorage.setItem('userData', JSON.stringify(data.user));
+          const userData = { ...data.user, station: data.station };
+          setUser(userData);
+          await AsyncStorage.setItem('userData', JSON.stringify(userData));
         }
 
         return data.accessToken;
@@ -251,6 +253,29 @@ export const AuthProvider = ({ children }) => {
     await logout(false); // Don't call backend since tokens are already invalid
   };
 
+  // Update user data in context and storage
+  const updateUser = async (newUserData) => {
+    try {
+      const updatedUser = { ...user, ...newUserData };
+      
+      // If updating station fields
+      if (newUserData.stationname || newUserData.locationcity || newUserData.locationstate || newUserData.stationphotourl) {
+        updatedUser.station = {
+          ...updatedUser.station,
+          stationname: newUserData.stationname || updatedUser.station?.stationname,
+          locationcity: newUserData.locationcity || updatedUser.station?.locationcity,
+          locationstate: newUserData.locationstate || updatedUser.station?.locationstate,
+          stationphotourl: newUserData.stationphotourl || updatedUser.station?.stationphotourl,
+        };
+      }
+
+      setUser(updatedUser);
+      await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+    } catch (error) {
+      console.error('Error updating user data:', error);
+    }
+  };
+
   const value = {
     isAuthenticated,
     user,
@@ -267,6 +292,7 @@ export const AuthProvider = ({ children }) => {
     isStaff,
     isOwner,
     isCustomer,
+    updateUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

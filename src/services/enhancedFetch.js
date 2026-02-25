@@ -105,11 +105,14 @@ const enhancedFetch = async (url, options = {}) => {
   // Get current access token
   const { accessToken } = await getTokens();
 
+  // Determine if we should set JSON Content-Type
+  const isFormData = options.body instanceof FormData;
+  
   // Prepare headers with token
   const enhancedOptions = {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(!isFormData && { 'Content-Type': 'application/json' }),
       ...options.headers,
       ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
     },

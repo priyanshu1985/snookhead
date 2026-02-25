@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
+  TouchableOpacity,
   Dimensions,
   Alert,
+  Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../../context/AuthContext';
+import apiClient from '../../services/apiClient';
 import {
   OwnerPanelIcon,
   InventoryTrackingIcon,
@@ -118,6 +120,7 @@ export default function MenuScreen({ navigation }) {
     }
   };
 
+
   return (
     <TouchableOpacity
       style={styles.overlay}
@@ -125,19 +128,32 @@ export default function MenuScreen({ navigation }) {
       onPress={() => navigation.goBack()}
     >
       <View style={styles.menu}>
-        {/* Profile Section */}
-        <View style={styles.profile}>
-          <View style={styles.avatar}>
-            <Icon name="person-outline" size={36} color="#fff" />
+        {/* Profile Section - Ad Card Style */}
+        <TouchableOpacity 
+          style={styles.profileCard} 
+          onPress={() => navigation.navigate('Profile')}
+          activeOpacity={0.8}
+        >
+          <View style={styles.avatarContainer}>
+            <View style={styles.avatar}>
+              {user?.station?.stationphotourl || user?.profile_picture ? (
+                <Image 
+                  source={{ uri: user.station?.stationphotourl || user.profile_picture }} 
+                  style={styles.avatarImage} 
+                />
+              ) : (
+                <Icon name="person-outline" size={36} color="#fff" />
+              )}
+            </View>
           </View>
-          <Text style={styles.staffId}>{user?.name || 'User'}</Text>
-          <Text style={styles.email}>{user?.email || 'user@example.com'}</Text>
+          <Text style={styles.userName}>{user?.name?.toUpperCase() || 'USER'}</Text>
+          <Text style={styles.userEmail}>{user?.email || 'user@example.com'}</Text>
           <View style={styles.roleBadge}>
             <Text style={styles.roleText}>
               {user?.role?.toUpperCase() || 'GUEST'}
             </Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* Menu Items */}
         {getMenuItems().map((item, index) => (
@@ -168,6 +184,7 @@ export default function MenuScreen({ navigation }) {
         >
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
+
       </View>
     </TouchableOpacity>
   );
@@ -188,52 +205,62 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 0,
     borderBottomRightRadius: 0,
   },
-  profile: {
+  profileCard: {
     alignItems: 'center',
     marginBottom: 40,
+    paddingTop: 20,
     paddingBottom: 28,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    // Add border to distinguish it slightly if needed, or rely on layout
+  },
+  avatarContainer: {
+    marginBottom: 16,
   },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: '#FF8C42',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
-    elevation: 4,
+    elevation: 8,
     shadowColor: '#FF8C42',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    overflow: 'hidden',
   },
-  staffId: {
-    fontSize: 20,
-    fontWeight: '700',
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  userName: {
+    fontSize: 22,
+    fontWeight: '800',
     color: '#1A1A1A',
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
   },
-  email: {
-    fontSize: 13,
-    color: '#888888',
+  userEmail: {
+    fontSize: 14,
+    color: '#666',
     marginTop: 4,
   },
   roleBadge: {
-    backgroundColor: '#FFF8F5',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginTop: 12,
-    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 14,
+    marginTop: 16,
+    borderWidth: 1.5,
     borderColor: '#FF8C42',
+    backgroundColor: 'rgba(255, 140, 66, 0.05)',
   },
   roleText: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#FF8C42',
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
   menuItem: {
     flexDirection: 'row',

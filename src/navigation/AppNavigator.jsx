@@ -32,6 +32,7 @@ import Notifications from '../screens/other/Notifications';
 import OwnerPanel from '../screens/owners/OwnerPanel';
 import OwnerTabs from '../screens/owners/OwnerTabs';
 import OwnerPasswordSetup from '../screens/owners/OwnerPasswordSetup';
+import ProfileScreen from '../screens/owners/ProfileScreen';
 
 import SetupMenu from '../screens/setupmenu/SetupMenu';
 import InventoryDashboard from '../screens/inventory/InventoryDashboard';
@@ -255,6 +256,7 @@ export default function AppNavigator() {
               name="PaymentConfirm"
               component={PaymentConfirmScreen}
             />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </MemberProvider>
