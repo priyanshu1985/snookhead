@@ -32,6 +32,8 @@ const InventoryDashboard = ({ navigation }) => {
     quantity: '',
     operation: 'add',
     reason: '',
+    unitType: 'units', // 'units' or 'boxes'
+    itemsPerBox: '10', // Default items per box
   });
 
   // History Modal States
@@ -110,6 +112,8 @@ const InventoryDashboard = ({ navigation }) => {
       quantity: '',
       operation: 'add',
       reason: '',
+      unitType: 'units',
+      itemsPerBox: '10',
     });
     setSelectedItem(null);
   };
@@ -123,6 +127,9 @@ const InventoryDashboard = ({ navigation }) => {
 
       setLoading(true);
       const quantity = parseInt(quantityUpdate.quantity);
+      const itemsPerBox = parseInt(quantityUpdate.itemsPerBox) || 1;
+      const multiplier = quantityUpdate.unitType === 'boxes' ? itemsPerBox : 1;
+
       if (isNaN(quantity) || quantity <= 0) {
         Alert.alert('Error', 'Please enter a valid quantity');
         setLoading(false);
@@ -130,8 +137,7 @@ const InventoryDashboard = ({ navigation }) => {
       }
 
       // Calculate net change: add = positive, subtract = negative
-      const netChange =
-        quantityUpdate.operation === 'add' ? quantity : -quantity;
+      const netChange = (quantityUpdate.operation === 'add' ? quantity : -quantity) * multiplier;
 
       // menuAPI.updateStock takes (id, quantity) where quantity can be negative
       await menuAPI.updateStock(selectedItem.id, netChange);
@@ -432,9 +438,41 @@ const InventoryDashboard = ({ navigation }) => {
                   </View>
                 </View>
 
+                <View style={styles.unitToggleContainer}>
+                  <Text style={styles.label}>Restock By:</Text>
+                  <View style={styles.toggleRow}>
+                    <TouchableOpacity
+                      style={[styles.toggleButton, quantityUpdate.unitType === 'units' && styles.toggleButtonActive]}
+                      onPress={() => setQuantityUpdate(prev => ({ ...prev, unitType: 'units' }))}
+                    >
+                      <Text style={[styles.toggleButtonText, quantityUpdate.unitType === 'units' && styles.toggleButtonTextActive]}>Units</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.toggleButton, quantityUpdate.unitType === 'boxes' && styles.toggleButtonActive]}
+                      onPress={() => setQuantityUpdate(prev => ({ ...prev, unitType: 'boxes' }))}
+                    >
+                      <Text style={[styles.toggleButtonText, quantityUpdate.unitType === 'boxes' && styles.toggleButtonTextActive]}>Boxes</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {quantityUpdate.unitType === 'boxes' && (
+                  <View style={styles.itemsPerBoxContainer}>
+                    <Text style={styles.label}>Items Per Box:</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Items Per Box"
+                      value={quantityUpdate.itemsPerBox}
+                      onChangeText={text => setQuantityUpdate(prev => ({ ...prev, itemsPerBox: text }))}
+                      keyboardType="numeric"
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+                )}
+
                 <TextInput
                   style={styles.input}
-                  placeholder="Quantity *"
+                  placeholder={quantityUpdate.unitType === 'boxes' ? "Number of Boxes *" : "Quantity *"}
                   value={quantityUpdate.quantity}
                   onChangeText={text =>
                     setQuantityUpdate(prev => ({ ...prev, quantity: text }))
@@ -442,6 +480,16 @@ const InventoryDashboard = ({ navigation }) => {
                   keyboardType="numeric"
                   placeholderTextColor="#999"
                 />
+
+                {quantityUpdate.quantity && !isNaN(parseInt(quantityUpdate.quantity)) && (
+                  <View style={styles.calculationPreview}>
+                    <Text style={styles.calculationText}>
+                      Total units to {quantityUpdate.operation === 'add' ? 'add' : 'remove'}: {
+                        parseInt(quantityUpdate.quantity) * (quantityUpdate.unitType === 'boxes' ? (parseInt(quantityUpdate.itemsPerBox) || 0) : 1)
+                      }
+                    </Text>
+                  </View>
+                )}
 
                 <TextInput
                   style={[styles.input, styles.textArea]}
@@ -798,6 +846,55 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     marginBottom: 8,
+  },
+  unitToggleContainer: {
+    marginBottom: 16,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f1f1',
+    borderRadius: 8,
+    padding: 4,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  toggleButtonActive: {
+    backgroundColor: '#fff',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+  },
+  toggleButtonText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+  toggleButtonTextActive: {
+    color: '#FF8C42',
+    fontWeight: '700',
+  },
+  itemsPerBoxContainer: {
+    marginBottom: 8,
+  },
+  calculationPreview: {
+    backgroundColor: '#FFF8F5',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FFE0CC',
+  },
+  calculationText: {
+    fontSize: 14,
+    color: '#FF8C42',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   pickerContainer: {
     marginBottom: 16,

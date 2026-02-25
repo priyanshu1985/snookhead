@@ -329,6 +329,8 @@ export default function HomeScreen({ navigation }) {
                 // Pass extra session details if needed
                 frameCount:
                   activeSession?.frame_count || activeSession?.framecount || 0,
+                currentFrameStartTime:
+                  activeSession?.current_frame_start_time || null,
                 // Attach the game image to each table
                 imageUrl: gameImageUrl,
                 // Attach reservation details if exists
@@ -797,6 +799,7 @@ export default function HomeScreen({ navigation }) {
           status: 'active',
           booking_type: table.bookingType,
           frame_count: table.frameCount,
+          current_frame_start_time: table.currentFrameStartTime,
         },
         gameType,
         color,

@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { API_URL } from '../../../config';
 import eventEmitter from '../../utils/eventEmitter';
 
-const POLL_INTERVAL = 1000; // Check every 1 second for immediate response
+const POLL_INTERVAL = 30000; // Check every 30 seconds to avoid hitting rate limits
 
 export default function GlobalBillManager() {
   const { isAuthenticated } = useAuth();

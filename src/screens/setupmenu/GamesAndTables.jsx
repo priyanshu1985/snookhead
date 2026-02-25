@@ -46,6 +46,7 @@ export default function GamesAndTables() {
     framePrice: '',
     hourPrice: '',
     image_key: '',
+    frame_threshold: '30', // Default 30 mins
   });
 
   const [editGameModal, setEditGameModal] = useState(false);
@@ -53,6 +54,7 @@ export default function GamesAndTables() {
     game_id: null,
     name: '',
     image_key: '',
+    frame_threshold: '',
   });
   const [deleteConfirmModal, setDeleteConfirmModal] = useState(false);
   const [gameToDelete, setGameToDelete] = useState(null);
@@ -144,7 +146,7 @@ export default function GamesAndTables() {
   };
 
   // Game API functions
-  async function addGameAPI(gameName, imageKey) {
+  async function addGameAPI(gameName, imageKey, frameThreshold) {
     setLoading(true);
     const token = await getAuthToken();
     try {
@@ -157,6 +159,7 @@ export default function GamesAndTables() {
         body: JSON.stringify({
           game_name: gameName,
           image_key: imageKey || null,
+          frame_threshold: parseInt(frameThreshold) || 30,
         }),
       });
       const data = await response.json();
@@ -173,7 +176,7 @@ export default function GamesAndTables() {
     }
   }
 
-  async function updateGameAPI(gameId, newName, imageKey) {
+  async function updateGameAPI(gameId, newName, imageKey, frameThreshold) {
     setLoading(true);
     const token = await getAuthToken();
     try {
@@ -186,6 +189,7 @@ export default function GamesAndTables() {
         body: JSON.stringify({
           game_name: newName,
           image_key: imageKey || null,
+          frame_threshold: parseInt(frameThreshold) || 30,
         }),
       });
       const data = await response.json();
@@ -229,6 +233,7 @@ export default function GamesAndTables() {
       game_id: game.game_id || game.gameid || game.id,
       name: game.game_name || game.gamename || '',
       image_key: game.image_key || game.imagekey || '',
+      frame_threshold: String(game.frame_threshold || '30'),
     });
     setEditGameModal(true);
   };
@@ -264,6 +269,7 @@ export default function GamesAndTables() {
       editGameForm.game_id,
       editGameForm.name.trim(),
       editGameForm.image_key,
+      editGameForm.frame_threshold,
     );
     if (success) {
       setEditGameModal(false);
@@ -696,6 +702,15 @@ export default function GamesAndTables() {
                 imageType="game"
               />
 
+              <Text style={styles.inputLabel}>Frame Threshold (Minutes) *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. 30"
+                keyboardType="numeric"
+                value={gameForm.frame_threshold}
+                onChangeText={text => setGameForm({ ...gameForm, frame_threshold: text })}
+              />
+
               <View style={styles.modalFooter}>
                 <TouchableOpacity
                   style={styles.cancelButton}
@@ -714,6 +729,7 @@ export default function GamesAndTables() {
                       await addGameAPI(
                         gameForm.name.trim(),
                         gameForm.image_key,
+                        gameForm.frame_threshold,
                       );
                       Alert.alert('Success', 'Game added successfully');
                       setAddGameModal(false);
@@ -748,7 +764,7 @@ export default function GamesAndTables() {
               <TouchableOpacity
                 onPress={() => {
                   setEditGameModal(false);
-                  setEditGameForm({ game_id: null, name: '', image_key: '' });
+                  setEditGameForm({ game_id: null, name: '', image_key: '', frame_threshold: '' });
                 }}
               >
                 <Icon name="close" size={24} color="#666" />
@@ -774,12 +790,21 @@ export default function GamesAndTables() {
                 imageType="game"
               />
 
+              <Text style={styles.inputLabel}>Frame Threshold (Minutes) *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. 30"
+                keyboardType="numeric"
+                value={editGameForm.frame_threshold}
+                onChangeText={text => setEditGameForm({ ...editGameForm, frame_threshold: text })}
+              />
+
               <View style={styles.modalFooter}>
                 <TouchableOpacity
                   style={styles.cancelButton}
                   onPress={() => {
                     setEditGameModal(false);
-                    setEditGameForm({ game_id: null, name: '', image_key: '' });
+                    setEditGameForm({ game_id: null, name: '', image_key: '', frame_threshold: '' });
                   }}
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>

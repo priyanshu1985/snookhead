@@ -22,6 +22,7 @@ import {
 } from '../../utils/queueAutoAssignment';
 import MenuItemCard from '../../components/menu/MenuItemCard';
 import VariationModal from '../../components/menu/VariationModal';
+import FrameThresholdModal from '../../components/tablebooking/FrameThresholdModal';
 
 export default function AfterBooking({ route, navigation }) {
   const {
@@ -58,6 +59,13 @@ export default function AfterBooking({ route, navigation }) {
   const isFrameMode = timeOption === 'Select Frame';
   const isCountdownMode =
     timeOption === 'Set Time' || (!isStopwatchMode && !isFrameMode);
+  
+  // Frame Threshold States
+  const [frameThreshold, setFrameThreshold] = useState(30); // Default 30 mins
+  const [currentFrameStartTime, setCurrentFrameStartTime] = useState(null);
+  const [showFrameAlert, setShowFrameAlert] = useState(false);
+  const [frameDurationSeconds, setFrameDurationSeconds] = useState(0);
+
   const [menuItems, setMenuItems] = useState([]);
 
   // Two-Tier Category States
@@ -129,18 +137,29 @@ export default function AfterBooking({ route, navigation }) {
 
   // Timer logic - different behavior based on mode
   useEffect(() => {
-    // Skip timer for Frame mode (no automatic timer)
-    if (isFrameMode) {
-      return;
-    }
+    let interval;
 
-    if (isStopwatchMode) {
+    if (isFrameMode) {
+      // Frame mode: Monitor current frame duration
+      interval = setInterval(() => {
+        if (currentFrameStartTime) {
+          const now = new Date();
+          const durationSecs = Math.max(0, Math.floor((now - currentFrameStartTime) / 1000));
+          setFrameDurationSeconds(durationSecs);
+          
+          // Check threshold
+          if (durationSecs > frameThreshold * 60) {
+            setShowFrameAlert(true);
+          } else {
+            setShowFrameAlert(false);
+          }
+        }
+      }, 1000);
+    } else if (isStopwatchMode) {
       // Stopwatch mode: Count UP every second (no auto-release)
-      const interval = setInterval(() => {
+      interval = setInterval(() => {
         setElapsedSeconds(prev => prev + 1);
       }, 1000);
-
-      return () => clearInterval(interval);
     } else {
       // Countdown mode: Check for expiration and auto-release
       if (remainingSeconds <= 0 && totalDurationSeconds > 0 && !timerExpired) {
@@ -168,7 +187,74 @@ export default function AfterBooking({ route, navigation }) {
     timerExpired,
     isStopwatchMode,
     isFrameMode,
+    currentFrameStartTime,
+    frameThreshold,
   ]);
+
+  // Sync Threshold and Frame Start Time from session data
+  useEffect(() => {
+    if (!isFrameMode) return;
+    
+    // Use threshold limit - defaulting to 30 since it's no longer in session as integer
+    // Ideally we should fetch this from the Game object
+    const threshold = 30; 
+    setFrameThreshold(threshold);
+
+    // Initialize/Sync frame baseline time (New repurposed column)
+    const frameStart = sessionData?.current_frame_start_time || sessionData?.starttime;
+    if (frameStart) {
+      setCurrentFrameStartTime(new Date(frameStart));
+    }
+  }, [isFrameMode, sessionData]);
+
+  // Handle Add Next Frame
+  const handleAddNextFrame = async () => {
+    try {
+      setLoading(true);
+      const token = await AsyncStorage.getItem('authToken');
+      const sessionId = sessionData?.active_id || sessionData?.id || sessionData?.activeid;
+      
+      if (!token || !sessionId) return;
+
+      const response = await fetch(`${API_URL}/api/activeTables/${sessionId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ add_next_frame: true }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Added next frame:', result);
+        
+        // Update local state
+        if (result.session) {
+          setSessionData(result.session);
+          setFrameCount(result.session.framecount || result.session.frame_count || frameCount + 1);
+          if (result.session.current_frame_start_time) {
+            setCurrentFrameStartTime(new Date(result.session.current_frame_start_time));
+          }
+        } else {
+          // Fallback if session not returned
+          setFrameCount(prev => prev + 1);
+          setCurrentFrameStartTime(new Date());
+        }
+        
+        setShowFrameAlert(false);
+        Alert.alert('Success', 'Next frame started successfully');
+      } else {
+        const errData = await response.json();
+        Alert.alert('Error', errData.error || 'Failed to add next frame');
+      }
+    } catch (err) {
+      console.error('Add next frame failed:', err);
+      Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Handle timer expiration - auto generate bill silently
   const handleTimerExpired = async () => {
@@ -1211,8 +1297,21 @@ export default function AfterBooking({ route, navigation }) {
                 {frameCount === 1 ? 'Frame' : 'Frames'}
               </Text>
               <Text style={[styles.timerDurationInfo, { marginTop: 4 }]}>
-                Elapsed: {formatCountdownTime(elapsedSeconds)}
+                Total Session: {formatCountdownTime(elapsedSeconds)}
               </Text>
+              <Text style={[styles.timerDurationInfo, { marginTop: 2, color: showFrameAlert ? '#FF4444' : '#666' }]}>
+                Current Frame: {formatCountdownTime(frameDurationSeconds)} / {frameThreshold}m
+              </Text>
+              {showFrameAlert && (
+                <TouchableOpacity 
+                  style={styles.frameAlertSmallBtn} 
+                  onPress={handleAddNextFrame}
+                  disabled={loading}
+                >
+                  <Icon name="add-circle" size={16} color="#FFF" />
+                  <Text style={styles.frameAlertSmallBtnText}>Add Next Frame</Text>
+                </TouchableOpacity>
+              )}
             </View>
             <View style={styles.timerStatus}>
               <Icon name="apps-outline" size={12} color="#4CAF50" />
@@ -2216,6 +2315,32 @@ const styles = StyleSheet.create({
     color: '#888888',
     marginTop: 8,
     fontWeight: '500',
+  },
+  frameHint: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  frameAlertSmallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF4444',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 10,
+    gap: 6,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  frameAlertSmallBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 
   // Quantity Controls
