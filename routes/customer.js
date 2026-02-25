@@ -2,6 +2,7 @@ import express from "express";
 import { Customer } from "../models/index.js";
 import { getSupabase as getDb } from "../config/supabase.js";
 import { auth, authorize } from "../middleware/auth.js";
+import { sendWelcomeEmail } from "../utils/membershipEmailService.js";
 import {
   stationContext,
   requireStation,
@@ -200,6 +201,15 @@ router.post(
             stationid: req.stationId,
             createdAt: new Date()
           });
+        }
+
+        // 3. Send Welcome Email with QR Code (Async/Non-blocking)
+        // This is wrapped in its own try/catch to ensure registration doesn't fail if email fails
+        if (customer.email) {
+          sendWelcomeEmail(customer, {
+            qrid: qrId,
+            qrPayload: qrPayload
+          }).catch(err => console.error("Non-blocking welcome email error:", err));
         }
 
       } catch (walletErr) {
