@@ -89,7 +89,7 @@ router.post(
           gamename: gameName,
           imagekey: req.body.image_key || null,
           frame_threshold: req.body.frame_threshold ? parseInt(req.body.frame_threshold) : 30,
-          gamecreatedon: new Date(),
+          gamecreatedon: new Date().toISOString(),
           createdby: req.user.email || req.user.name || req.user.id,
         },
         req.stationId
@@ -99,8 +99,8 @@ router.post(
       const newG = await Game.create(payload);
       res.status(201).json(newG);
     } catch (err) {
-      console.error("Game create error DETAILS:", err);
-      res.status(400).json({ error: "Bad request", details: err.message, stack: err.stack });
+      console.error(err);
+      res.status(400).json({ error: "Bad request", details: err.message });
     }
   }
 );

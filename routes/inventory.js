@@ -91,7 +91,7 @@ router.get("/history", auth, stationContext, async (req, res) => {
 
     // Apply filters
     if (req.stationId) {
-      query = query.eq("station_id", req.stationId);
+      query = query.eq("stationid", req.stationId);
     }
     if (itemId) query = query.eq("menu_item_id", itemId);
     if (category) query = query.eq("category", category);
@@ -162,7 +162,7 @@ router.get("/", auth, stationContext, async (req, res) => {
     // Fetch ALL items for this station
     const where = {};
     if (req.stationId) {
-      where.station_id = req.stationId;
+      where.stationid = req.stationId;
     }
     // Note: 'isactive' filter is better done in memory if not all fields are reliable, 
     // but we can try to filter simple fields at DB level if findAll supports it.
@@ -354,7 +354,7 @@ router.post(
       // Check if item already exists for this station
       const existingWhere = { itemname: item_name.trim() };
       if (req.stationId) {
-        existingWhere.station_id = req.stationId;
+        existingWhere.stationid = req.stationId;
       }
 
       const existingItem = await Inventory.findOne({
@@ -383,7 +383,7 @@ router.post(
       };
 
       if (req.stationId) {
-        itemData.station_id = req.stationId;
+        itemData.stationid = req.stationId;
       }
 
       const newItem = await Inventory.create(itemData);
@@ -607,7 +607,7 @@ router.get("/alerts/low-stock", auth, stationContext, async (req, res) => {
     // Fetch all active items for station
     const whereClause = { isactive: true };
     if (req.stationId) {
-      whereClause.station_id = req.stationId;
+      whereClause.stationid = req.stationId;
     }
 
     const allItems = await Inventory.findAll({ where: whereClause });

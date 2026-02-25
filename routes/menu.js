@@ -375,7 +375,7 @@ router.patch(
           menu_item_id: item.id,
           item_name: item.name,
           category: item.category,
-          station_id: req.stationId,
+          stationid: req.stationId,
           action: change >= 0 ? 'ADD' : 'DEDUCT',
           quantity_change: Math.abs(change),
           previous_stock: oldStock,
@@ -392,7 +392,7 @@ router.patch(
             itemname: item.name.trim(),
             isactive: true
           };
-          if (req.stationId) invWhere.station_id = req.stationId;
+          if (req.stationId) invWhere.stationid = req.stationId;
 
           const invItem = await Inventory.findOne({ where: invWhere });
 

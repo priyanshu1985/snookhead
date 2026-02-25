@@ -2,6 +2,15 @@
 // Touch to force restart!!
 import "dotenv/config";
 import dns from "node:dns";
+
+// 🔥 Bypassing local DNS hijacking by forcing Google DNS
+try {
+  dns.setServers(["8.8.8.8", "8.8.4.4"]);
+  console.log("🛠️ DNS servers forced to Google DNS (8.8.8.8)");
+} catch (error) {
+  console.warn("⚠️ Failed to set custom DNS servers:", error.message);
+}
+
 if (dns.setDefaultResultOrder) {
   dns.setDefaultResultOrder("ipv4first");
 }
@@ -50,8 +59,8 @@ process.on("unhandledRejection", (reason, promise) => {
 
 // Middleware
 app.use(securityHeaders); // Must be before other middlewares
-// We use 500 requests per 15 minutes. 10 requests (the default) is far too strict for an SPA that fires multiple API calls on load.
-app.use(rateLimit(500, 15 * 60 * 1000));
+// We use 2000 requests per 15 minutes. 500 was still too strict for multiple active users and polling.
+app.use(rateLimit(2000, 15 * 60 * 1000));
 
 // Permissive CORS: Allow all origins for initial deployment
 app.use(cors());

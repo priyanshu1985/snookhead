@@ -8,6 +8,9 @@ import {
   MenuItem,
   Queue,
   Reservation,
+  Inventory,
+  InventoryLog,
+  Game,
 } from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
@@ -246,14 +249,18 @@ router.post(
         }
       }
 
+      // Fetch Game to get frame_threshold
+      const game = await Game.findByPk(game_id);
+      const frameThreshold = game ? (game.frame_threshold || 30) : 30;
+
       // create active session with station_id
       // booking_type: 'timer' = countdown with auto-release, 'set' = stopwatch (count up, manual release), 'frame' = frame-based
       const sessionData = addStationToData(
         {
           tableid: table_id,
           gameid: game_id,
-          starttime: startTime,
-          bookingendtime: bookingEndTime,
+          starttime: startTime.toISOString ? startTime.toISOString() : startTime,
+          bookingendtime: bookingEndTime && bookingEndTime.toISOString ? bookingEndTime.toISOString() : bookingEndTime,
           durationminutes:
             duration_minutes ||
             (queueEntry ? queueEntry.duration_minutes : null),
@@ -267,11 +274,9 @@ router.post(
             booking_type || (queueEntry ? queueEntry.booking_type : "timer"), // Transfer queue booking type
           framecount:
             frame_count || (queueEntry ? queueEntry.frame_count : null),
-          // bookingsource removed due to schema constraint
-          created_by: req.user.id, // Track who started the session
           current_frame_start_time:
             (booking_type || (queueEntry ? queueEntry.booking_type : "timer")) === "frame"
-              ? startTime
+              ? (startTime.toISOString ? startTime.toISOString() : startTime)
               : null,
           food_orders:
             food_orders ||
@@ -360,6 +365,41 @@ router.post(
                 { stock: newStock },
                 { where: { id: menuItem.id } },
               );
+            }
+
+            // Sync with Inventory Table
+            try {
+              if (Inventory) {
+                const inventoryWhere = {
+                  itemname: menuItem.name.trim(),
+                  isactive: true
+                };
+                if (req.stationId) inventoryWhere.stationid = req.stationId;
+
+                const inventoryItem = await Inventory.findOne({ where: inventoryWhere });
+                if (inventoryItem) {
+                  await inventoryItem.decrement('currentquantity', { by: qty });
+                  
+                  // Log the deduction
+                  if (InventoryLog) {
+                    await InventoryLog.create({
+                      menu_item_id: menuItem.id,
+                      item_name: menuItem.name,
+                      category: menuItem.category,
+                      stationid: req.stationId,
+                      action: 'DEDUCT',
+                      quantity_change: qty,
+                      previous_stock: inventoryItem.currentquantity,
+                      new_stock: inventoryItem.currentquantity - qty,
+                      reason: `Booking Created (Session ID: ${session.activeid || session.active_id})`,
+                      user_id: req.user ? req.user.id : null,
+                      created_at: new Date()
+                    });
+                  }
+                }
+              }
+            } catch (invErr) {
+              console.error("Inventory sync failed in booking start:", invErr);
             }
           }
         }
@@ -669,6 +709,41 @@ router.post(
               { stock: newStock },
               { where: { id: menuItem.id } },
             );
+
+            // Sync with Inventory Table
+            try {
+              if (Inventory) {
+                const inventoryWhere = {
+                  itemname: menuItem.name.trim(),
+                  isactive: true
+                };
+                if (req.stationId) inventoryWhere.stationid = req.stationId;
+
+                const inventoryItem = await Inventory.findOne({ where: inventoryWhere });
+                if (inventoryItem) {
+                  await inventoryItem.decrement('currentquantity', { by: qty });
+
+                  // Log the deduction
+                  if (InventoryLog) {
+                    await InventoryLog.create({
+                      menu_item_id: menuItem.id,
+                      item_name: menuItem.name,
+                      category: menuItem.category,
+                      stationid: req.stationId,
+                      action: 'DEDUCT',
+                      quantity_change: qty,
+                      previous_stock: inventoryItem.currentquantity,
+                      new_stock: inventoryItem.currentquantity - qty,
+                      reason: `Auto-Release (Session ID: ${session.active_id})`,
+                      user_id: req.user ? req.user.id : null,
+                      created_at: new Date()
+                    });
+                  }
+                }
+              }
+            } catch (invErr) {
+              console.error("Inventory sync failed in auto-release:", invErr);
+            }
           }
 
           const itemTotal = Number(item.price || 0) * Number(item.qty || 1);
@@ -792,7 +867,7 @@ router.put(
       // Custom logic for "Add Next Frame" action
       if (updates.add_next_frame) {
         allowedUpdates.framecount = (session.framecount || session.frame_count || 0) + 1;
-        allowedUpdates.current_frame_start_time = new Date();
+        allowedUpdates.current_frame_start_time = new Date().toISOString();
       }
 
       if (Object.keys(allowedUpdates).length === 0) {

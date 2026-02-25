@@ -74,12 +74,22 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
     let calculatedTotal = 0;
 
     for (const cartItem of cart) {
-      const { item, qty } = cartItem;
+      // Handle both nested and flat structures for robustness
+      const menuItemId = cartItem.menu_item_id || (cartItem.item && cartItem.item.id);
+      const qty = Number(cartItem.quantity || cartItem.qty || (cartItem.item && cartItem.item.qty) || 1);
+      const variationId = cartItem.variation_id || (cartItem.item && cartItem.item.variation_id);
+
+      if (!menuItemId) {
+        console.warn("Skipping cart item with missing ID:", cartItem);
+        continue;
+      }
+
+      const menuWhere = addStationFilter({ id: menuItemId }, req.stationId, "stationid");
 
       const menuItem = await MenuItem.findOne({ where: menuWhere });
       if (!menuItem) {
         return res.status(404).json({
-          error: `Menu item ${item.name} not found`,
+          error: `Menu item ${cartItem.name || (cartItem.item && cartItem.item.name) || menuItemId} not found`,
         });
       }
 
@@ -89,11 +99,11 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       let inventoryMultiplier = 1;
       let itemNameForLog = menuItem.name;
 
-      if (item.variation_id) {
+      if (variationId) {
         const { data: variation } = await getDb()
           .from('menu_item_variations')
           .select('*')
-          .eq('id', item.variation_id)
+          .eq('id', variationId)
           .single();
 
         if (variation) {
@@ -106,11 +116,11 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       const itemTotal = priceEach * qty;
       calculatedTotal += itemTotal;
 
-      // Create OrderItem (TODO: add variation_id to schema if needed, but for now we store the updated price)
+      // Create OrderItem
       await OrderItem.create({
         orderId: order.id,
-        menuItemId: item.id,
-        qty: Number(qty) || 1,
+        menuItemId: menuItemId,
+        qty: qty,
         priceEach,
       });
 
@@ -127,7 +137,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
             itemname: menuName,
             isactive: true
           };
-          if (req.stationId) inventoryWhere.station_id = req.stationId;
+          if (req.stationId) inventoryWhere.stationid = req.stationId;
 
           const inventoryItem = await Inventory.findOne({ where: inventoryWhere });
 
@@ -142,6 +152,24 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
             // Deduct stock
             await inventoryItem.decrement('currentquantity', { by: totalDeductionNeeded });
             console.log(`Deducted ${totalDeductionNeeded} from inventory for ${itemNameForLog}`);
+
+            // Log the deduction
+            const { InventoryLog } = await import("../models/index.js");
+            if (InventoryLog) {
+              await InventoryLog.create({
+                menu_item_id: menuItemId,
+                item_name: menuItem.name,
+                category: menuItem.category,
+                stationid: req.stationId,
+                action: 'DEDUCT',
+                quantity_change: totalDeductionNeeded,
+                previous_stock: inventoryItem.currentquantity,
+                new_stock: inventoryItem.currentquantity - totalDeductionNeeded,
+                reason: `Order Created (Order ID: ${order.id})`,
+                user_id: req.user ? req.user.id : null,
+                created_at: new Date()
+              });
+            }
           } else {
             console.warn(`No inventory item found for ${itemNameForLog}, skipping inventory deduction.`);
           }
@@ -232,7 +260,7 @@ router.get("/", auth, stationContext, async (req, res) => {
       currentPage: page,
       data: orders,
       debug: {
-        station_id: req.stationId,
+        stationid: req.stationId,
         where_filter: where,
         raw_orders_count: orders.length,
       },
