@@ -20,7 +20,10 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../../config';
 import MemberAutocomplete from '../../components/member/MemberAutocomplete';
+import VariationModal from '../../components/menu/VariationModal';
+import FrameThresholdModal from '../../components/tablebooking/FrameThresholdModal';
 import Sound from 'react-native-sound';
+import { PreparedFoodIcon, PackedFoodIcon } from '../../components/common/icon';
 
 // Move OUTSIDE component
 const getNextDates = () => {

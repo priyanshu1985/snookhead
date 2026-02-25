@@ -17,6 +17,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../../config';
 import ImageSelector from '../../components/ImageSelector';
+import { PreparedFoodIcon, PackedFoodIcon } from '../../components/common/icon';
 
 async function getAuthToken() {
   try {
@@ -497,6 +498,8 @@ export default function MenuManagement() {
             ).length;
             const isSelected = selectedMainCategory === mainCat;
 
+            const IconComponent = mainCat === 'prepared' ? PreparedFoodIcon : PackedFoodIcon;
+
             return (
               <TouchableOpacity
                 key={mainCat}
@@ -509,6 +512,11 @@ export default function MenuManagement() {
                   setSelectedSubcategory(null);
                 }}
               >
+                <IconComponent 
+                  size={20} 
+                  color={isSelected ? '#FF8C42' : '#999'} 
+                  style={{ marginRight: 6 }}
+                />
                 <Text
                   style={[
                     styles.mainCategoryTabText,
@@ -796,7 +804,11 @@ export default function MenuManagement() {
             ListEmptyComponent={
               <View style={styles.enhancedMenuEmptyState}>
                 <View style={styles.menuEmptyIconContainer}>
-                  <Icon name="restaurant-outline" size={64} color="#E8E8E8" />
+                  {selectedMainCategory === 'prepared' ? (
+                    <PreparedFoodIcon size={64} color="#E8E8E8" />
+                  ) : (
+                    <PackedFoodIcon size={64} color="#E8E8E8" />
+                  )}
                 </View>
                 <Text style={styles.menuEmptyTitle}>
                   No Items

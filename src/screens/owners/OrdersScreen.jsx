@@ -22,6 +22,7 @@ import Header from '../../components/common/Header';
 import ActiveOrders from '../../components/orders/ActiveOrders';
 import MenuItemCard from '../../components/menu/MenuItemCard';
 import VariationModal from '../../components/menu/VariationModal';
+import { PreparedFoodIcon, PackedFoodIcon } from '../../components/common/icon';
 
 const DEFAULT_CATEGORIES = ['prepared', 'packed', 'cigarette'];
 
@@ -382,26 +383,39 @@ export default function OrdersScreen({ navigation }) {
             {/* Main Categories Row */}
             {mainCategories.length > 0 && (
               <View style={styles.mainCategoriesGrid}>
-                {mainCategories.map(cat => (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[
-                      styles.mainCategoryButton,
-                      selectedMainCategory === cat && styles.mainCategoryButtonActive,
-                    ]}
-                    onPress={() => setSelectedMainCategory(cat)}
-                  >
-                    <Text
+                {mainCategories.map(cat => {
+                  const IconComponent = cat.toLowerCase() === 'prepared' ? PreparedFoodIcon : 
+                                      cat.toLowerCase() === 'packed' ? PackedFoodIcon : null;
+                  return (
+                    <TouchableOpacity
+                      key={cat}
                       style={[
-                        styles.mainCategoryButtonText,
-                        selectedMainCategory === cat &&
-                          styles.mainCategoryButtonTextActive,
+                        styles.mainCategoryButton,
+                        selectedMainCategory === cat && styles.mainCategoryButtonActive,
                       ]}
+                      onPress={() => setSelectedMainCategory(cat)}
                     >
-                      {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        {IconComponent && (
+                          <IconComponent 
+                            size={18} 
+                            color={selectedMainCategory === cat ? '#FFFFFF' : '#666666'} 
+                            style={{ marginRight: 6 }}
+                          />
+                        )}
+                        <Text
+                          style={[
+                            styles.mainCategoryButtonText,
+                            selectedMainCategory === cat &&
+                              styles.mainCategoryButtonTextActive,
+                          ]}
+                        >
+                          {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
 

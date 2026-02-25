@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../../../config';
 import ImageSelector from '../../components/ImageSelector';
 import enhancedFetch from '../../services/enhancedFetch';
+import { TableGamesIcon } from '../../components/common/icon';
 
 async function getAuthToken() {
   try {
@@ -428,7 +429,7 @@ export default function GamesAndTables() {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.sectionHeader}>
-        <Icon name="game-controller-outline" size={22} color="#FF8C42" />
+        <TableGamesIcon size={22} color="#FF8C42" />
         <Text style={styles.sectionHeaderText}>Manage Games</Text>
         <View style={styles.gameCountBadge}>
           <Text style={styles.gameCountText}>{games.length}</Text>
@@ -439,7 +440,7 @@ export default function GamesAndTables() {
         {games.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIconContainer}>
-              <Icon name="game-controller-outline" size={48} color="#FF8C42" />
+              <TableGamesIcon size={48} color="#FF8C42" />
             </View>
             <Text style={styles.emptyText}>No games added yet</Text>
             <Text style={styles.emptySubtext}>

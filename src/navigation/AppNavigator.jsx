@@ -3,6 +3,12 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { 
+  DashboardIcon, 
+  QueueIcon, 
+  BillingIcon, 
+  FoodIcon 
+} from '../components/common/icon';
 
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
@@ -97,9 +103,8 @@ function BottomTabs() {
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarIcon: ({ color, focused }) => (
-            <Icon
-              name={focused ? 'home' : 'home-outline'}
+          tabBarIcon: ({ color }) => (
+            <DashboardIcon
               size={28}
               color={color}
             />
@@ -111,9 +116,8 @@ function BottomTabs() {
         name="Queue"
         component={QueueScreen}
         options={{
-          tabBarIcon: ({ color, focused }) => (
-            <Icon
-              name={focused ? 'people' : 'people-outline'}
+          tabBarIcon: ({ color }) => (
+            <QueueIcon
               size={28}
               color={color}
             />
@@ -140,9 +144,8 @@ function BottomTabs() {
         name="Bill"
         component={BillScreen}
         options={{
-          tabBarIcon: ({ color, focused }) => (
-            <Icon
-              name={focused ? 'receipt' : 'receipt-outline'}
+          tabBarIcon: ({ color }) => (
+            <BillingIcon
               size={28}
               color={color}
             />
@@ -154,9 +157,8 @@ function BottomTabs() {
         name="Orders"
         component={OrdersScreen}
         options={{
-          tabBarIcon: ({ color, focused }) => (
-            <Icon
-              name={focused ? 'document-text' : 'document-text-outline'}
+          tabBarIcon: ({ color }) => (
+            <FoodIcon
               size={28}
               color={color}
             />

@@ -9,6 +9,15 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../../context/AuthContext';
+import {
+  OwnerPanelIcon,
+  InventoryTrackingIcon,
+  SetupMenuIcon,
+  MembersListIcon,
+  UpgradeIcon,
+  ReportBugsIcon,
+  PrivacyPolicyIcon,
+} from '../../components/common/icon';
 
 const { width } = Dimensions.get('window');
 
@@ -19,52 +28,52 @@ export default function MenuScreen({ navigation }) {
   const getMenuItems = () => {
     const allMenuItems = [
       {
-        icon: 'id-card-outline',
+        icon: OwnerPanelIcon,
         title: "Owner's Panel",
         route: 'OwnerPanel',
-        roles: ['owner', 'admin'], // Owners and admins can access
+        roles: ['owner', 'admin'],
       },
       {
-        icon: 'calendar-outline',
+        icon: InventoryTrackingIcon,
         title: 'Reservations',
         route: 'ReservationsListScreen',
-        roles: ['owner', 'admin', 'staff'], // Staff can also manage reservations
+        roles: ['owner', 'admin', 'staff'],
       },
       {
-        icon: 'settings-outline',
+        icon: SetupMenuIcon,
         title: 'Set up menu',
         route: 'SetupMenu',
-        roles: ['owner', 'admin'], // Owners and admins can access
+        roles: ['owner', 'admin'],
       },
       {
-        icon: 'stats-chart-outline',
+        icon: InventoryTrackingIcon,
         title: 'inventory tracking',
         route: 'InventoryDashboard',
         roles: ['owner', 'admin'],
       },
       {
-        icon: 'people-outline',
+        icon: MembersListIcon,
         title: 'Member Management',
         route: 'Member',
         roles: ['owner', 'admin'],
       },
       {
-        icon: 'refresh-outline',
+        icon: UpgradeIcon,
         title: 'Upgrade subscription',
         route: 'UpgradeSubscription',
-        roles: ['owner'], // Only owners can upgrade
+        roles: ['owner'],
       },
       {
-        icon: 'bug-outline',
+        icon: ReportBugsIcon,
         title: 'Report bugs',
         route: 'ReportBugs',
-        roles: ['owner', 'customer', 'admin', 'staff'], // All roles can report bugs
+        roles: ['owner', 'customer', 'admin', 'staff'],
       },
       {
-        icon: 'shield-checkmark-outline',
+        icon: PrivacyPolicyIcon,
         title: 'Privacy and Policy',
         route: 'PrivacyPolicy',
-        roles: ['owner', 'customer', 'admin', 'staff'], // All roles can view policy
+        roles: ['owner', 'customer', 'admin', 'staff'],
       },
     ];
 
@@ -137,7 +146,7 @@ export default function MenuScreen({ navigation }) {
             style={styles.menuItem}
             onPress={() => handleMenuItemPress(item.route)}
           >
-            <Icon name={item.icon} size={22} color="#FF8C42" />
+            <item.icon size={22} color="#FF8C42" />
             <Text style={styles.menuText}>{item.title}</Text>
             <Icon
               name="chevron-forward-outline"

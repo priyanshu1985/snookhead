@@ -1446,27 +1446,40 @@ export default function AfterBooking({ route, navigation }) {
         {/* 1. Main Categories (Prepared vs Packed) */}
         {mainCategories.length > 0 && (
           <View style={styles.mainCategoriesContainer}>
-            {mainCategories.map(cat => (
-              <TouchableOpacity
-                key={cat}
-                style={[
-                  styles.mainCategoryButton,
-                  selectedMainCategory === cat &&
-                    styles.mainCategoryButtonActive,
-                ]}
-                onPress={() => setSelectedMainCategory(cat)}
-              >
-                <Text
+            {mainCategories.map(cat => {
+              const IconComponent = cat.toLowerCase() === 'prepared' ? PreparedFoodIcon : 
+                                  cat.toLowerCase() === 'packed' ? PackedFoodIcon : null;
+              return (
+                <TouchableOpacity
+                  key={cat}
                   style={[
-                    styles.mainCategoryText,
+                    styles.mainCategoryButton,
                     selectedMainCategory === cat &&
-                      styles.mainCategoryTextActive,
+                      styles.mainCategoryButtonActive,
                   ]}
+                  onPress={() => setSelectedMainCategory(cat)}
                 >
-                  {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    {IconComponent && (
+                      <IconComponent 
+                        size={18} 
+                        color={selectedMainCategory === cat ? '#FFFFFF' : '#666666'} 
+                        style={{ marginRight: 6 }}
+                      />
+                    )}
+                    <Text
+                      style={[
+                        styles.mainCategoryText,
+                        selectedMainCategory === cat &&
+                          styles.mainCategoryTextActive,
+                      ]}
+                    >
+                      {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
@@ -1508,7 +1521,13 @@ export default function AfterBooking({ route, navigation }) {
             </View>
           ) : getFilteredMenuItems().length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Icon name="restaurant-outline" size={48} color="#ccc" />
+              {selectedMainCategory.toLowerCase() === 'prepared' ? (
+                <PreparedFoodIcon size={48} color="#ccc" />
+              ) : selectedMainCategory.toLowerCase() === 'packed' ? (
+                <PackedFoodIcon size={48} color="#ccc" />
+              ) : (
+                <Icon name="restaurant-outline" size={48} color="#ccc" />
+              )}
               <Text style={styles.emptyText}>
                 No items found in {selectedSubCategory || selectedMainCategory}
               </Text>

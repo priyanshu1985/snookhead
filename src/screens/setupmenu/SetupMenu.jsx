@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import GamesAndTables from './GamesAndTables';
 import MenuManagement from './MenuManagement';
+import { SetupDashboardIcon, MenuIcon } from '../../components/common/icon';
 
 export default function SetupMenu({ navigation }) {
   const [activeTab, setActiveTab] = useState('SET DASHBOARD');
@@ -50,13 +51,28 @@ export default function SetupMenu({ navigation }) {
               style={styles.tabBtn}
               onPress={() => handleTabChange(tab)}
             >
-              <Text
-                style={
-                  activeTab === tab ? styles.activeTabText : styles.tabText
-                }
-              >
-                {tab.replace('MANAGE ', '')}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {tab === 'SET DASHBOARD' ? (
+                  <SetupDashboardIcon 
+                    size={18} 
+                    color={activeTab === tab ? '#FF8C42' : '#999'} 
+                    style={{ marginRight: 6 }} 
+                  />
+                ) : (
+                  <MenuIcon 
+                    size={18} 
+                    color={activeTab === tab ? '#FF8C42' : '#999'} 
+                    style={{ marginRight: 6 }} 
+                  />
+                )}
+                <Text
+                  style={
+                    activeTab === tab ? styles.activeTabText : styles.tabText
+                  }
+                >
+                  {tab.replace('MANAGE ', '').charAt(0).toUpperCase() + tab.replace('MANAGE ', '').slice(1).toLowerCase()}
+                </Text>
+              </View>
               {activeTab === tab && <View style={styles.tabLine} />}
             </TouchableOpacity>
           ))}
