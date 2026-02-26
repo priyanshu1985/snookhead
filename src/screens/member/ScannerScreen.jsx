@@ -209,12 +209,38 @@ export default function ScannerScreen({ navigation, route }) {
               result.customer.name
             }'s wallet?\nWallet Balance: ₹${walletBalance.toFixed(
               2,
-            )}\nRemaining: ₹${(walletBalance - billAmount).toFixed(2)}`,
+              )}\nRemaining: ₹${(walletBalance - billAmount).toFixed(2)}`,
             [
               { text: 'Cancel', style: 'cancel' },
               {
                 text: 'Confirm Payment',
                 onPress: () => processWalletPayment(result, billAmount),
+              },
+            ],
+          );
+        } else if (route?.params?.returnScreen === 'PaymentConfirmScreen') {
+          // Special handling for Reservations payment
+          Alert.alert(
+            'Customer Identified',
+            `Customer: ${result.customer?.name || 'Unknown'}\nWallet Balance: ₹${result.wallet?.balance || 0}`,
+            [
+              {
+                text: 'Cancel',
+                onPress: () => setShowManualEntry(true),
+                style: 'cancel',
+              },
+              {
+                text: 'Use Wallet',
+                onPress: () => {
+                  navigation.navigate('PaymentConfirmScreen', {
+                    scannedCustomer: {
+                      id: result.customer?.id,
+                      name: result.customer?.name,
+                      phone: result.customer?.phone,
+                      wallet: result.wallet
+                    },
+                  });
+                },
               },
             ],
           );

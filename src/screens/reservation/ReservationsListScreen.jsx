@@ -17,7 +17,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { reservationsAPI, activeTables } from '../../services/api';
 import { API_URL } from '../../../config';
 import ReservationCard from '../../components/reservation/ReservationCard';
-import ReservationFormModal from '../../components/reservation/ReservationFormModal';
 
 const ReservationsListScreen = ({ navigation }) => {
   const [reservations, setReservations] = useState([]);
@@ -28,7 +27,6 @@ const ReservationsListScreen = ({ navigation }) => {
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [selectedGameFilter, setSelectedGameFilter] = useState('all');
   const [showFilterModal, setShowFilterModal] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Available filters
   const statusFilters = [
@@ -345,12 +343,8 @@ const ReservationsListScreen = ({ navigation }) => {
   };
 
   const handleCreateNew = () => {
-    console.log('FAB pressed - Opening create modal');
-    setShowCreateModal(true);
-  };
-
-  const handleCreateSuccess = () => {
-    fetchReservations(); // Refresh the list
+    console.log('FAB pressed - Navigating to NewReservation');
+    navigation.navigate('NewReservation', { bookingMode: 'advance' });
   };
 
   const renderFilterChip = filter => {
@@ -571,12 +565,7 @@ const ReservationsListScreen = ({ navigation }) => {
         </View>
       </Modal>
 
-      {/* Create Reservation Modal */}
-      <ReservationFormModal
-        visible={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onSuccess={handleCreateSuccess}
-      />
+      {/* Reservations List */}
 
       {/* Floating Action Button */}
       <TouchableOpacity

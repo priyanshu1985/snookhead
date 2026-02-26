@@ -221,49 +221,98 @@ export const calculateEstimatedCost = async bookingDetails => {
     duration_minutes,
     frame_count,
     game_id,
+    table_id, // New: support table-specific pricing
     food_orders = [],
   } = bookingDetails;
 
   try {
-    // Get game details for pricing
-    const games = await gamesAPI.getAll();
-    const game = games.find(g => g.id === game_id);
+    // 1. Get game and table details for pricing
+    const [gamesData, tablesData] = await Promise.all([
+      gamesAPI.getAll(),
+      tablesAPI.getAll()
+    ]);
+
+    // Robustly handle potentially wrapped responses (e.g., { data: [...] })
+    const games = Array.isArray(gamesData) ? gamesData : (gamesData?.data || []);
+    const tables = Array.isArray(tablesData) ? tablesData : (tablesData?.data || []);
+
+    // Robust ID matching (handling string vs number)
+    const game = games.find(g => String(g.id) === String(game_id));
+    const table = table_id ? tables.find(t => String(t.id) === String(table_id)) : null;
 
     if (!game) {
-      throw new Error('Game not found');
+      console.warn(`[calculateEstimatedCost] Game not found for ID: ${game_id}. Using 0 as fallback.`);
     }
 
     let tableCost = 0;
 
-    // Calculate table cost based on booking type
-    if (booking_type === 'timer' && duration_minutes) {
-      const hours = duration_minutes / 60;
-      tableCost = hours * (game.price_per_hour || 0);
-    } else if (booking_type === 'frame' && frame_count) {
-      tableCost = frame_count * (game.price_per_frame || 0);
+    // 2. Calculate table cost
+    // Prioritize table pricing if available (matches old ReservationFormModal logic)
+    if (table) {
+      if ((booking_type === 'timer' || booking_type === 'set_time') && duration_minutes) {
+        const pricePerMin = parseFloat(table.pricePerMin || table.pricepermin || 0);
+        if (pricePerMin > 0) {
+          tableCost = duration_minutes * pricePerMin;
+        } else {
+          // Fallback to game pricing if table price is not set
+          const hours = duration_minutes / 60;
+          tableCost = hours * (game?.price_per_hour || 0);
+        }
+      } else if (booking_type === 'frame' && frame_count) {
+        const frameCharge = parseFloat(table.frameCharge || table.framecharge || 0);
+        if (frameCharge > 0) {
+          tableCost = frame_count * frameCharge;
+        } else {
+          // Fallback
+          tableCost = frame_count * (game?.price_per_frame || 0);
+        }
+      }
+    } else if (game) {
+      // Game-level fallback if table not specified
+      if ((booking_type === 'timer' || booking_type === 'set_time') && duration_minutes) {
+        const hours = duration_minutes / 60;
+        tableCost = hours * (game.price_per_hour || 0);
+      } else if (booking_type === 'frame' && frame_count) {
+        tableCost = frame_count * (game.price_per_frame || 0);
+      }
     }
-    // For stopwatch, cost is calculated at the end
 
-    // Calculate food cost
+    // 3. Calculate food cost
     let foodCost = 0;
     if (food_orders.length > 0) {
       const menuItems = await menuAPI.getAll();
       foodCost = food_orders.reduce((total, order) => {
-        const item = menuItems.find(m => m.id === order.menu_item_id);
-        return total + (item ? item.price * order.quantity : 0);
+        const item = menuItems.find(m => String(m.id) === String(order.id));
+        let itemPrice = item ? item.price : 0;
+        
+        if (order.variation_id && item?.variations) {
+          const variation = item.variations.find(v => String(v.id) === String(order.variation_id));
+          if (variation) itemPrice = variation.price;
+        }
+        
+        return total + (itemPrice * order.qty);
       }, 0);
     }
 
-    const totalCost = tableCost + foodCost;
+    const subtotal = tableCost + foodCost;
+    const taxRate = 0.05; // 5% GST
+    const taxes = subtotal * taxRate;
+    const totalCost = subtotal + taxes;
 
     return {
+      subtotal: parseFloat(subtotal.toFixed(2)),
       tableCost: parseFloat(tableCost.toFixed(2)),
       foodCost: parseFloat(foodCost.toFixed(2)),
+      taxes: parseFloat(taxes.toFixed(2)),
       totalCost: parseFloat(totalCost.toFixed(2)),
       breakdown: {
-        game: game.name,
+        game: game?.name || 'Unknown',
+        table: table?.name || 'Any',
         booking_type,
         ...(booking_type === 'timer' && {
+          duration: `${duration_minutes} minutes`,
+        }),
+        ...((booking_type === 'timer' || booking_type === 'set_time') && {
           duration: `${duration_minutes} minutes`,
         }),
         ...(booking_type === 'frame' && { frames: frame_count }),
@@ -290,11 +339,12 @@ export const getAvailableTables = async (
   durationMinutes = null,
 ) => {
   try {
-    const allTables = await tablesAPI.getAll();
+    const rawTables = await tablesAPI.getAll();
+    const allTables = Array.isArray(rawTables) ? rawTables : (rawTables?.data || []);
 
     // Filter tables by game
     let availableTables = allTables.filter(
-      t => t.gameid === gameId && t.status !== 'maintenance',
+      t => String(t.gameid || t.game_id) === String(gameId) && t.status !== 'maintenance',
     );
 
     // If checking for specific time slot, filter out reserved tables

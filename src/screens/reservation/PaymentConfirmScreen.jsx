@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,11 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { createAdvanceReservation } from '../../services/reservationService';
+import { createAdvanceReservation, calculateEstimatedCost, lookupWallet } from '../../services/reservationService';
 
 const PAYMENT_MODES = {
   CASH: 'cash',
@@ -28,15 +29,107 @@ export default function PaymentConfirmScreen({ navigation, route }) {
 
   // UI State
   const [processing, setProcessing] = useState(false);
+  const [loadingCost, setLoadingCost] = useState(true);
+  const [costEstimate, setCostEstimate] = useState(null);
+  const [bookingMode, setBookingMode] = useState('advance');
+  const [paymentSelection, setPaymentSelection] = useState('now');
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [reservationSuccessData, setReservationSuccessData] = useState(null);
+  const [conflictData, setConflictData] = useState(null);
+
+  // Wallet State
+  const [walletQuery, setWalletQuery] = useState('');
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [walletChecked, setWalletChecked] = useState(false);
+  const [walletInfo, setWalletInfo] = useState(null);
+
+  useEffect(() => {
+    const getEstimate = async () => {
+      try {
+        setLoadingCost(true);
+        // Ensure consistent ID mapping for estimation
+        const gameId = bookingDetails.game_id || bookingDetails.gameid;
+        const tableId = bookingDetails.table_id || bookingDetails.tableid;
+        
+        const estimate = await calculateEstimatedCost({
+          ...bookingDetails,
+          game_id: gameId,
+          table_id: tableId,
+          booking_type: bookingDetails.booking_type || 'timer',
+          duration_minutes: bookingDetails.duration_minutes || 60,
+        });
+        
+        setCostEstimate(estimate);
+        
+        // Use estimate total if available, otherwise default to "0" or manual entry
+        const total = estimate?.totalCost || 0;
+        if (paymentSelection === 'now') {
+          setAmount(total.toString());
+        } else if (paymentSelection === 'half') {
+          setAmount((total / 2).toString());
+        } else {
+          setAmount('0');
+        }
+      } catch (error) {
+        console.error('Error getting cost estimate:', error);
+        Alert.alert('Error', 'Failed to calculate booking cost');
+      } finally {
+        setLoadingCost(false);
+      }
+    };
+
+    getEstimate();
+  }, [bookingDetails, paymentSelection]);
+
+  // Handle scanned customer from ScannerScreen
+  useEffect(() => {
+    if (route.params?.scannedCustomer) {
+      const { scannedCustomer } = route.params;
+      setWalletQuery(scannedCustomer.phone || scannedCustomer.id);
+      setWalletInfo({
+        customerId: scannedCustomer.id,
+        customerName: scannedCustomer.name,
+        phone: scannedCustomer.phone,
+        balance: scannedCustomer.wallet?.balance || 0
+      });
+      setWalletChecked(true);
+      setPaymentMode(PAYMENT_MODES.WALLET);
+    }
+  }, [route.params?.scannedCustomer]);
+
+  const handleWalletLookup = async () => {
+    if (!walletQuery.trim()) return;
+    setWalletLoading(true);
+    try {
+      const result = await lookupWallet(walletQuery);
+      setWalletChecked(true);
+      if (result.success) {
+        setWalletInfo(result.wallet);
+      } else {
+        setWalletInfo(null);
+      }
+    } catch (error) {
+      console.error('Wallet lookup error:', error);
+    } finally {
+      setWalletLoading(false);
+    }
+  };
+
+  const handleForceStart = () => {
+    setShowConflictModal(false);
+    handleConfirmBooking(true);
+  };
 
   const handleConfirmBooking = async (acknowledgeConflicts = false) => {
     // Validation
-    if (!paymentMode) {
+    const isPaying = paymentSelection === 'now' || paymentSelection === 'half';
+    if (isPaying && !paymentMode) {
       Alert.alert('Error', 'Please select a payment mode');
       return;
     }
 
-    if (!amount || parseFloat(amount) <= 0) {
+    if (isPaying && (!amount || parseFloat(amount) <= 0)) {
       Alert.alert('Error', 'Please enter a valid amount');
       return;
     }
@@ -47,14 +140,24 @@ export default function PaymentConfirmScreen({ navigation, route }) {
       // Create reservation with payment info
       const reservationData = {
         ...bookingDetails,
-        payment_status: paymentMode,
-        advance_payment: parseFloat(amount),
+        payment_status: paymentSelection === 'later' ? 'pending' : (paymentSelection === 'half' ? 'partial' : 'paid'),
+        advance_payment: paymentSelection === 'later' ? 0 : parseFloat(amount),
         acknowledge_conflicts: acknowledgeConflicts,
+        food_orders: bookingDetails.food_orders || [],
+        food_instructions: bookingDetails.food_instructions || null,
       };
+
+      // Construction of payment data for service layer
+      const paymentData = isPaying ? {
+        paymentMode: paymentMode,
+        payNow: true,
+        amount: parseFloat(amount),
+        customerId: walletInfo?.customerId || walletQuery, // Uses query if info not fetched yet
+      } : null;
 
       const result = await createAdvanceReservation(
         reservationData,
-        null,
+        paymentData,
         acknowledgeConflicts,
       );
 
@@ -76,11 +179,14 @@ export default function PaymentConfirmScreen({ navigation, route }) {
       }
 
       if (result.success) {
-        Alert.alert(
-          'Reservation Created',
-          `Your reservation has been created successfully!\n\nPayment: ₹${amount} (${paymentMode.toUpperCase()})`,
-          [{ text: 'OK', onPress: () => navigation.navigate('Home') }],
-        );
+        setReservationSuccessData({
+          ...result.reservation,
+          paymentMode: paymentMode,
+          paymentAmount: amount,
+          estimate: costEstimate,
+          selection: paymentSelection
+        });
+        setShowSuccessModal(true);
       } else {
         Alert.alert('Error', result.error || 'Failed to create reservation');
       }
@@ -118,85 +224,137 @@ export default function PaymentConfirmScreen({ navigation, route }) {
     }
   };
 
-  const renderSummary = () => (
-    <View style={styles.summaryCard}>
-      <Text style={styles.summaryTitle}>Booking Summary</Text>
+  const renderSummary = () => {
+    if (loadingCost) {
+      return (
+        <View style={[styles.summaryCard, { alignItems: 'center', padding: 30 }]}>
+          <ActivityIndicator size="small" color="#FF8C42" />
+          <Text style={{ marginTop: 10, color: '#666' }}>Calculating charges...</Text>
+        </View>
+      );
+    }
 
-      <View style={styles.summaryRow}>
-        <Text style={styles.summaryLabel}>Customer:</Text>
-        <Text style={styles.summaryValue}>{bookingDetails.customer_name}</Text>
-      </View>
+    if (!costEstimate) return null;
 
-      <View style={styles.summaryRow}>
-        <Text style={styles.summaryLabel}>Phone:</Text>
-        <Text style={styles.summaryValue}>{bookingDetails.customer_phone}</Text>
-      </View>
+    return (
+      <View style={styles.summaryCard}>
+        <Text style={styles.summaryTitle}>Booking Summary</Text>
 
-      <View style={styles.summaryRow}>
-        <Text style={styles.summaryLabel}>Game:</Text>
-        <Text style={styles.summaryValue}>{gameName}</Text>
-      </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Customer:</Text>
+          <Text style={styles.summaryValue}>{bookingDetails.customer_name}</Text>
+        </View>
 
-      <View style={styles.summaryRow}>
-        <Text style={styles.summaryLabel}>Table:</Text>
-        <Text style={styles.summaryValue}>{tableName}</Text>
-      </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Phone:</Text>
+          <Text style={styles.summaryValue}>{bookingDetails.customer_phone}</Text>
+        </View>
 
-      {bookingMode === 'advance' && (
-        <>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Game:</Text>
+          <Text style={styles.summaryValue}>{gameName}</Text>
+        </View>
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Table:</Text>
+          <Text style={styles.summaryValue}>{tableName}</Text>
+        </View>
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Date:</Text>
+          <Text style={styles.summaryValue}>{bookingDetails.reservation_date}</Text>
+        </View>
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Time:</Text>
+          <Text style={styles.summaryValue}>{bookingDetails.start_time}</Text>
+        </View>
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Booking Type:</Text>
+          <Text style={styles.summaryValue}>
+            {bookingDetails.booking_type === 'timer' ? 'Timer' : 
+             bookingDetails.booking_type === 'frame' ? 'Frame' : 'Set Time'}
+          </Text>
+        </View>
+
+        {bookingDetails.booking_type !== 'timer' && (
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Date:</Text>
+            <Text style={styles.summaryLabel}>
+              {bookingDetails.booking_type === 'frame' ? 'Frames:' : 'Duration:'}
+            </Text>
             <Text style={styles.summaryValue}>
-              {bookingDetails.reservation_date}
+              {bookingDetails.booking_type === 'frame' 
+                ? `${bookingDetails.frame_count} Frames` 
+                : `${bookingDetails.duration_minutes} Mins`}
             </Text>
           </View>
+        )}
 
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Time:</Text>
-            <Text style={styles.summaryValue}>{bookingDetails.start_time}</Text>
-          </View>
-        </>
-      )}
+        <View style={styles.divider} />
 
-      <View style={styles.summaryRow}>
-        <Text style={styles.summaryLabel}>Mode:</Text>
-        <Text style={styles.summaryValue}>
-          {costEstimate.breakdown.booking_type === 'timer' &&
-            `Duration: ${costEstimate.breakdown.duration}`}
-          {costEstimate.breakdown.booking_type === 'frame' &&
-            `Frames: ${costEstimate.breakdown.frames}`}
-          {costEstimate.breakdown.booking_type === 'set' && 'Stopwatch'}
-        </Text>
-      </View>
-
-      <View style={styles.divider} />
-
-      <View style={styles.summaryRow}>
-        <Text style={styles.summaryLabel}>Table Charges:</Text>
-        <Text style={styles.summaryValue}>₹{costEstimate.tableCost}</Text>
-      </View>
-
-      {costEstimate.foodCost > 0 && (
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Food Charges:</Text>
-          <Text style={styles.summaryValue}>₹{costEstimate.foodCost}</Text>
+          <Text style={styles.summaryLabel}>Table Charges:</Text>
+          <Text style={styles.summaryValue}>₹{costEstimate.tableCost}</Text>
         </View>
-      )}
 
-      <View style={styles.divider} />
+        {costEstimate.foodCost > 0 && (
+          <>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Food Charges:</Text>
+              <Text style={styles.summaryValue}>₹{costEstimate.foodCost}</Text>
+            </View>
+            
+            {/* Display individual food items */}
+            <View style={styles.foodDetailsList}>
+              {bookingDetails.food_orders?.map((item, index) => (
+                <View key={index} style={styles.foodDetailItem}>
+                  <Text style={styles.foodDetailName}>
+                    • {item.qty}x {item.item_name || 'Food Item'}
+                    {item.variation_name ? ` (${item.variation_name})` : ''}
+                  </Text>
+                </View>
+              ))}
+              {bookingDetails.food_instructions && (
+                <Text style={styles.foodInstructionsText}>
+                  Note: {bookingDetails.food_instructions}
+                </Text>
+              )}
+            </View>
+          </>
+        )}
 
-      <View style={styles.summaryRow}>
-        <Text style={styles.totalLabel}>Total Amount:</Text>
-        <Text style={styles.totalValue}>₹{costEstimate.totalCost}</Text>
+        <View style={styles.divider} />
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Subtotal:</Text>
+          <Text style={styles.summaryValue}>₹{costEstimate.subtotal}</Text>
+        </View>
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>GST (5%):</Text>
+          <Text style={styles.summaryValue}>₹{costEstimate.taxes}</Text>
+        </View>
+
+        <View style={styles.divider} />
+
+        <View style={styles.summaryRow}>
+          <Text style={styles.totalLabel}>
+            {paymentSelection === 'half' ? 'Total Advance (50%):' : 'Total Payable:'}
+          </Text>
+          <Text style={styles.totalValue}>₹{amount}</Text>
+        </View>
+        
+        <Text style={styles.noteText}>* Remaining balance (if any) to be paid at the venue.</Text>
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderPaymentOptions = () => (
     <View style={styles.paymentCard}>
       <Text style={styles.sectionTitle}>Payment Options</Text>
 
-      {/* Pay Now / Pay Later */}
+      {/* Pay Now / Pay Half / Pay Later */}
       <View style={styles.paymentToggle}>
         <TouchableOpacity
           style={[
@@ -212,6 +370,23 @@ export default function PaymentConfirmScreen({ navigation, route }) {
             ]}
           >
             Pay Now
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.toggleButton,
+            paymentSelection === 'half' && styles.toggleButtonActive,
+          ]}
+          onPress={() => setPaymentSelection('half')}
+        >
+          <Text
+            style={[
+              styles.toggleText,
+              paymentSelection === 'half' && styles.toggleTextActive,
+            ]}
+          >
+            Pay Half
           </Text>
         </TouchableOpacity>
 
@@ -234,7 +409,7 @@ export default function PaymentConfirmScreen({ navigation, route }) {
       </View>
 
       {/* Payment Mode Selection */}
-      {paymentSelection === 'now' && (
+      {(paymentSelection === 'now' || paymentSelection === 'half') && (
         <View style={styles.paymentModes}>
           <TouchableOpacity
             style={[
@@ -285,7 +460,15 @@ export default function PaymentConfirmScreen({ navigation, route }) {
               styles.modeCard,
               paymentMode === PAYMENT_MODES.WALLET && styles.modeCardActive,
             ]}
-            onPress={() => setPaymentMode(PAYMENT_MODES.WALLET)}
+            onPress={() => {
+              setPaymentMode(PAYMENT_MODES.WALLET);
+              if (!walletInfo) {
+                navigation.navigate('ScannerScreen', {
+                  returnScreen: 'PaymentConfirmScreen',
+                  scanMode: 'customer'
+                });
+              }
+            }}
           >
             <Icon
               name="wallet"
@@ -307,7 +490,16 @@ export default function PaymentConfirmScreen({ navigation, route }) {
       {/* Wallet Lookup Section */}
       {paymentSelection === 'now' && paymentMode === PAYMENT_MODES.WALLET && (
         <View style={styles.walletSection}>
-          <Text style={styles.walletTitle}>Wallet Payment</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={styles.walletTitle}>Wallet Payment</Text>
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('ScannerScreen', { returnScreen: 'PaymentConfirmScreen', scanMode: 'customer' })}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+            >
+              <Icon name="qr-code" size={16} color="#FF8C42" />
+              <Text style={{ fontSize: 13, color: '#FF8C42', fontWeight: 'bold' }}>Scan Again</Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.walletLookupRow}>
             <TextInput
@@ -334,7 +526,7 @@ export default function PaymentConfirmScreen({ navigation, route }) {
             <View
               style={[
                 styles.walletInfo,
-                walletInfo.balance < costEstimate.totalCost &&
+                walletInfo.balance < parseFloat(amount) &&
                   styles.walletInfoError,
               ]}
             >
@@ -343,7 +535,7 @@ export default function PaymentConfirmScreen({ navigation, route }) {
                   name="person-circle"
                   size={40}
                   color={
-                    walletInfo.balance >= costEstimate.totalCost
+                    walletInfo.balance >= parseFloat(amount)
                       ? '#4CAF50'
                       : '#f44336'
                   }
@@ -360,17 +552,25 @@ export default function PaymentConfirmScreen({ navigation, route }) {
                 <Text
                   style={[
                     styles.walletBalance,
-                    walletInfo.balance < costEstimate.totalCost &&
+                    walletInfo.balance < parseFloat(amount) &&
                       styles.walletBalanceInsufficient,
                   ]}
                 >
                   ₹{walletInfo.balance.toFixed(2)}
                 </Text>
               </View>
-              {walletInfo.balance < costEstimate.totalCost && (
-                <Text style={styles.insufficientText}>
-                  Insufficient balance for this booking
-                </Text>
+              {walletInfo.balance < parseFloat(amount) && (
+                <View style={styles.insufficientContainer}>
+                  <Text style={styles.insufficientText}>
+                    Insufficient balance for this payment
+                  </Text>
+                  <TouchableOpacity 
+                    style={styles.topUpButton}
+                    onPress={() => navigation.navigate('Wallet')} // Assuming Wallet screen exist
+                  >
+                    <Text style={styles.topUpButtonText}>Top Up</Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
           )}
@@ -425,6 +625,71 @@ export default function PaymentConfirmScreen({ navigation, route }) {
     </Modal>
   );
 
+  const renderSuccessModal = () => (
+    <Modal
+      visible={showSuccessModal}
+      transparent
+      animationType="slide"
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.invoiceModal}>
+          <View style={styles.invoiceHeader}>
+            <Icon name="checkmark-circle" size={60} color="#4CAF50" />
+            <Text style={styles.invoiceTitle}>Booking Confirmed!</Text>
+            <Text style={styles.bookingId}>ID: {reservationSuccessData?.id || 'RES-' + Math.floor(Math.random() * 10000)}</Text>
+          </View>
+
+          <View style={styles.invoiceContent}>
+            <View style={styles.invoiceRow}>
+              <Text style={styles.invoiceLabel}>Table Charges</Text>
+              <Text style={styles.invoiceValue}>₹{reservationSuccessData?.estimate?.tableCost}</Text>
+            </View>
+            <View style={styles.invoiceRow}>
+              <Text style={styles.invoiceLabel}>Food Total</Text>
+              <Text style={styles.invoiceValue}>₹{reservationSuccessData?.estimate?.foodCost}</Text>
+            </View>
+            <View style={styles.invoiceRow}>
+              <Text style={styles.invoiceLabel}>Subtotal</Text>
+              <Text style={styles.invoiceValue}>₹{reservationSuccessData?.estimate?.subtotal}</Text>
+            </View>
+            <View style={styles.invoiceRow}>
+              <Text style={styles.invoiceLabel}>GST (5%)</Text>
+              <Text style={styles.invoiceValue}>₹{reservationSuccessData?.estimate?.taxes}</Text>
+            </View>
+            <View style={styles.invoiceDivider} />
+            <View style={styles.invoiceRow}>
+              <Text style={styles.invoiceTotalLabel}>Total Payable</Text>
+              <Text style={styles.invoiceTotalValue}>₹{reservationSuccessData?.estimate?.totalCost}</Text>
+            </View>
+            <View style={styles.invoiceRow}>
+              <Text style={styles.advancePaidLabel}>Paid Advance ({reservationSuccessData?.paymentMode?.toUpperCase()})</Text>
+              <Text style={styles.advancePaidValue}>- ₹{reservationSuccessData?.paymentAmount}</Text>
+            </View>
+            <View style={styles.dueRow}>
+              <Text style={styles.dueLabel}>Remaining at Venue</Text>
+              <Text style={styles.dueValue}>
+                ₹{(parseFloat(reservationSuccessData?.total_amt || reservationSuccessData?.estimate?.totalCost || 0) - parseFloat(reservationSuccessData?.paymentAmount || 0)).toFixed(2)}
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.doneButton}
+            onPress={() => {
+              setShowSuccessModal(false);
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'MainTabs', params: { screen: 'Home' } }],
+              });
+            }}
+          >
+            <Text style={styles.doneButtonText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -436,136 +701,8 @@ export default function PaymentConfirmScreen({ navigation, route }) {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Booking Summary */}
-        <View style={styles.summaryCard}>
-          <Text style={styles.sectionTitle}>Booking Summary</Text>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Customer:</Text>
-            <Text style={styles.summaryValue}>
-              {bookingDetails.customer_name}
-            </Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Phone:</Text>
-            <Text style={styles.summaryValue}>
-              {bookingDetails.customer_phone}
-            </Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Game:</Text>
-            <Text style={styles.summaryValue}>{gameName}</Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Table:</Text>
-            <Text style={styles.summaryValue}>{tableName}</Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Date:</Text>
-            <Text style={styles.summaryValue}>
-              {bookingDetails.reservation_date}
-            </Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Time:</Text>
-            <Text style={styles.summaryValue}>{bookingDetails.start_time}</Text>
-          </View>
-        </View>
-
-        {/* Payment Options */}
-        <View style={styles.paymentCard}>
-          <Text style={styles.sectionTitle}>Payment Method</Text>
-
-          <View style={styles.paymentModes}>
-            <TouchableOpacity
-              style={[
-                styles.modeCard,
-                paymentMode === PAYMENT_MODES.CASH && styles.modeCardActive,
-              ]}
-              onPress={() => setPaymentMode(PAYMENT_MODES.CASH)}
-            >
-              <Icon
-                name="cash"
-                size={32}
-                color={paymentMode === PAYMENT_MODES.CASH ? '#FF8C42' : '#666'}
-              />
-              <Text
-                style={[
-                  styles.modeText,
-                  paymentMode === PAYMENT_MODES.CASH && styles.modeTextActive,
-                ]}
-              >
-                Cash
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.modeCard,
-                paymentMode === PAYMENT_MODES.UPI && styles.modeCardActive,
-              ]}
-              onPress={() => setPaymentMode(PAYMENT_MODES.UPI)}
-            >
-              <Icon
-                name="qr-code"
-                size={32}
-                color={paymentMode === PAYMENT_MODES.UPI ? '#FF8C42' : '#666'}
-              />
-              <Text
-                style={[
-                  styles.modeText,
-                  paymentMode === PAYMENT_MODES.UPI && styles.modeTextActive,
-                ]}
-              >
-                UPI
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.modeCard,
-                paymentMode === PAYMENT_MODES.WALLET && styles.modeCardActive,
-              ]}
-              onPress={() => setPaymentMode(PAYMENT_MODES.WALLET)}
-            >
-              <Icon
-                name="wallet"
-                size={32}
-                color={
-                  paymentMode === PAYMENT_MODES.WALLET ? '#FF8C42' : '#666'
-                }
-              />
-              <Text
-                style={[
-                  styles.modeText,
-                  paymentMode === PAYMENT_MODES.WALLET && styles.modeTextActive,
-                ]}
-              >
-                Wallet
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Amount Input */}
-          <View style={styles.amountSection}>
-            <Text style={styles.inputLabel}>Advance Amount</Text>
-            <View style={styles.amountInputContainer}>
-              <Text style={styles.rupeeSymbol}>₹</Text>
-              <TextInput
-                style={styles.amountInput}
-                placeholder="0.00"
-                value={amount}
-                onChangeText={setAmount}
-                keyboardType="decimal-pad"
-              />
-            </View>
-          </View>
-        </View>
+        {renderSummary()}
+        {renderPaymentOptions()}
       </ScrollView>
 
       <View style={styles.footer}>
@@ -587,6 +724,8 @@ export default function PaymentConfirmScreen({ navigation, route }) {
           )}
         </TouchableOpacity>
       </View>
+      {renderConflictModal()}
+      {renderSuccessModal()}
     </SafeAreaView>
   );
 }
@@ -659,6 +798,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FF8C42',
   },
+  foodDetailsList: {
+    paddingLeft: 10,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  foodDetailItem: {
+    marginBottom: 4,
+  },
+  foodDetailName: {
+    fontSize: 13,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  foodInstructionsText: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 4,
+    fontStyle: 'italic',
+    paddingLeft: 10,
+  },
   paymentCard: {
     backgroundColor: '#fff',
     margin: 16,
@@ -690,6 +849,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     backgroundColor: '#fff',
+  },
+  noteText: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    marginTop: 10,
+    textAlign: 'center',
   },
   toggleButtonActive: {
     backgroundColor: '#FF8C42',
@@ -847,11 +1013,31 @@ const styles = StyleSheet.create({
   walletBalanceInsufficient: {
     color: '#f44336',
   },
+  insufficientContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(244, 67, 54, 0.2)',
+  },
   insufficientText: {
     fontSize: 12,
     color: '#f44336',
-    marginTop: 8,
+    flex: 1,
     fontStyle: 'italic',
+  },
+  topUpButton: {
+    backgroundColor: '#f44336',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+  },
+  topUpButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   walletNotFound: {
     flexDirection: 'row',
@@ -953,6 +1139,117 @@ const styles = StyleSheet.create({
   conflictForceText: {
     fontSize: 14,
     color: '#fff',
+    fontWeight: 'bold',
+  },
+  invoiceModal: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  invoiceHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  invoiceTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 12,
+  },
+  bookingId: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  invoiceContent: {
+    backgroundColor: '#fcfcfc',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+    marginBottom: 24,
+  },
+  invoiceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  invoiceLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  invoiceValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  invoiceDivider: {
+    height: 1,
+    backgroundColor: '#eee',
+    marginVertical: 12,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    borderRadius: 1,
+  },
+  invoiceTotalLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  invoiceTotalValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FF8C42',
+  },
+  advancePaidLabel: {
+    fontSize: 13,
+    color: '#4CAF50',
+    fontStyle: 'italic',
+  },
+  advancePaidValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4CAF50',
+  },
+  dueRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  dueLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+  },
+  dueValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#f44336',
+  },
+  doneButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  doneButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });
