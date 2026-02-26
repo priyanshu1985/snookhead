@@ -260,7 +260,7 @@ const models = {
       const { data, error } = await getDb()
         .from(this.tableName)
         .select("*")
-        .eq("reservationid", id)
+        .eq("id", id)
         .single();
       if (error && error.code !== "PGRST116") throw error;
       return data;
@@ -383,7 +383,7 @@ const models = {
       const { data, error } = await getDb()
         .from(this.tableName)
         .select("*")
-        .eq("orderid", id)
+        .eq("id", id)
         .single();
       if (error && error.code !== "PGRST116") throw error;
       return data;
@@ -486,7 +486,7 @@ const models = {
       const { data, error } = await getDb()
         .from(this.tableName)
         .select("*")
-        .eq("billid", id)
+        .eq("id", id)
         .single();
       if (error && error.code !== "PGRST116") throw error;
       return data;

@@ -260,6 +260,7 @@ router.post(
         {
           tableid: table_id,
           gameid: game_id,
+          reservation_id: req.body.reservationId || null,
           starttime: startTime.toISOString ? startTime.toISOString() : startTime,
           bookingendtime: bookingEndTime && bookingEndTime.toISOString ? bookingEndTime.toISOString() : bookingEndTime,
           durationminutes:
@@ -496,48 +497,51 @@ router.post(
       }
 
       // --- NEW: Sync Reservation Status ---
-      // Find any active/assigned/pending reservation for this table that overlaps 'now'
-      // effectively closing the reservation that "caused" this session.
-      const now = new Date();
-      const linkedReservation = await Reservation.findOne({
-        where: addStationFilter(
-          {
-            tableId: table.id,
-            // We want reservations that are possibly blocking this table.
-            // Status check matching typical flows.
-          },
-          req.stationId,
-        ),
-      });
+      // ------------------------------------
+      // Update Reservation Status if applicable
+      const reservationId = session.reservation_id || session.reservationid;
+      if (reservationId) {
+        try {
+          await Reservation.update(
+            { status: 'done' },
+            { where: { id: reservationId } }
+          );
+          console.log(`[SessionStop] Set Reservation ${reservationId} to done`);
+        } catch (resErr) {
+          console.error("Failed to update reservation status on stop:", resErr);
+        }
+      } else {
+        // Fallback: Find any active/assigned/pending reservation for this table that overlaps 'now'
+        // effectively closing the reservation that "caused" this session.
+        const now = new Date();
+        const allTableRes = await Reservation.findAll({
+          where: addStationFilter({ tableId: table.id }, req.stationId),
+        });
 
-      // Since findOne with complex OR/Time logic is hard via simple wrapper,
-      // let's fetch all active/pending for this table and filter in JS (safer given helper limitations)
-      const allTableRes = await Reservation.findAll({
-        where: addStationFilter({ tableId: table.id }, req.stationId),
-      });
-
-      const activeRes = allTableRes.find(
-        (r) =>
-          (r.status === "active" ||
-            r.status === "pending" ||
-            r.status === "assigned") &&
-          new Date(r.fromTime || r.reservationtime) <= now &&
-          // end time is in future or it's currently active
-          (r.toTime ? new Date(r.toTime) > now : true),
-      );
-
-      if (activeRes) {
-        await Reservation.update(
-          {
-            status: "cancelled", // Use 'cancelled' as 'completed' is not a valid enum value
-            toTime: now, // Clamp end time to actual session end
-          },
-          { where: { id: activeRes.id } },
+        const activeRes = allTableRes.find(
+          (r) =>
+            (r.status === "active" ||
+              r.status === "pending" ||
+              r.status === "assigned") &&
+            new Date(r.fromTime || r.reservationtime) <= now &&
+            // end time is in future or it's currently active 
+            (r.toTime ? new Date(r.toTime) > now : true),
         );
-        console.log(
-          `[SessionStop] Auto-cancelled reservation ${activeRes.id} to release table`,
-        );
+
+        if (activeRes) {
+          await Reservation.update(
+            {
+              status: "done",
+              toTime: now, // Clamp end time to actual session end
+            },
+            { where: { id: activeRes.id } },
+          );
+          console.log(
+            `[SessionStop] Auto-completed reservation ${activeRes.id} to release table`,
+          );
+        }
       }
+      // ------------------------------------
       // ------------------------------------
 
       // If skip_bill is true, just return session info without creating a bill

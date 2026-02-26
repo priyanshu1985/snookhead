@@ -812,3 +812,63 @@
   "checkingAgainst": []
 }
 
+{
+  "body": {
+    "table_id": 39,
+    "game_id": 29,
+    "user_id": null,
+    "duration_minutes": 60,
+    "booking_type": "set_time",
+    "frame_count": null,
+    "customer_name": "ram",
+    "reservationId": 101,
+    "acknowledge_conflicts": true
+  },
+  "tableId": 39,
+  "checkingAgainst": [
+    {
+      "id": 101
+    }
+  ]
+}
+
+{
+  "body": {
+    "table_id": 41,
+    "game_id": 24,
+    "user_id": null,
+    "duration_minutes": 1,
+    "booking_type": "set_time",
+    "frame_count": null,
+    "customer_name": "kiran",
+    "reservationId": 102,
+    "acknowledge_conflicts": true
+  },
+  "tableId": 41,
+  "checkingAgainst": [
+    {
+      "id": 102
+    }
+  ]
+}
+
+{
+  "body": {
+    "table_id": 38,
+    "game_id": 27,
+    "user_id": null,
+    "duration_minutes": 5,
+    "booking_type": "set_time",
+    "frame_count": null,
+    "customer_name": "vhb",
+    "reservationId": 103,
+    "acknowledge_conflicts": true
+  },
+  "tableId": 38,
+  "checkingAgainst": [
+    {
+      "id": 103
+    }
+  ]
+}
+
