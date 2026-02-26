@@ -286,6 +286,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         set_time,
         customerid: customerid || null,
         food_orders: req.body.food_orders || req.body.cart || [], // Save food selection
+        food_instructions: req.body.food_instructions || null, // Save instructions
       },
       req.stationId,
       "stationid",

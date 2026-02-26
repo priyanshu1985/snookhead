@@ -56,6 +56,14 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: "waiting",
       },
 
+      food_orders: {
+        type: DataTypes.JSONB,
+        defaultValue: [],
+      },
+      food_instructions: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       created_at: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW,
