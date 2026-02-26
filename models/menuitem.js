@@ -68,6 +68,10 @@ module.exports = (sequelize, DataTypes) => {
       imageUrl: {
         type: DataTypes.STRING(255),
       },
+      variations: {
+        type: DataTypes.JSONB,
+        defaultValue: [],
+      },
     },
     {
       tableName: "menuitems",

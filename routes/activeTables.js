@@ -8,6 +8,9 @@ import {
   MenuItem,
   Queue,
   Reservation,
+  Inventory,
+  InventoryLog,
+  Game,
 } from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
@@ -94,6 +97,7 @@ router.post(
         user_id,
         duration_minutes,
         customer_name,
+        customer_id,
         booking_type,
         frame_count,
         food_orders,
@@ -151,53 +155,53 @@ router.post(
       });
 
       let conflictingReservation = null;
-      
+
       // Debug logging to file
       const logPath = path.join(__dirname, '..', 'debug_conflict.log');
       const debugData = {
-          body: req.body,
-          tableId: table_id,
-          checkingAgainst: tableReservations.map(r => ({ id: r.id, time: r.reservationtime }))
+        body: req.body,
+        tableId: table_id,
+        checkingAgainst: tableReservations.map(r => ({ id: r.id, time: r.reservationtime }))
       };
       if (fs.existsSync(path.dirname(logPath))) {
-          fs.appendFileSync(logPath, JSON.stringify(debugData, null, 2) + '\n\n');
+        fs.appendFileSync(logPath, JSON.stringify(debugData, null, 2) + '\n\n');
       }
 
       console.log(`[Start Session] Request Body:`, JSON.stringify(req.body, null, 2));
 
       for (const r of tableReservations) {
-          // Check if this is the SAME reservation we are fulfilling
-          // Use loose equality for safety or explicit string conversion
-          const isSelf = req.body.reservationId && (String(r.id) === String(req.body.reservationId));
-          
-          if (isSelf) {
-               console.log(`[Conflict Check] Skipping self (Res ID ${r.id})`);
-               continue; // Valid fulfillment, ignore this reservation
-          }
-          
-          const rTime = new Date(r.reservationtime || r.reservation_time || r.fromTime);
-          if (rTime < new Date(now.getTime() - 40 * 60000)) {
-            console.log(`[Conflict Check] Skipping stale reservation ${r.id} (older than 40m)`);
-            continue; // Ignore stale (older than 40m)
-          }
+        // Check if this is the SAME reservation we are fulfilling
+        // Use loose equality for safety or explicit string conversion
+        const isSelf = req.body.reservationId && (String(r.id) === String(req.body.reservationId));
 
-          // Conflict Logic:
-          // Does this reservation start overlaps with the session we are about to start?
-          // Session: Now -> Now + Duration
-          // Reservation: rTime
-          // If reservation starts within our proposed session window, it's a conflict
-          if (rTime < proposedEnd && rTime > new Date(now.getTime() - 15 * 60000)) { // Overlap check
-              console.log(`[Conflict Detected] Res ${r.id} (${rTime.toLocaleTimeString()}) overlaps with session end ${proposedEnd.toLocaleTimeString()}`);
-              conflictingReservation = r; // Mark as conflicting
-              break; // Found a conflict, no need to check further
-          }
+        if (isSelf) {
+          console.log(`[Conflict Check] Skipping self (Res ID ${r.id})`);
+          continue; // Valid fulfillment, ignore this reservation
+        }
+
+        const rTime = new Date(r.reservationtime || r.reservation_time || r.fromTime);
+        if (rTime < new Date(now.getTime() - 40 * 60000)) {
+          console.log(`[Conflict Check] Skipping stale reservation ${r.id} (older than 40m)`);
+          continue; // Ignore stale (older than 40m)
+        }
+
+        // Conflict Logic:
+        // Does this reservation start overlaps with the session we are about to start?
+        // Session: Now -> Now + Duration
+        // Reservation: rTime
+        // If reservation starts within our proposed session window, it's a conflict
+        if (rTime < proposedEnd && rTime > new Date(now.getTime() - 15 * 60000)) { // Overlap check
+          console.log(`[Conflict Detected] Res ${r.id} (${rTime.toLocaleTimeString()}) overlaps with session end ${proposedEnd.toLocaleTimeString()}`);
+          conflictingReservation = r; // Mark as conflicting
+          break; // Found a conflict, no need to check further
+        }
       }
 
       if (conflictingReservation) {
         const rTime = new Date(
           conflictingReservation.reservationtime ||
-            conflictingReservation.reservationtime ||
-            conflictingReservation.fromTime,
+          conflictingReservation.reservationtime ||
+          conflictingReservation.fromTime,
         );
         return res.status(409).json({
           error: "Conflict",
@@ -246,14 +250,19 @@ router.post(
         }
       }
 
+      // Fetch Game to get frame_threshold
+      const game = await Game.findByPk(game_id);
+      const frameThreshold = game ? (game.frame_threshold || 30) : 30;
+
       // create active session with station_id
       // booking_type: 'timer' = countdown with auto-release, 'set' = stopwatch (count up, manual release), 'frame' = frame-based
       const sessionData = addStationToData(
         {
           tableid: table_id,
           gameid: game_id,
-          starttime: startTime,
-          bookingendtime: bookingEndTime,
+          reservation_id: req.body.reservationId || null,
+          starttime: startTime.toISOString ? startTime.toISOString() : startTime,
+          bookingendtime: bookingEndTime && bookingEndTime.toISOString ? bookingEndTime.toISOString() : bookingEndTime,
           durationminutes:
             duration_minutes ||
             (queueEntry ? queueEntry.duration_minutes : null),
@@ -263,12 +272,17 @@ router.post(
             (queueEntry
               ? queueEntry.customername || queueEntry.customer_name
               : null), // Transfer queue customer name
+          customerid:
+            customer_id ||
+            (queueEntry ? queueEntry.customerid : null),
           bookingtype:
             booking_type || (queueEntry ? queueEntry.booking_type : "timer"), // Transfer queue booking type
           framecount:
             frame_count || (queueEntry ? queueEntry.frame_count : null),
-          // bookingsource removed due to schema constraint
-          created_by: req.user.id, // Track who started the session
+          current_frame_start_time:
+            (booking_type || (queueEntry ? queueEntry.booking_type : "timer")) === "frame"
+              ? (startTime.toISOString ? startTime.toISOString() : startTime)
+              : null,
           food_orders:
             food_orders ||
             (queueEntry ? queueEntry.food_orders : []) ||
@@ -277,18 +291,18 @@ router.post(
         req.stationId,
       );
       const session = await ActiveTable.create(sessionData);
-      
+
       // Update Reservation Status if applicable
       if (req.body.reservationId) {
-          try {
-             await Reservation.update(
-                 { status: 'active' },
-                 { where: { id: req.body.reservationId } }
-             );
-             console.log(`[Start Session] Set Reservation ${req.body.reservationId} to active`);
-          } catch (resErr) {
-             console.error("Failed to update reservation status:", resErr);
-          }
+        try {
+          await Reservation.update(
+            { status: 'active' },
+            { where: { id: req.body.reservationId } }
+          );
+          console.log(`[Start Session] Set Reservation ${req.body.reservationId} to active`);
+        } catch (resErr) {
+          console.error("Failed to update reservation status:", resErr);
+        }
       }
 
       // Check for existing pending order if coming from queue
@@ -315,7 +329,7 @@ router.post(
         // create order linked to this session with station_id
         const orderData = addStationToData(
           {
-            userId: user_id ?? req.user.id ?? null,
+            userId: req.user.id ?? null,
             personName: customer_name || "Table Customer",
             total: 0,
             status: "pending",
@@ -356,6 +370,41 @@ router.post(
                 { stock: newStock },
                 { where: { id: menuItem.id } },
               );
+            }
+
+            // Sync with Inventory Table
+            try {
+              if (Inventory) {
+                const inventoryWhere = {
+                  itemname: menuItem.name.trim(),
+                  isactive: true
+                };
+                if (req.stationId) inventoryWhere.stationid = req.stationId;
+
+                const inventoryItem = await Inventory.findOne({ where: inventoryWhere });
+                if (inventoryItem) {
+                  await inventoryItem.decrement('currentquantity', { by: qty });
+                  
+                  // Log the deduction
+                  if (InventoryLog) {
+                    await InventoryLog.create({
+                      menu_item_id: menuItem.id,
+                      item_name: menuItem.name,
+                      category: menuItem.category,
+                      stationid: req.stationId,
+                      action: 'DEDUCT',
+                      quantity_change: qty,
+                      previous_stock: inventoryItem.currentquantity,
+                      new_stock: inventoryItem.currentquantity - qty,
+                      reason: `Booking Created (Session ID: ${session.activeid || session.active_id})`,
+                      user_id: req.user ? req.user.id : null,
+                      created_at: new Date()
+                    });
+                  }
+                }
+              }
+            } catch (invErr) {
+              console.error("Inventory sync failed in booking start:", invErr);
             }
           }
         }
@@ -448,48 +497,51 @@ router.post(
       }
 
       // --- NEW: Sync Reservation Status ---
-      // Find any active/assigned/pending reservation for this table that overlaps 'now'
-      // effectively closing the reservation that "caused" this session.
-      const now = new Date();
-      const linkedReservation = await Reservation.findOne({
-        where: addStationFilter(
-          {
-            tableId: table.id,
-            // We want reservations that are possibly blocking this table.
-            // Status check matching typical flows.
-          },
-          req.stationId,
-        ),
-      });
+      // ------------------------------------
+      // Update Reservation Status if applicable
+      const reservationId = session.reservation_id || session.reservationid;
+      if (reservationId) {
+        try {
+          await Reservation.update(
+            { status: 'done' },
+            { where: { id: reservationId } }
+          );
+          console.log(`[SessionStop] Set Reservation ${reservationId} to done`);
+        } catch (resErr) {
+          console.error("Failed to update reservation status on stop:", resErr);
+        }
+      } else {
+        // Fallback: Find any active/assigned/pending reservation for this table that overlaps 'now'
+        // effectively closing the reservation that "caused" this session.
+        const now = new Date();
+        const allTableRes = await Reservation.findAll({
+          where: addStationFilter({ tableId: table.id }, req.stationId),
+        });
 
-      // Since findOne with complex OR/Time logic is hard via simple wrapper,
-      // let's fetch all active/pending for this table and filter in JS (safer given helper limitations)
-      const allTableRes = await Reservation.findAll({
-        where: addStationFilter({ tableId: table.id }, req.stationId),
-      });
-
-      const activeRes = allTableRes.find(
-        (r) =>
-          (r.status === "active" ||
-            r.status === "pending" ||
-            r.status === "assigned") &&
-          new Date(r.fromTime || r.reservationtime) <= now &&
-          // end time is in future or it's currently active
-          (r.toTime ? new Date(r.toTime) > now : true),
-      );
-
-      if (activeRes) {
-        await Reservation.update(
-          {
-            status: "cancelled", // Use 'cancelled' as 'completed' is not a valid enum value
-            toTime: now, // Clamp end time to actual session end
-          },
-          { where: { id: activeRes.id } },
+        const activeRes = allTableRes.find(
+          (r) =>
+            (r.status === "active" ||
+              r.status === "pending" ||
+              r.status === "assigned") &&
+            new Date(r.fromTime || r.reservationtime) <= now &&
+            // end time is in future or it's currently active 
+            (r.toTime ? new Date(r.toTime) > now : true),
         );
-        console.log(
-          `[SessionStop] Auto-cancelled reservation ${activeRes.id} to release table`,
-        );
+
+        if (activeRes) {
+          await Reservation.update(
+            {
+              status: "done",
+              toTime: now, // Clamp end time to actual session end
+            },
+            { where: { id: activeRes.id } },
+          );
+          console.log(
+            `[SessionStop] Auto-completed reservation ${activeRes.id} to release table`,
+          );
+        }
       }
+      // ------------------------------------
       // ------------------------------------
 
       // If skip_bill is true, just return session info without creating a bill
@@ -665,6 +717,41 @@ router.post(
               { stock: newStock },
               { where: { id: menuItem.id } },
             );
+
+            // Sync with Inventory Table
+            try {
+              if (Inventory) {
+                const inventoryWhere = {
+                  itemname: menuItem.name.trim(),
+                  isactive: true
+                };
+                if (req.stationId) inventoryWhere.stationid = req.stationId;
+
+                const inventoryItem = await Inventory.findOne({ where: inventoryWhere });
+                if (inventoryItem) {
+                  await inventoryItem.decrement('currentquantity', { by: qty });
+
+                  // Log the deduction
+                  if (InventoryLog) {
+                    await InventoryLog.create({
+                      menu_item_id: menuItem.id,
+                      item_name: menuItem.name,
+                      category: menuItem.category,
+                      stationid: req.stationId,
+                      action: 'DEDUCT',
+                      quantity_change: qty,
+                      previous_stock: inventoryItem.currentquantity,
+                      new_stock: inventoryItem.currentquantity - qty,
+                      reason: `Auto-Release (Session ID: ${session.active_id})`,
+                      user_id: req.user ? req.user.id : null,
+                      created_at: new Date()
+                    });
+                  }
+                }
+              }
+            } catch (invErr) {
+              console.error("Inventory sync failed in auto-release:", invErr);
+            }
           }
 
           const itemTotal = Number(item.price || 0) * Number(item.qty || 1);
@@ -775,14 +862,21 @@ router.put(
 
       // Whitelist allowed updates
       const allowedUpdates = {};
-      if (updates.frame_count !== undefined)
+      if (updates.frame_count !== undefined) {
         allowedUpdates.framecount = updates.frame_count; // REVERTED
+      }
       if (updates.booking_end_time !== undefined)
         allowedUpdates.bookingendtime = updates.booking_end_time; // REVERTED
       if (updates.duration_minutes !== undefined)
         allowedUpdates.durationminutes = updates.duration_minutes; // REVERTED
       if (updates.food_orders !== undefined)
         allowedUpdates.food_orders = updates.food_orders; // New persistent cart
+
+      // Custom logic for "Add Next Frame" action
+      if (updates.add_next_frame) {
+        allowedUpdates.framecount = (session.framecount || session.frame_count || 0) + 1;
+        allowedUpdates.current_frame_start_time = new Date().toISOString();
+      }
 
       if (Object.keys(allowedUpdates).length === 0) {
         return res.status(400).json({ error: "No valid fields to update" });

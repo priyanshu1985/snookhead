@@ -1,10 +1,39 @@
-import { getSupabase } from "../config/supabase.js";
+import { getSupabase as getDb } from "../config/supabase.js";
 
-// Helper function to get supabase instance
-const getDb = () => getSupabase();
+import walletTransactionModel from "./walletTransaction.js";
 
 // Supabase table helpers - simplified data access layer
 const models = {
+  WalletTransaction: {
+    tableName: "transactions",
+    async findAll(filter = {}) {
+      let query = getDb().from(this.tableName).select("*");
+      if (filter.where) {
+        Object.keys(filter.where).forEach((key) => {
+          query = query.eq(key, filter.where[key]);
+        });
+      }
+      if (filter.order) {
+        filter.order.forEach(([key, dir]) => {
+          query = query.order(key, { ascending: dir === "ASC" });
+        });
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+
+    async create(data) {
+      const { data: created, error } = await getDb()
+        .from(this.tableName)
+        .insert(data)
+        .select()
+        .single();
+      if (error) throw error;
+      return created;
+    },
+  },
+
   User: {
     tableName: "users",
     async findOne(filter) {
@@ -231,7 +260,7 @@ const models = {
       const { data, error } = await getDb()
         .from(this.tableName)
         .select("*")
-        .eq("reservationid", id)
+        .eq("id", id)
         .single();
       if (error && error.code !== "PGRST116") throw error;
       return data;
@@ -261,6 +290,52 @@ const models = {
       const { data, error } = await getDb()
         .from(this.tableName)
         .update(reservationData)
+        .match(filter.where || filter)
+        .select();
+      if (error) throw error;
+      return data;
+    },
+
+    async destroy(filter) {
+      const { error } = await getDb()
+        .from(this.tableName)
+        .delete()
+        .match(filter.where || filter);
+      if (error) throw error;
+      return true;
+    },
+  },
+
+  MenuItemVariation: {
+    tableName: "menu_item_variations",
+    async findAll(filter = {}) {
+      let query = getDb()
+        .from(this.tableName)
+        .select("*");
+      if (filter.where) {
+        Object.keys(filter.where).forEach((key) => {
+          query = query.eq(key, filter.where[key]);
+        });
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+
+    async create(variationData) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .insert(variationData)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+
+    async update(variationData, filter) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .update(variationData)
         .match(filter.where || filter)
         .select();
       if (error) throw error;
@@ -308,7 +383,7 @@ const models = {
       const { data, error } = await getDb()
         .from(this.tableName)
         .select("*")
-        .eq("orderid", id)
+        .eq("id", id)
         .single();
       if (error && error.code !== "PGRST116") throw error;
       return data;
@@ -411,7 +486,7 @@ const models = {
       const { data, error } = await getDb()
         .from(this.tableName)
         .select("*")
-        .eq("billid", id)
+        .eq("id", id)
         .single();
       if (error && error.code !== "PGRST116") throw error;
       return data;
@@ -445,6 +520,15 @@ const models = {
         .select();
       if (error) throw error;
       return data;
+    },
+
+    async destroy(filter) {
+      const { error } = await getDb()
+        .from(this.tableName)
+        .delete()
+        .match(filter.where || filter);
+      if (error) throw error;
+      return true;
     },
   },
 
@@ -975,6 +1059,39 @@ const models = {
     },
   },
 
+  InventoryLog: {
+    tableName: "inventory_logs",
+    async findAll(filter = {}) {
+      let query = getDb().from(this.tableName).select("*");
+      if (filter.where) {
+        Object.keys(filter.where).forEach((key) => {
+          query = query.eq(key, filter.where[key]);
+        });
+      }
+      if (filter.order) {
+        filter.order.forEach(([key, dir]) => {
+          query = query.order(key, { ascending: dir === "ASC" });
+        });
+      }
+      if (filter.limit) {
+        query = query.limit(filter.limit);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+
+    async create(logData) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .insert(logData)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  },
+
   Inventory: {
     tableName: "inventory",
     async findAll(filter = {}) {
@@ -1231,6 +1348,9 @@ export const {
   Token,
   Expense,
   Shift,
+  WalletTransaction,
+  InventoryLog,
+  MenuItemVariation,
 } = models;
 
 export default models;

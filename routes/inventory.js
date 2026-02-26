@@ -1,5 +1,6 @@
 import express from "express";
 import { auth } from "../middleware/auth.js";
+import { getSupabase as getDb } from "../config/supabase.js";
 import {
   stationContext,
   requireStation,
@@ -70,6 +71,68 @@ router.get("/test", (req, res) => {
   });
 });
 
+// GET /api/inventory/history - Global History Log
+router.get("/history", auth, stationContext, async (req, res) => {
+  try {
+    const { InventoryLog, User } = await getModels(); // Ensure User is fetched if possible, or just ID
+
+    // Filters
+    const {
+      startDate,
+      endDate,
+      itemId,
+      category,
+      action,
+      page = 1,
+      limit = 50
+    } = req.query;
+
+    let query = getDb().from("inventory_logs").select("*");
+
+    // Apply filters
+    if (req.stationId) {
+      query = query.eq("stationid", req.stationId);
+    }
+    if (itemId) query = query.eq("menu_item_id", itemId);
+    if (category) query = query.eq("category", category);
+    if (action) query = query.eq("action", action);
+
+    if (startDate) query = query.gte("created_at", startDate);
+    if (endDate) query = query.lte("created_at", endDate);
+
+    // Pagination & Sorting
+    const offset = (page - 1) * limit;
+    query = query
+      .order("created_at", { ascending: false })
+      .range(offset, offset + parseInt(limit) - 1);
+
+    const { data, error, count } = await query; // count not supported directly in select(*) without refined query in some clients, but simple range usually returns data. 
+    // To get count we might need a separate query or exact option.
+    // For now, let's just return data.
+
+    if (error) throw error;
+
+    // Enrich with user names if needed? 
+    // Usually log has user_id, client can fetch user map or we join.
+    // Supabase join: .select('*, users(name)') if FK exists.
+    // Let's assume frontend shows user_id or we keep it simple for now.
+
+    res.json({
+      success: true,
+      data: data,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        // total: ... (requires count query)
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching inventory history:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /api/inventory - List all inventory items
 router.get("/", auth, stationContext, async (req, res) => {
   try {
@@ -99,7 +162,7 @@ router.get("/", auth, stationContext, async (req, res) => {
     // Fetch ALL items for this station
     const where = {};
     if (req.stationId) {
-        where.station_id = req.stationId;
+      where.stationid = req.stationId;
     }
     // Note: 'isactive' filter is better done in memory if not all fields are reliable, 
     // but we can try to filter simple fields at DB level if findAll supports it.
@@ -116,13 +179,13 @@ router.get("/", auth, stationContext, async (req, res) => {
 
     // In-memory filtering for Search (LIKE equivalent)
     let filteredRows = allItems;
-    
+
     if (search) {
       const lowerSearch = search.toLowerCase();
-      filteredRows = filteredRows.filter(item => 
-          (item.itemname && item.itemname.toLowerCase().includes(lowerSearch)) ||
-          (item.description && item.description.toLowerCase().includes(lowerSearch)) ||
-          (item.supplier && item.supplier.toLowerCase().includes(lowerSearch))
+      filteredRows = filteredRows.filter(item =>
+        (item.itemname && item.itemname.toLowerCase().includes(lowerSearch)) ||
+        (item.description && item.description.toLowerCase().includes(lowerSearch)) ||
+        (item.supplier && item.supplier.toLowerCase().includes(lowerSearch))
       );
     }
 
@@ -143,16 +206,16 @@ router.get("/", auth, stationContext, async (req, res) => {
 
     // Sorting
     filteredRows.sort((a, b) => {
-        let valA = a[sort_by];
-        let valB = b[sort_by];
-        
-        // Handle string vs number
-        if (typeof valA === 'string') valA = valA.toLowerCase();
-        if (typeof valB === 'string') valB = valB.toLowerCase();
-        
-        if (valA < valB) return sort_order === 'asc' ? -1 : 1;
-        if (valA > valB) return sort_order === 'asc' ? 1 : -1;
-        return 0;
+      let valA = a[sort_by];
+      let valB = b[sort_by];
+
+      // Handle string vs number
+      if (typeof valA === 'string') valA = valA.toLowerCase();
+      if (typeof valB === 'string') valB = valB.toLowerCase();
+
+      if (valA < valB) return sort_order === 'asc' ? -1 : 1;
+      if (valA > valB) return sort_order === 'asc' ? 1 : -1;
+      return 0;
     });
 
     // Pagination
@@ -170,11 +233,11 @@ router.get("/", auth, stationContext, async (req, res) => {
     // AND 'status' is applied on top?
     // Wait, original: DB filter had Search + Category + Station. Status was applied in memory.
     // So 'rows' = search/cat/station matches.
-    
+
     // My 'filteredRows' above has Search/Cat/Station applied. 
     // THEN I applied Status to it.
     // So 'paginatedRows' is correct for the table.
-    
+
     // Summary needs 'all rows matching search/cat/station' (ignoring status filter? or respecting it?)
     // Original summary usage:
     // total_items: count (from DB, so search/cat/station match)
@@ -183,37 +246,37 @@ router.get("/", auth, stationContext, async (req, res) => {
     // In original: 'filteredRows = rows' then 'if (status) filteredRows = ...'
     // So 'rows' = search/cat/station results.
     // 'filteredRows' = search/cat/station + status results.
-    
+
     // I need to separate the Status filter step if I want to replicate exact summary logic.
     // or just calculate summary on valid dataset.
-    
+
     // Let's re-organized:
     // 1. Base set = All items for station
     // 2. Search/Category set = Base set filtered by Search & Category & Active
     // 3. Status set = Search/Cat set filtered by Status
-    
+
     // Re-eval:
     // 'categories' in summary was empty array in original.
-    
+
     // Let's implement robustly.
-    
+
     const summaryData = {
-        total_items: filteredRows.length, // Logic change: Summary reflects current filters? Or broader? 
-        // Original: 'count' was DB result (Search + Cat + Station).
-        // My 'filteredRows' includes Status filter if applied.
-        // Let's just use filteredRows for stats to be consistent with what user sees.
-        active_items: filteredRows.filter((item) => item.isactive).length,
-        low_stock_items: filteredRows.filter(
-            (item) => item.currentquantity <= item.minimumthreshold
-        ).length,
-        out_of_stock_items: filteredRows.filter(
-            (item) => item.currentquantity === 0
-        ).length,
-        total_value: filteredRows.reduce(
-            (sum, item) => sum + (item.costperunit || 0) * item.currentquantity,
-            0
-        ),
-        categories: []
+      total_items: filteredRows.length, // Logic change: Summary reflects current filters? Or broader? 
+      // Original: 'count' was DB result (Search + Cat + Station).
+      // My 'filteredRows' includes Status filter if applied.
+      // Let's just use filteredRows for stats to be consistent with what user sees.
+      active_items: filteredRows.filter((item) => item.isactive).length,
+      low_stock_items: filteredRows.filter(
+        (item) => item.currentquantity <= item.minimumthreshold
+      ).length,
+      out_of_stock_items: filteredRows.filter(
+        (item) => item.currentquantity === 0
+      ).length,
+      total_value: filteredRows.reduce(
+        (sum, item) => sum + (item.costperunit || 0) * item.currentquantity,
+        0
+      ),
+      categories: []
     };
 
     res.json({
@@ -291,9 +354,9 @@ router.post(
       // Check if item already exists for this station
       const existingWhere = { itemname: item_name.trim() };
       if (req.stationId) {
-          existingWhere.station_id = req.stationId;
+        existingWhere.stationid = req.stationId;
       }
-      
+
       const existingItem = await Inventory.findOne({
         where: existingWhere,
       });
@@ -307,20 +370,20 @@ router.post(
 
       // Create new inventory item with station_id
       const itemData = {
-          itemname: item_name.trim(),
-          category,
-          currentquantity: parseInt(current_quantity),
-          minimumthreshold: parseInt(minimum_threshold),
-          unit: unit.trim(),
-          costperunit: cost_per_unit ? parseFloat(cost_per_unit) : null,
-          supplier: supplier ? supplier.trim() : null,
-          description: description ? description.trim() : null,
-          lastrestocked: last_restocked ? new Date(last_restocked) : null,
-          isactive: true,
+        itemname: item_name.trim(),
+        category,
+        currentquantity: parseInt(current_quantity),
+        minimumthreshold: parseInt(minimum_threshold),
+        unit: unit.trim(),
+        costperunit: cost_per_unit ? parseFloat(cost_per_unit) : null,
+        supplier: supplier ? supplier.trim() : null,
+        description: description ? description.trim() : null,
+        lastrestocked: last_restocked ? new Date(last_restocked) : null,
+        isactive: true,
       };
-      
+
       if (req.stationId) {
-          itemData.station_id = req.stationId;
+        itemData.stationid = req.stationId;
       }
 
       const newItem = await Inventory.create(itemData);
@@ -375,7 +438,7 @@ router.put("/:id", auth, stationContext, async (req, res) => {
         updateData.lastrestocked = new Date();
       }
     }
-    
+
     // Normalize field names
     if (updateData.item_name !== undefined) { updateData.itemname = updateData.item_name; delete updateData.item_name; }
     if (updateData.minimum_threshold !== undefined) { updateData.minimumthreshold = parseInt(updateData.minimum_threshold); delete updateData.minimum_threshold; }
@@ -416,13 +479,21 @@ router.patch("/:id/quantity", auth, stationContext, async (req, res) => {
   try {
     const { Inventory } = await getModels();
     const { id } = req.params;
-    const { quantity_change, operation = "add", reason } = req.body;
+    const { quantity_change, operation = "add", reason, inventory_multiplier } = req.body;
 
     if (!quantity_change || isNaN(quantity_change) || quantity_change <= 0) {
       return res.status(400).json({
         error: "Valid quantity_change is required",
       });
     }
+
+    // Apply variation multiplication if provided (e.g., adding 2 Boxes * 20 multiplier = 40 items)
+    let multiplier = 1;
+    if (inventory_multiplier && !isNaN(inventory_multiplier)) {
+      multiplier = parseFloat(inventory_multiplier);
+    }
+
+    const actual_quantity_change = Math.ceil(parseInt(quantity_change) * multiplier);
 
     // Apply station filter
     const where = addStationFilter({ id }, req.stationId);
@@ -435,9 +506,9 @@ router.patch("/:id/quantity", auth, stationContext, async (req, res) => {
 
     let newQuantity;
     if (operation === "add") {
-      newQuantity = item.currentquantity + parseInt(quantity_change);
+      newQuantity = item.currentquantity + actual_quantity_change;
     } else if (operation === "subtract") {
-      newQuantity = item.currentquantity - parseInt(quantity_change);
+      newQuantity = item.currentquantity - actual_quantity_change;
     } else {
       return res.status(400).json({
         error: 'Operation must be "add" or "subtract"',
@@ -472,7 +543,9 @@ router.patch("/:id/quantity", auth, stationContext, async (req, res) => {
       data: updatedItem,
       change_summary: {
         operation,
-        quantity_change: parseInt(quantity_change),
+        input_quantity: parseInt(quantity_change),
+        multiplier_applied: multiplier,
+        actual_quantity_change: actual_quantity_change,
         previous_quantity: item.currentquantity,
         new_quantity: newQuantity,
         reason: reason || null,
@@ -534,14 +607,14 @@ router.get("/alerts/low-stock", auth, stationContext, async (req, res) => {
     // Fetch all active items for station
     const whereClause = { isactive: true };
     if (req.stationId) {
-        whereClause.station_id = req.stationId;
+      whereClause.stationid = req.stationId;
     }
 
     const allItems = await Inventory.findAll({ where: whereClause });
 
     // In-memory filter for low stock
     const lowStockItems = allItems.filter(
-        (item) => item.currentquantity <= item.minimumthreshold
+      (item) => item.currentquantity <= item.minimumthreshold
     );
 
     // Sort by quantity asc

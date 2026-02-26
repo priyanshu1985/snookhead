@@ -30,12 +30,20 @@ export const getSupabase = () => {
 export const testConnection = async () => {
   try {
     const client = getSupabase();
+    console.log("🔍 Checking Supabase connectivity...");
 
-    // Test with storage API which is more reliable than table access
+    // Test with a simple storage query with a timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout for slow networks
+
     const { data, error } = await client.storage.listBuckets();
+    clearTimeout(timeoutId);
 
     if (error) {
       console.log("❌ Supabase Connection Failed:", error.message);
+      if (error.message.includes("fetch failed")) {
+        console.log("💡 Hint: This is likely a network/DNS issue. Check your internet or firewall.");
+      }
       return false;
     }
 
@@ -43,6 +51,9 @@ export const testConnection = async () => {
     return true;
   } catch (err) {
     console.log("❌ Connection Error:", err.message);
+    if (err.name === 'AbortError') {
+      console.log("📡 Timeout: The network is too slow to reach Supabase. Retrying might help.");
+    }
     return false;
   }
 };

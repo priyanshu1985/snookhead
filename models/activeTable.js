@@ -22,10 +22,13 @@ module.exports = (sequelize, DataTypes) => {
       bookingendtime: { type: DataTypes.DATE, allowNull: true },
       durationminutes: { type: DataTypes.INTEGER, allowNull: true },
       customer_name: { type: DataTypes.STRING, allowNull: true },
+      customerid: { type: DataTypes.CHAR(36), allowNull: true },
       bookingtype: { type: DataTypes.STRING, allowNull: true },
       framecount: { type: DataTypes.INTEGER, allowNull: true },
       advance_payment: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
       reservation_id: { type: DataTypes.INTEGER, allowNull: true },
+      // Actual timestamp for the current frame timer
+      current_frame_start_time: { type: DataTypes.DATE, allowNull: true },
       status: {
         type: DataTypes.ENUM("active", "paused", "completed"),
         defaultValue: "active",

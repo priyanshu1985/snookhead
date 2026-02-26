@@ -9,17 +9,17 @@ const router = express.Router();
 router.get("/", auth, authorize("admin", "owner"), async (req, res) => {
   try {
     const filter = {
-      attributes: ["id", "name", "email", "phone", "role", "createdAt", "salary_type", "salary_amount", "owner_id"],
+      attributes: ["id", "name", "email", "phone", "role", "createdAt", "salary_type", "salary_amount", "profile_picture"],
       where: {}
     };
 
     // If owner, only show their employees
     if (req.user.role === 'owner') {
-      filter.where.owner_id = req.user.id;
+      filter.where.stationid = req.user.station_id;
     }
 
     const list = await User.findAll(filter);
-    
+
     // Fetch shifts for these users? maybe separate endpoint or include if model supports relation
     // For now simple list
     res.json(list);
@@ -31,7 +31,7 @@ router.get("/", auth, authorize("admin", "owner"), async (req, res) => {
 // Create new user (admin/owner only)
 router.post("/", auth, authorize("admin", "owner"), async (req, res) => {
   try {
-    const { name, email, phone, password, role, salary_type, salary_amount, shift } = req.body;
+    const { name, email, phone, password, role, salary_type, salary_amount, shift, profile_picture } = req.body;
 
     // Basic validation
     if (!name || !email || !password) {
@@ -40,7 +40,7 @@ router.post("/", auth, authorize("admin", "owner"), async (req, res) => {
 
     // Role validation
     if (role && !["staff", "manager"].includes(role)) {
-       return res.status(400).json({ error: "Invalid role. Can only create staff/manager." });
+      return res.status(400).json({ error: "Invalid role. Can only create staff/manager." });
     }
 
     const existingUser = await User.findOne({ where: { email } });
@@ -60,6 +60,7 @@ router.post("/", auth, authorize("admin", "owner"), async (req, res) => {
       stationid: req.user.station_id, // Inherit station from owner 
       salary_type: salary_type || 'monthly',
       salary_amount: salary_amount || 0,
+      profile_picture: profile_picture || null,
       createdAt: new Date(),
       updatedAt: new Date()
     });
@@ -83,23 +84,23 @@ router.get("/:id", auth, async (req, res) => {
     // 1. Admin can see all
     // 2. Self can see self
     // 3. Owner can see ONLY their employees
-    
+
     if (req.user.role === 'admin') {
-        // allow
+      // allow
     } else if (req.user.id === id) {
-        // allow
+      // allow
     } else if (req.user.role === 'owner') {
-        // Check ownership
-        const targetUser = await User.findByPk(id);
-        if (!targetUser || targetUser.owner_id !== req.user.id) {
-            return res.status(403).json({ error: "Forbidden" });
-        }
+      // Check ownership
+      const targetUser = await User.findByPk(id);
+      if (!targetUser || targetUser.stationid !== req.user.station_id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
     } else {
-         return res.status(403).json({ error: "Forbidden" });
+      return res.status(403).json({ error: "Forbidden" });
     }
 
     const u = await User.findByPk(id, {
-      attributes: ["id", "name", "email", "phone", "role", "createdAt"],
+      attributes: ["id", "name", "email", "phone", "role", "createdAt", "salary_type", "salary_amount", "profile_picture"],
     });
     if (!u) return res.status(404).json({ error: "Not found" });
     res.json(u);
@@ -112,26 +113,27 @@ router.get("/:id", auth, async (req, res) => {
 router.put("/:id", auth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    
+
     const u = await User.findByPk(id);
     if (!u) return res.status(404).json({ error: "Not found" });
 
     // Perms
     if (req.user.role === 'admin') {
-        // ok
+      // ok
     } else if (req.user.id === id) {
-        // ok (self)
+      // ok (self)
     } else if (req.user.role === 'owner') {
-        if (u.owner_id !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+      if (u.stationid !== req.user.station_id) return res.status(403).json({ error: "Forbidden" });
     } else {
-        return res.status(403).json({ error: "Forbidden" });
+      return res.status(403).json({ error: "Forbidden" });
     }
 
-    const { name, phone, salary_type, salary_amount } = req.body;
-    
+    const { name, phone, salary_type, salary_amount, profile_picture } = req.body;
+
     const updateData = {};
     if (name) updateData.name = name;
-    if (phone) updateData.phone = phone;
+    if (phone !== undefined) updateData.phone = phone;
+    if (profile_picture !== undefined) updateData.profile_picture = profile_picture;
     // Only owner/admin can update salary
     if ((req.user.role === 'owner' || req.user.role === 'admin') && salary_type) updateData.salary_type = salary_type;
     if ((req.user.role === 'owner' || req.user.role === 'admin') && salary_amount) updateData.salary_amount = salary_amount;
@@ -162,10 +164,10 @@ router.post("/:id/role", auth, authorize("admin", "owner"), async (req, res) => 
 
     const u = await User.findByPk(id);
     if (!u) return res.status(404).json({ error: "Not found" });
-    
+
     // Check ownership if owner
-    if (req.user.role === 'owner' && u.owner_id !== req.user.id) {
-        return res.status(403).json({ error: "Forbidden" });
+    if (req.user.role === 'owner' && u.stationid !== req.user.station_id) {
+      return res.status(403).json({ error: "Forbidden" });
     }
 
     await User.update({ role }, { where: { id: id } });
@@ -186,10 +188,10 @@ router.delete("/:id", auth, authorize("admin", "owner"), async (req, res) => {
     if (u.role === "admin") {
       return res.status(403).json({ error: "Cannot delete admin users" });
     }
-    
+
     // Check ownership if owner
-    if (req.user.role === 'owner' && u.owner_id !== req.user.id) {
-        return res.status(403).json({ error: "Forbidden" });
+    if (req.user.role === 'owner' && u.stationid !== req.user.station_id) {
+      return res.status(403).json({ error: "Forbidden" });
     }
 
     await User.destroy({ where: { id: id } });

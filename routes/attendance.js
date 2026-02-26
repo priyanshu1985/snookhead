@@ -13,12 +13,12 @@ router.get("/active/:userId", auth, stationContext, async (req, res) => {
     // Verify user belongs to station (via Shift record check)
     // Finding shift by user_id AND station_id
     const where = addStationFilter({ user_id: req.params.userId, status: 'active' }, req.stationId);
-    
+
     // Check if user is trying to access data from another station?
     // Usually user context is enough.
-    
+
     const activeSession = await Shift.findOne({ where });
-    res.json(activeSession || null); 
+    res.json(activeSession || null);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -28,22 +28,22 @@ router.get("/active/:userId", auth, stationContext, async (req, res) => {
 router.post("/check-in", auth, stationContext, requireStation, async (req, res) => {
   try {
     const { user_id } = req.body;
-    
+
     // Check if already checked in AT THIS STATION
     const where = addStationFilter({ user_id, status: 'active' }, req.stationId);
     const existing = await Shift.findOne({ where });
     if (existing) {
-        return res.status(400).json({ error: "User is already checked in" });
+      return res.status(400).json({ error: "User is already checked in" });
     }
 
     const shiftData = addStationToData({
-        user_id,
-        check_in_time: new Date(),
-        status: 'active'
+      user_id,
+      check_in_time: new Date(),
+      status: 'active'
     }, req.stationId);
 
     const newRecord = await Shift.create(shiftData);
-    
+
     res.json(newRecord);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -53,14 +53,14 @@ router.post("/check-in", auth, stationContext, requireStation, async (req, res) 
 // Clock Out
 router.post("/check-out", auth, stationContext, async (req, res) => {
   try {
-    const { user_id, attendance_id } = req.body; 
-    
+    const { user_id, attendance_id } = req.body;
+
     // Find the record restricted by Station
     let where = {};
     if (attendance_id) {
-        where = addStationFilter({ id: attendance_id }, req.stationId);
+      where = addStationFilter({ id: attendance_id }, req.stationId);
     } else {
-        where = addStationFilter({ user_id, status: 'active' }, req.stationId);
+      where = addStationFilter({ user_id, status: 'active' }, req.stationId);
     }
 
     const record = await Shift.findOne({ where });
@@ -69,11 +69,11 @@ router.post("/check-out", auth, stationContext, async (req, res) => {
 
     const checkOutTime = new Date();
     const checkInTime = new Date(record.check_in_time);
-    
+
     // Calculate total hours
     const diffMs = checkOutTime - checkInTime;
     const totalHours = (diffMs / (1000 * 60 * 60)).toFixed(2);
-    
+
     // Update
     // Note: custom update in model/index.js (from my memory) took (data, filter) OR (id, data)?
     // Re-reading models/index.js Shift.update:
@@ -87,15 +87,15 @@ router.post("/check-out", auth, stationContext, async (req, res) => {
        } else { ... }
     */
     // So update(record.id, data) works.
-    
-    await Shift.update(record.id, {
-        check_out_time: checkOutTime,
-        status: 'completed',
-        total_hours: totalHours
-    });
-    
+
+    await Shift.update({
+      check_out_time: checkOutTime,
+      status: 'completed',
+      total_hours: totalHours
+    }, { where });
+
     // Return updated record
-    const updated = await Shift.findOne({ where: { id: record.id }});
+    const updated = await Shift.findOne({ where });
 
     res.json(updated);
   } catch (err) {
@@ -105,19 +105,19 @@ router.post("/check-out", auth, stationContext, async (req, res) => {
 
 // Get attendance history for a user
 router.get("/user/:userId", auth, stationContext, async (req, res) => {
-    try {
-        if (req.needsStationSetup) return res.json([]);
-        
-        const where = addStationFilter({ user_id: req.params.userId }, req.stationId);
-        
-        const history = await Shift.findAll({
-            where,
-            order: [['check_in_time', 'DESC']]
-        });
-        res.json(history);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+  try {
+    if (req.needsStationSetup) return res.json([]);
+
+    const where = addStationFilter({ user_id: req.params.userId }, req.stationId);
+
+    const history = await Shift.findAll({
+      where,
+      order: [['check_in_time', 'DESC']]
+    });
+    res.json(history);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

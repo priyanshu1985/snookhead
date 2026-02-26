@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import { auth } from "../middleware/auth.js";
+import fetch from "node-fetch";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -97,6 +98,64 @@ router.get("/menu", auth, async (req, res) => {
   } catch (err) {
     console.error("Error listing menu stock images:", err);
     res.status(500).json({ error: "Failed to list menu stock images" });
+  }
+});
+
+// Add image to stock (download from URL)
+router.post("/add", auth, async (req, res) => {
+  try {
+    const { folder, imageUrl } = req.body;
+
+    if (!folder || !['games', 'menu'].includes(folder)) {
+      return res.status(400).json({ error: "Invalid folder. Must be 'games' or 'menu'." });
+    }
+    if (!imageUrl) {
+      return res.status(400).json({ error: "Image URL is required." });
+    }
+
+    const targetDir = folder === 'games' ? GAME_IMAGES_DIR : MENU_IMAGES_DIR;
+
+    // Ensure directory exists
+    try {
+      await fs.access(targetDir);
+    } catch {
+      await fs.mkdir(targetDir, { recursive: true });
+    }
+
+    // Determine filename
+    // Try to get extension from URL or default to .jpg
+    let ext = path.extname(imageUrl).split('?')[0].toLowerCase(); // Remove query params
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      ext = ".jpg"; // Fallback
+    }
+
+    // Create unique filename
+    const timestamp = Date.now();
+    const cleanName = path.basename(imageUrl, ext).replace(/[^a-z0-9]/gi, '_').substring(0, 20);
+    const filename = `stock_${cleanName}_${timestamp}${ext}`;
+    const filePath = path.join(targetDir, filename);
+
+    // Fetch and save
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.statusText}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    await fs.writeFile(filePath, buffer);
+
+    res.json({
+      success: true,
+      key: filename, // The key is the filename for stock images
+      url: `/static/${folder}-images/${filename}`,
+      filename: filename
+    });
+
+  } catch (err) {
+    console.error("Error adding stock image:", err);
+    res.status(500).json({ error: "Failed to add image to stock" });
   }
 });
 

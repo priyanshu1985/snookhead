@@ -14,6 +14,7 @@ module.exports = (sequelize, DataTypes) => {
     game_createdon: { type: DataTypes.DATE },
     created_by: { type: DataTypes.STRING(100) },
     game_modify: { type: DataTypes.STRING(250) },
-    modified_by: { type: DataTypes.STRING(250) }
+    modified_by: { type: DataTypes.STRING(250) },
+    frame_threshold: { type: DataTypes.INTEGER, defaultValue: 30 }
   }, { tableName: 'games', timestamps: false });
 };

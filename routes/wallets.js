@@ -1,7 +1,7 @@
 import express from "express";
 import QRCode from "qrcode";
 import { v4 as uuidv4 } from "uuid";
-import { Wallet, Customer } from "../models/index.js";
+import { Wallet, Customer, WalletTransaction } from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
   stationContext,
@@ -18,7 +18,7 @@ const router = express.Router();
 router.get("/customer/:customer_id", auth, stationContext, async (req, res) => {
   try {
     const { customer_id } = req.params;
-    
+
     if (req.needsStationSetup) {
       return res.status(404).json({ error: "Wallet/Customer not found" });
     }
@@ -27,61 +27,61 @@ router.get("/customer/:customer_id", auth, stationContext, async (req, res) => {
 
     // 1. Try finding by UUID (customer ID) directly if it looks like a uuid
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customer_id);
-    
+
     if (isUuid) {
-        const where = addStationFilter({ customerid: customer_id }, req.stationId);
-        wallet = await Wallet.findOne({
-          where,
-          include: [{ model: Customer }],
-        });
+      const where = addStationFilter({ customerid: customer_id }, req.stationId);
+      wallet = await Wallet.findOne({
+        where,
+        include: [{ model: Customer }],
+      });
     }
 
     // 2. If not found by UUID, try searching Customer by member_seq, phone, or alias
     if (!wallet) {
-        // Find customer first
-        // We need custom filter for OR condition (member_seq OR phone OR alias)
-        // Since our model helper supports basic 'where', we might need multiple attempts or advanced filter.
-        // Let's try finding unique customer matching the input.
-        
-        let customer = null;
-        
-        // Try member_seq (if numeric)
-        if (!isNaN(customer_id)) {
-             customer = await Customer.findOne({ 
-                 where: addStationFilter({ member_seq: Number(customer_id) }, req.stationId) 
-             });
-        }
-        
-        // Try Phone
-        if (!customer) {
-             customer = await Customer.findOne({ 
-                 where: addStationFilter({ phone: customer_id }, req.stationId) 
-             });
-        }
-        
-        // Try Alias
-        if (!customer) {
-             customer = await Customer.findOne({ 
-                 where: addStationFilter({ alias: customer_id }, req.stationId) 
-             });
-        }
-        
-        // Try UUID on Customer ID directly if it was a UUID but no wallet yet? (handled by logic below)
+      // Find customer first
+      // We need custom filter for OR condition (member_seq OR phone OR alias)
+      // Since our model helper supports basic 'where', we might need multiple attempts or advanced filter.
+      // Let's try finding unique customer matching the input.
 
-        if (customer) {
-            // Found customer, now get wallet
-            const where = addStationFilter({ customerid: customer.id }, req.stationId);
-            wallet = await Wallet.findOne({
-              where,
-              include: [{ model: Customer }],
-            });
-            
-            // If wallet doesn't exist for this customer, we might want to return just customer info?
-            // But existing API returns "Wallet not found".
-            // The PaymentModal expects wallet data.
-            // If wallet missing but customer exists, maybe Create one? 
-            // For now, let's stick to existing behavior: return 404 if wallet not found.
-        }
+      let customer = null;
+
+      // Try member_seq (if numeric)
+      if (!isNaN(customer_id)) {
+        customer = await Customer.findOne({
+          where: addStationFilter({ member_seq: Number(customer_id) }, req.stationId)
+        });
+      }
+
+      // Try Phone
+      if (!customer) {
+        customer = await Customer.findOne({
+          where: addStationFilter({ phone: customer_id }, req.stationId)
+        });
+      }
+
+      // Try Alias
+      if (!customer) {
+        customer = await Customer.findOne({
+          where: addStationFilter({ alias: customer_id }, req.stationId)
+        });
+      }
+
+      // Try UUID on Customer ID directly if it was a UUID but no wallet yet? (handled by logic below)
+
+      if (customer) {
+        // Found customer, now get wallet
+        const where = addStationFilter({ customerid: customer.id }, req.stationId);
+        wallet = await Wallet.findOne({
+          where,
+          include: [{ model: Customer }],
+        });
+
+        // If wallet doesn't exist for this customer, we might want to return just customer info?
+        // But existing API returns "Wallet not found".
+        // The PaymentModal expects wallet data.
+        // If wallet missing but customer exists, maybe Create one? 
+        // For now, let's stick to existing behavior: return 404 if wallet not found.
+      }
     }
 
     if (!wallet) {
@@ -154,7 +154,8 @@ router.post(
           creditlimit: 0,
           reservedamount: 0,
         },
-        req.stationId
+        req.stationId,
+        "station_id"
       );
 
       const wallet = await Wallet.create(walletData);
@@ -176,42 +177,89 @@ router.post(
    HELPER: Find Wallet by flexible Customer ID
    ===================================================== */
 async function findWalletByCustomerId(customer_id, stationId) {
-    if (!customer_id) return null;
-    
-    // 1. Try finding by UUID (customer ID) directly
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customer_id);
-    
-    if (isUuid) {
-        const where = addStationFilter({ customerid: customer_id }, stationId);
-        const wallet = await Wallet.findOne({ where });
-        if (wallet) return wallet;
-    }
+  if (!customer_id) return null;
 
-    // 2. Lookup Customer by ID/Phone/Alias
-    let customer = null;
-    if (!isNaN(customer_id)) {
-          customer = await Customer.findOne({ 
-              where: addStationFilter({ member_seq: Number(customer_id) }, stationId) 
-          });
-    }
-    if (!customer) {
-          customer = await Customer.findOne({ 
-              where: addStationFilter({ phone: customer_id }, stationId) 
-          });
-    }
-    if (!customer) {
-          customer = await Customer.findOne({ 
-              where: addStationFilter({ alias: customer_id }, stationId) 
-          });
-    }
+  // 1. Try finding by UUID (customer ID) directly
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customer_id);
 
-    if (customer) {
-        const where = addStationFilter({ customerid: customer.id }, stationId);
-        return await Wallet.findOne({ where });
-    }
+  if (isUuid) {
+    const where = addStationFilter({ customerid: customer_id }, stationId);
+    const wallet = await Wallet.findOne({ where });
+    if (wallet) return wallet;
+  }
 
-    return null;
+  // 2. Lookup Customer by ID/Phone/Alias
+  let customer = null;
+  if (!isNaN(customer_id)) {
+    customer = await Customer.findOne({
+      where: addStationFilter({ member_seq: Number(customer_id) }, stationId)
+    });
+  }
+  if (!customer) {
+    customer = await Customer.findOne({
+      where: addStationFilter({ phone: customer_id }, stationId)
+    });
+  }
+  if (!customer) {
+    customer = await Customer.findOne({
+      where: addStationFilter({ alias: customer_id }, stationId)
+    });
+  }
+
+  if (customer) {
+    const where = addStationFilter({ customerid: customer.id }, stationId);
+    return await Wallet.findOne({ where });
+  }
+
+  return null;
 }
+
+/* =====================================================
+   LOOKUP Wallet & Customer by ID/Phone - filtered by station
+   ===================================================== */
+router.get(
+  "/lookup",
+  auth,
+  stationContext,
+  authorize("staff", "admin", "owner"),
+  async (req, res) => {
+    try {
+      const { query } = req.query;
+
+      if (!query) {
+        return res.status(400).json({ error: "Query parameter required" });
+      }
+
+      const wallet = await findWalletByCustomerId(query, req.stationId);
+
+      if (!wallet) {
+        return res.status(404).json({ error: "Wallet not found for this customer" });
+      }
+
+      // Fetch full customer details to return
+      const customer = await Customer.findOne({
+        where: { id: wallet.customerid }
+      });
+
+      res.json({
+        wallet: {
+          id: wallet.id,
+          balance: wallet.balance,
+          currency: wallet.currency,
+        },
+        customer: {
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          member_seq: customer.member_seq
+        }
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
 
 /* =====================================================
    ADD Money - filtered by station
@@ -239,7 +287,22 @@ router.post(
         balance: newBalance,
         lasttransactionat: new Date()
       }, { where: { id: wallet.id } });
-      
+
+      // Create Transaction Record
+      await WalletTransaction.create(
+        {
+          walletid: wallet.id,
+          customerid: wallet.customerid,
+          amount: amount,
+          balancebefore: wallet.balance,
+          balanceafter: newBalance,
+          stationid: req.stationId,
+          type: "TOPUP",
+          description: "Money Added via Panel",
+          createdAt: new Date()
+        }
+      );
+
       // Update local object for response
       wallet.balance = newBalance;
 
@@ -283,6 +346,21 @@ router.post(
         lasttransactionat: new Date()
       }, { where: { id: wallet.id } });
 
+      // Create Transaction Record
+      await WalletTransaction.create(
+        {
+          walletid: wallet.id,
+          customerid: wallet.customerid,
+          amount: amount,
+          balancebefore: wallet.balance,
+          balanceafter: newBalance,
+          stationid: req.stationId,
+          type: "TOPUP",
+          description: "Money Added via Panel (ID)",
+          createdAt: new Date()
+        }
+      );
+
       // Update local object for response
       wallet.balance = newBalance;
 
@@ -307,7 +385,7 @@ router.post(
   authorize("staff", "admin", "owner"),
   async (req, res) => {
     try {
-      const { customer_id, amount } = req.body;
+      const { customer_id, amount, note } = req.body;
 
       if (!amount || amount <= 0) {
         return res.status(400).json({ error: "Invalid amount" });
@@ -327,6 +405,21 @@ router.post(
         balance: newBalance,
         lasttransactionat: new Date()
       }, { where: { id: wallet.id } });
+
+      // Create Transaction Record
+      await WalletTransaction.create(
+        {
+          walletid: wallet.id,
+          customerid: wallet.customerid,
+          amount: amount,
+          balancebefore: wallet.balance,
+          balanceafter: newBalance,
+          stationid: req.stationId,
+          type: "DEDUCT",
+          description: note || "Money Deducted via Panel",
+          createdAt: new Date()
+        }
+      );
 
       // Update local object for response
       wallet.balance = newBalance;
@@ -418,6 +511,37 @@ router.get(
         include: [{ model: Customer }],
       });
       res.json(wallets);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+/* =====================================================
+   GET Wallet Transactions
+   ===================================================== */
+router.get(
+  "/:wallet_id/transactions",
+  auth,
+  stationContext,
+  async (req, res) => {
+    try {
+      const { wallet_id } = req.params;
+
+      // Transactions table uses 'walletid' and 'stationid'
+      const where = {
+        walletid: wallet_id,
+        stationid: req.stationId
+      };
+
+      // Use findAll from models definition
+      const transactions = await WalletTransaction.findAll({
+        where,
+        order: [["createdAt", "DESC"]]
+      });
+
+      res.json(transactions);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: err.message });

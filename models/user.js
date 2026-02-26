@@ -23,6 +23,7 @@ module.exports = (sequelize, DataTypes) => {
       reset_token_expiry: { type: DataTypes.DATE, allowNull: true },
       owner_panel_password: { type: DataTypes.STRING(128), allowNull: true }, // Hashed owner panel password
       owner_panel_setup: { type: DataTypes.BOOLEAN, defaultValue: false }, // Track if user has set up owner panel password
+      profile_picture: { type: DataTypes.STRING(255), allowNull: true }, // URL to uploaded profile picture
     },
     {
       tableName: "users",

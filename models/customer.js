@@ -59,9 +59,9 @@ module.exports = (sequelize, DataTypes) => {
       charset: "utf8mb4",
       collate: "utf8mb4_0900_ai_ci",
       indexes: [
-        { unique: true, fields: ["phone"] },
-        { unique: true, fields: ["email"] },
-        { unique: true, fields: ["external_id"] },
+        { unique: true, fields: ["phone", "station_id"] },
+        { unique: true, fields: ["email", "station_id"] },
+        { unique: true, fields: ["external_id", "station_id"] },
         { fields: ["is_active"] },
         { fields: ["created_by"] },
       ],

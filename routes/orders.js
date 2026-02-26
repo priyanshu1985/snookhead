@@ -74,26 +74,53 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
     let calculatedTotal = 0;
 
     for (const cartItem of cart) {
-      const { item, qty } = cartItem;
+      // Handle both nested and flat structures for robustness
+      const menuItemId = cartItem.menu_item_id || (cartItem.item && cartItem.item.id);
+      const qty = Number(cartItem.quantity || cartItem.qty || (cartItem.item && cartItem.item.qty) || 1);
+      const variationId = cartItem.variation_id || (cartItem.item && cartItem.item.variation_id);
 
-      // Find menu item in database with station filter
-      const menuWhere = addStationFilter({ id: item.id }, req.stationId);
+      if (!menuItemId) {
+        console.warn("Skipping cart item with missing ID:", cartItem);
+        continue;
+      }
+
+      const menuWhere = addStationFilter({ id: menuItemId }, req.stationId, "stationid");
+
       const menuItem = await MenuItem.findOne({ where: menuWhere });
       if (!menuItem) {
         return res.status(404).json({
-          error: `Menu item ${item.name} not found`,
+          error: `Menu item ${cartItem.name || (cartItem.item && cartItem.item.name) || menuItemId} not found`,
         });
       }
 
-      const priceEach = Number(menuItem.price) || 0;
+      // Check if variation was chosen
+      const { getSupabase: getDb } = await import("../config/supabase.js");
+      let priceEach = Number(menuItem.price) || 0;
+      let inventoryMultiplier = 1;
+      let itemNameForLog = menuItem.name;
+
+      if (variationId) {
+        const { data: variation } = await getDb()
+          .from('menu_item_variations')
+          .select('*')
+          .eq('id', variationId)
+          .single();
+
+        if (variation) {
+          priceEach = Number(variation.selling_price);
+          inventoryMultiplier = Number(variation.inventory_multiplier) || 1;
+          itemNameForLog = `${menuItem.name} (${variation.variation_name})`;
+        }
+      }
+
       const itemTotal = priceEach * qty;
       calculatedTotal += itemTotal;
 
       // Create OrderItem
       await OrderItem.create({
         orderId: order.id,
-        menuItemId: item.id,
-        qty: Number(qty) || 1,
+        menuItemId: menuItemId,
+        qty: qty,
         priceEach,
       });
 
@@ -110,22 +137,41 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
             itemname: menuName,
             isactive: true
           };
-          if (req.stationId) inventoryWhere.station_id = req.stationId;
+          if (req.stationId) inventoryWhere.stationid = req.stationId;
 
           const inventoryItem = await Inventory.findOne({ where: inventoryWhere });
 
           if (inventoryItem) {
             // Strict check? We already checked menu item (which should be synced).
             // But let's double check here to be safe against race conditions.
-            if (inventoryItem.currentquantity < qty) {
-              throw new Error(`Insufficient inventory for ${menuName}. Available: ${inventoryItem.currentquantity}`);
+            const totalDeductionNeeded = qty * inventoryMultiplier;
+            if (inventoryItem.currentquantity < totalDeductionNeeded) {
+              throw new Error(`Insufficient inventory for ${itemNameForLog}. Required: ${totalDeductionNeeded}, Available: ${inventoryItem.currentquantity}`);
             }
 
             // Deduct stock
-            await inventoryItem.decrement('currentquantity', { by: qty });
-            console.log(`Deducted ${qty} from inventory for ${menuName}`);
+            await inventoryItem.decrement('currentquantity', { by: totalDeductionNeeded });
+            console.log(`Deducted ${totalDeductionNeeded} from inventory for ${itemNameForLog}`);
+
+            // Log the deduction
+            const { InventoryLog } = await import("../models/index.js");
+            if (InventoryLog) {
+              await InventoryLog.create({
+                menu_item_id: menuItemId,
+                item_name: menuItem.name,
+                category: menuItem.category,
+                stationid: req.stationId,
+                action: 'DEDUCT',
+                quantity_change: totalDeductionNeeded,
+                previous_stock: inventoryItem.currentquantity,
+                new_stock: inventoryItem.currentquantity - totalDeductionNeeded,
+                reason: `Order Created (Order ID: ${order.id})`,
+                user_id: req.user ? req.user.id : null,
+                created_at: new Date()
+              });
+            }
           } else {
-            console.warn(`No inventory item found for ${menuName}, skipping inventory deduction.`);
+            console.warn(`No inventory item found for ${itemNameForLog}, skipping inventory deduction.`);
           }
         }
       } catch (invErr) {
@@ -138,7 +184,8 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       }
 
       if (menuItem.stock !== undefined) {
-        const newStock = Math.max(0, menuItem.stock - qty);
+        const totalDeductionNeeded = qty * inventoryMultiplier;
+        const newStock = Math.max(0, menuItem.stock - totalDeductionNeeded);
         await MenuItem.update(
           { stock: newStock },
           { where: { id: menuItem.id } },
@@ -204,7 +251,7 @@ router.get("/", auth, stationContext, async (req, res) => {
       where,
       offset: (page - 1) * limit,
       limit: parseInt(limit),
-      select: "*, OrderItems:orderitem(*, MenuItem:menuitems(*))",
+      select: "*, OrderItems:orderitems(*, MenuItem:menuitems(*))",
       order: [["createdAt", "DESC"]], // Ensure ordering works with new select
     });
 
@@ -213,7 +260,7 @@ router.get("/", auth, stationContext, async (req, res) => {
       currentPage: page,
       data: orders,
       debug: {
-        station_id: req.stationId,
+        stationid: req.stationId,
         where_filter: where,
         raw_orders_count: orders.length,
       },
@@ -232,7 +279,6 @@ router.get("/by-session/:sessionId", auth, stationContext, async (req, res) => {
 
     // Apply station filter
     const where = addStationFilter(
-      { session_id: parseInt(sessionId) },
       { session_id: parseInt(sessionId) },
       req.stationId,
       "stationid",

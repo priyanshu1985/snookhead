@@ -29,6 +29,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: "Walk-in Customer",
       },
+      customerid: { type: DataTypes.CHAR(36), allowNull: true },
       customer_phone: {
         type: DataTypes.STRING(20),
         allowNull: true,

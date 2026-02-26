@@ -135,6 +135,7 @@ router.get(
           status: bill.status,
           customer_name: bill.customername || "Unknown Customer",
           customer_phone: bill.customerphone || "+91 XXXXXXXXXX",
+          customer_id: bill.customerid || details.customer_id || null, // Include customer_id
           items_summary: itemsSummary,
           order_items: orderItemsFormatted,
           table_info: {
@@ -210,6 +211,7 @@ router.get(
         status: bill.status,
         customer_name: bill.customername || "Unknown Customer",
         customer_phone: bill.customerphone || "+91 XXXXXXXXXX",
+        customer_id: bill.customerid || details.customer_id || null, // Include customer_id
         items_summary: itemsSummary,
         order_items: orderItemsFormatted,
         table_info: {
@@ -286,6 +288,7 @@ router.post(
       const {
         customer_name = "Walk-in Customer",
         customer_phone,
+        customer_id,
         table_id,
         session_id,
         selected_menu_items = [],
@@ -439,6 +442,7 @@ router.post(
           billnumber: bill_number, // Mapped to lowercase schema
           customername: customer_name,
           customerphone: customer_phone,
+          customerid: customer_id,
           tableid: table_id,
           sessionid: session_id,
           tablecharges: table_charges,
@@ -452,6 +456,7 @@ router.post(
             booking_time,
             table_price_per_min: actualPricePerMin,
             frame_charges: actualFrameCharges,
+            customer_id: customer_id,
             advance_payment: req.body.advance_payment || 0,
             booking_source: bookingSource, // Tracked!
             booking_type: bookingType, // Tracked!
