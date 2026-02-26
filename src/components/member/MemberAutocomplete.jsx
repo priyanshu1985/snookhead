@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  ScrollView,
   FlatList,
   StyleSheet,
   ActivityIndicator,
@@ -86,37 +87,35 @@ const MemberAutocomplete = ({
               <ActivityIndicator size="small" color="#FF8C42" />
             </View>
           ) : (
-            <FlatList
-              data={filteredMembers}
-              keyExtractor={(item) => item.id.toString()}
-              keyboardShouldPersistTaps="handled"
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.suggestionItem}
-                  onPress={() => handleSelect(item)}
-                >
-                  <Icon name="person" size={16} color="#666" style={styles.icon} />
-                  <View>
-                    <Text style={styles.suggestionName}>{item.name}</Text>
-                    <Text style={styles.suggestionPhone}>{item.phone}</Text>
-                  </View>
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
+            <ScrollView keyboardShouldPersistTaps="handled">
+              {filteredMembers.length > 0 ? (
+                filteredMembers.map((item) => (
+                  <TouchableOpacity
+                    key={item.id.toString()}
+                    style={styles.suggestionItem}
+                    onPress={() => handleSelect(item)}
+                  >
+                    <Icon name="person" size={16} color="#666" style={styles.icon} />
+                    <View>
+                      <Text style={styles.suggestionName}>{item.name}</Text>
+                      <Text style={styles.suggestionPhone}>{item.phone}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              ) : (
                 <View style={styles.emptyContainer}>
                   <Text style={styles.emptyText}>No matches found</Text>
                 </View>
-              }
-              ListFooterComponent={
-                <TouchableOpacity
-                  style={styles.createButton}
-                  onPress={handleCreateNew}
-                >
-                  <Icon name="add-circle" size={18} color="#FF8C42" style={styles.icon} />
-                  <Text style={styles.createButtonText}>Create new member</Text>
-                </TouchableOpacity>
-              }
-            />
+              )}
+              
+              <TouchableOpacity
+                style={styles.createButton}
+                onPress={handleCreateNew}
+              >
+                <Icon name="add-circle" size={18} color="#FF8C42" style={styles.icon} />
+                <Text style={styles.createButtonText}>Create new member</Text>
+              </TouchableOpacity>
+            </ScrollView>
           )}
         </View>
       )}

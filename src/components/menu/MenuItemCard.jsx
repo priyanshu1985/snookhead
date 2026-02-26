@@ -31,15 +31,7 @@ export default function MenuItemCard({
   };
 
   const handleRemove = () => {
-    if (hasVariations) {
-      // If variations exist and user taps "-", just open variations modal or let them remove from cart summary.
-      // For simplicity here, we'll trigger onOpenVariations so they can add/remove specific ones,
-      // OR we just remove the most recently added one.
-      // Let's pass null to onRemoveFood, indicating base item remove request, calling parent logic.
-      onRemoveFood(item.id);
-    } else {
-      onRemoveFood(item.id);
-    }
+    onRemoveFood(item);
   };
 
   return (

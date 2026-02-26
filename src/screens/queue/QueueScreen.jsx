@@ -1,5 +1,5 @@
 // QueueScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -19,6 +19,9 @@ import QueueListView from '../../components/queue/QueueListView';
 import Header from '../../components/common/Header';
 import { API_URL } from '../../../config';
 import MemberAutocomplete from '../../components/member/MemberAutocomplete';
+import MenuItemCard from '../../components/menu/MenuItemCard';
+import VariationModal from '../../components/menu/VariationModal';
+import { PreparedFoodIcon, PackedFoodIcon } from '../../components/common/icon';
 
 // Helper function to get auth token
 async function getAuthToken() {
@@ -56,6 +59,15 @@ export default function QueueScreen({ navigation, route }) {
   const [frameCount, setFrameCount] = useState('1');
   const [setTime, setSetTime] = useState('');
   const [customerid, setCustomerid] = useState(null);
+  const [formStep, setFormStep] = useState(1); // 1: Queue Form, 2: Food Selection
+  const [cartItems, setCartItems] = useState([]);
+  const [foodInstructions, setFoodInstructions] = useState('');
+  const [menuItems, setMenuItems] = useState([]);
+  const [selectedMainCategory, setSelectedMainCategory] = useState('prepared');
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [subCategories, setSubCategories] = useState([]);
+  const [selectedVariationItem, setSelectedVariationItem] = useState(null);
+  const [isVariationModalVisible, setIsVariationModalVisible] = useState(false);
 
   // Metadata
   const [games, setGames] = useState([]);
@@ -148,6 +160,15 @@ export default function QueueScreen({ navigation, route }) {
             : [],
         );
       }
+
+      // Fetch Menu Data
+      const menuRes = await fetch(`${API_URL}/api/menu`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (menuRes.ok) {
+        const menuData = await menuRes.json();
+        setMenuItems(Array.isArray(menuData) ? menuData : menuData.data || []);
+      }
     } catch (err) {
       console.error('Error fetching metadata:', err);
     }
@@ -158,6 +179,100 @@ export default function QueueScreen({ navigation, route }) {
     fetchQueueData();
     fetchMetadata();
   }, []);
+
+  // Update categories dynamically when menu items or main category change
+  useEffect(() => {
+    if (menuItems.length > 0) {
+      const activeMainCat = selectedMainCategory;
+      const relevantSubCats = Array.from(
+        new Set(
+          menuItems
+            .filter(m => (m.item_type || m.itemType || 'prepared').toLowerCase() === activeMainCat)
+            .map(m => m.category || m.category_name || '')
+            .filter(Boolean),
+        ),
+      );
+      
+      setSubCategories(relevantSubCats);
+      if (relevantSubCats.length > 0 && !relevantSubCats.includes(selectedCategory)) {
+        setSelectedCategory(relevantSubCats[0]);
+      } else if (relevantSubCats.length === 0) {
+        setSelectedCategory(null);
+      }
+    }
+  }, [selectedMainCategory, menuItems]);
+
+  // Filter menu items based on selected categories
+  const getFilteredMenuItems = useCallback(() => {
+    return menuItems.filter(item => {
+      const itemMainCat = (item.item_type || item.itemType || 'prepared').toLowerCase();
+      const matchMain = itemMainCat === selectedMainCategory;
+      if (!matchMain) return false;
+      
+      if (selectedCategory) {
+        const itemSubCat = (item.category || item.category_name || '').toLowerCase();
+        return itemSubCat === selectedCategory.toLowerCase();
+      }
+      return true;
+    });
+  }, [menuItems, selectedMainCategory, selectedCategory]);
+
+  // Cart Management
+  const handleAddFood = (item, variationId = null) => {
+    setCartItems(prev => {
+      const existing = prev.find(
+        ci => ci.item.id === item.id && ci.variation_id === variationId
+      );
+      if (existing) {
+        return prev.map(ci =>
+          ci.item.id === item.id && ci.variation_id === variationId
+            ? { ...ci, qty: ci.qty + 1 }
+            : ci
+        );
+      }
+      return [...prev, { item, qty: 1, variation_id: variationId }];
+    });
+  };
+
+  const handleDecreaseFood = (item, variationId = null) => {
+    setCartItems(prev => {
+      // Find the item to decrease
+      let targetIndex = -1;
+      
+      if (variationId === null) {
+        // Find the last entry with this item ID (regardless of variation)
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (prev[i].item.id === item.id) {
+            targetIndex = i;
+            break;
+          }
+        }
+      } else {
+        // Find the specific variation
+        targetIndex = prev.findIndex(
+          ci => ci.item.id === item.id && ci.variation_id === variationId
+        );
+      }
+
+      if (targetIndex === -1) return prev;
+
+      const existing = prev[targetIndex];
+      if (existing.qty > 1) {
+        const clone = [...prev];
+        clone[targetIndex] = { ...existing, qty: existing.qty - 1 };
+        return clone;
+      }
+      return prev.filter((_, i) => i !== targetIndex);
+    });
+  };
+
+  const handleVariationSelect = (variation) => {
+    if (selectedVariationItem) {
+      handleAddFood(selectedVariationItem, variation.id);
+      setIsVariationModalVisible(false);
+      setSelectedVariationItem(null);
+    }
+  };
 
   // Refetch on focus
   useFocusEffect(
@@ -181,6 +296,11 @@ export default function QueueScreen({ navigation, route }) {
     const phoneDigits = newCustomerPhone.replace(/\D/g, '');
     if (phoneDigits.length !== 10) {
       Alert.alert('Error', 'Phone number must be exactly 10 digits');
+      return;
+    }
+
+    if (formStep === 1) {
+      setFormStep(2);
       return;
     }
 
@@ -250,6 +370,12 @@ export default function QueueScreen({ navigation, route }) {
             bookingType === 'Set Time' ? parseInt(duration) || 60 : null,
           frame_count: bookingType === 'Frame' ? parseInt(frameCount) : null,
           customerid: customerid || null,
+          food_orders: cartItems.map(ci => ({
+            id: ci.item.id,
+            qty: ci.qty,
+            variation_id: ci.variation_id
+          })),
+          food_instructions: foodInstructions.trim() || null,
         }),
       });
 
@@ -266,6 +392,9 @@ export default function QueueScreen({ navigation, route }) {
         setEditingItem(null);
         setCustomerid(null);
         fetchQueueData();
+        setFormStep(1);
+        setCartItems([]);
+        setFoodInstructions('');
         setShowSuccessModal(true);
       } else {
         throw new Error(result.error || 'Failed to add to queue');
@@ -290,6 +419,9 @@ export default function QueueScreen({ navigation, route }) {
     setFrameCount('1');
     setSetTime('');
     setCustomerid(null);
+    setFormStep(1);
+    setCartItems([]);
+    setFoodInstructions('');
     setShowAddModal(true);
   };
 
@@ -398,27 +530,29 @@ export default function QueueScreen({ navigation, route }) {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ paddingBottom: 10 }}
               >
-                {/* Game Selection Section */}
-                <View style={styles.formSection}>
-                  <Text style={styles.sectionLabel}>Select Game *</Text>
-                  <TouchableOpacity
-                    style={styles.dropdownButton}
-                    onPress={() => setShowGameDropdown(!showGameDropdown)}
-                  >
-                    <Text style={styles.dropdownButtonText}>
-                      {targetGameId
-                        ? games.find(
-                            g => (g.game_id || g.gameid) === targetGameId,
-                          )?.game_name ||
-                          games.find(
-                            g => (g.game_id || g.gameid) === targetGameId,
-                          )?.gamename ||
-                          games.find(
-                            g => (g.game_id || g.gameid) === targetGameId,
-                          )?.name ||
-                          'Select a game'
-                        : 'Select a game'}
-                    </Text>
+                {formStep === 1 ? (
+                  <>
+                    {/* Game Selection Section */}
+                    <View style={styles.formSection}>
+                      <Text style={styles.sectionLabel}>Select Game *</Text>
+                      <TouchableOpacity
+                        style={styles.dropdownButton}
+                        onPress={() => setShowGameDropdown(!showGameDropdown)}
+                      >
+                        <Text style={styles.dropdownButtonText}>
+                          {targetGameId
+                            ? games.find(
+                                g => (g.game_id || g.gameid) === targetGameId,
+                              )?.game_name ||
+                              games.find(
+                                g => (g.game_id || g.gameid) === targetGameId,
+                              )?.gamename ||
+                              games.find(
+                                g => (g.game_id || g.gameid) === targetGameId,
+                              )?.name ||
+                              'Select a game'
+                            : 'Select a game'}
+                        </Text>
                     <Icon
                       name={showGameDropdown ? 'chevron-up' : 'chevron-down'}
                       size={20}
@@ -682,22 +816,153 @@ export default function QueueScreen({ navigation, route }) {
                   )}
                 </View>
 
-                {/* Submit Button */}
-                <TouchableOpacity
-                  style={[
-                    styles.modalAddButton,
-                    addingToQueue && styles.modalAddButtonDisabled,
-                  ]}
-                  onPress={handleAddToQueue}
-                  disabled={addingToQueue}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.modalAddButtonText}>
-                    {addingToQueue ? 'Saving...' : isEditMode ? 'Save Changes' : 'Add to Queue'}
-                  </Text>
-                </TouchableOpacity>
-              </ScrollView>
-            </View>
+                      </>
+                    ) : (
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.foodStepHeader}>
+                          <TouchableOpacity onPress={() => setFormStep(1)} style={styles.backButton}>
+                             <Icon name="arrow-back" size={20} color="#666" />
+                             <Text style={styles.backButtonText}>Back to Details</Text>
+                          </TouchableOpacity>
+                        </View>
+                        
+                        <Text style={[styles.sectionLabel, { marginTop: 12 }]}>Add Food (Optional)</Text>
+                        
+                        {/* Main Category Filter */}
+                        <View style={styles.mainCategoriesGrid}>
+                          {['prepared', 'packed'].map(cat => (
+                            <TouchableOpacity
+                              key={cat}
+                              style={[
+                                styles.mainCategoryButton,
+                                selectedMainCategory === cat && styles.mainCategoryButtonActive,
+                              ]}
+                              onPress={() => setSelectedMainCategory(cat)}
+                            >
+                              <Text style={[
+                                styles.mainCategoryText,
+                                selectedMainCategory === cat && styles.mainCategoryTextActive
+                              ]}>
+                                {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+
+                        {/* Sub Category Selection */}
+                        {subCategories.length > 0 && (
+                          <View style={{ marginBottom: 16 }}>
+                            <ScrollView 
+                              horizontal 
+                              showsHorizontalScrollIndicator={false}
+                              contentContainerStyle={styles.subCategoryRow}
+                            >
+                              {subCategories.map(cat => (
+                                <TouchableOpacity
+                                  key={cat}
+                                  style={[
+                                    styles.subCategoryChip,
+                                    selectedCategory === cat && styles.subCategoryChipActive,
+                                  ]}
+                                  onPress={() => setSelectedCategory(cat)}
+                                >
+                                  <Text style={[
+                                    styles.subCategoryChipText,
+                                    selectedCategory === cat && styles.subCategoryChipTextActive
+                                  ]}>
+                                    {cat}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          </View>
+                        )}
+
+                        {/* Menu List - Simple horizontal or vertical list for the modal */}
+                        <View style={{ minHeight: 400 }}>
+                           {getFilteredMenuItems().length > 0 ? (
+                             getFilteredMenuItems().map(item => (
+                               <MenuItemCard
+                                  key={item.id}
+                                  item={item}
+                                  cartItems={cartItems}
+                                  onAddFood={handleAddFood}
+                                  onRemoveFood={handleDecreaseFood}
+                                  onOpenVariations={(item) => {
+                                    setSelectedVariationItem(item);
+                                    setIsVariationModalVisible(true);
+                                  }}
+                               />
+                             ))
+                           ) : (
+                             <View style={styles.emptyMenu}>
+                                <Text style={styles.emptyMenuText}>No items found in this category</Text>
+                             </View>
+                           )}
+                        </View>
+
+                        {/* Special Instructions */}
+                        <View style={styles.formSection}>
+                           <Text style={styles.sectionLabel}>Special Instructions</Text>
+                           <TextInput
+                             style={[styles.textInput, { height: 60, textAlignVertical: 'top' }]}
+                             placeholder="E.g. Extra spicy, no onions..."
+                             multiline
+                             value={foodInstructions}
+                             onChangeText={setFoodInstructions}
+                           />
+                        </View>
+                      </View>
+                    )}
+                  </ScrollView>
+
+                  {/* Fixed Footer Buttons */}
+                  <View style={styles.stickyFooter}>
+                    {formStep === 1 ? (
+                      <TouchableOpacity
+                        style={[
+                          styles.modalAddButton,
+                          addingToQueue && styles.modalAddButtonDisabled,
+                          { marginTop: 0 },
+                        ]}
+                        onPress={handleAddToQueue}
+                        disabled={addingToQueue}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.modalAddButtonText}>
+                          {addingToQueue ? 'Saving...' : 'Next'}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={[styles.foodStepFooter, { borderTopWidth: 0, marginTop: 0 }]}>
+                        <TouchableOpacity 
+                          style={styles.skipButton}
+                          onPress={() => {
+                            setCartItems([]);
+                            handleAddToQueue();
+                          }}
+                          disabled={addingToQueue}
+                        >
+                          <Text style={styles.skipButtonText}>Skip Food</Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity 
+                          style={[
+                            styles.modalAddButton, 
+                            { flex: 1, marginTop: 0 },
+                            addingToQueue && styles.modalAddButtonDisabled
+                          ]}
+                          onPress={handleAddToQueue}
+                          disabled={addingToQueue}
+                        >
+                          <Text style={styles.modalAddButtonText}>
+                            {addingToQueue ? 'Saving...' : `Confirm & Add (${cartItems.length})`}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                </View>
           </TouchableWithoutFeedback>
         </TouchableOpacity>
       </Modal>
@@ -728,6 +993,13 @@ export default function QueueScreen({ navigation, route }) {
           </View>
         </View>
       </Modal>
+      {/* Variation Modal */}
+      <VariationModal
+        visible={isVariationModalVisible}
+        onClose={() => setIsVariationModalVisible(false)}
+        menuItem={selectedVariationItem}
+        onAddVariation={handleVariationSelect}
+      />
     </View>
   );
 }
@@ -1063,5 +1335,111 @@ const styles = StyleSheet.create({
     color: '#FF8C42',
     fontWeight: '600',
     marginLeft: 4,
+  },
+  subCategoryRow: {
+    paddingVertical: 10,
+    gap: 10,
+  },
+  subCategoryChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F0F0F0',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginRight: 8,
+  },
+  subCategoryChipActive: {
+    backgroundColor: '#FFF3E0',
+    borderColor: '#FF8C42',
+  },
+  subCategoryChipText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  subCategoryChipTextActive: {
+    color: '#FF8C42',
+    fontWeight: '700',
+  },
+  // Food Step Styles
+  foodStepHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  backButtonText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '600',
+  },
+  mainCategoriesGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  mainCategoryButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+  },
+  mainCategoryButtonActive: {
+    backgroundColor: '#FFF3E0',
+    borderColor: '#FF8C42',
+  },
+  mainCategoryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  mainCategoryTextActive: {
+    color: '#FF8C42',
+  },
+  emptyMenu: {
+    height: 150,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyMenuText: {
+    color: '#999',
+    fontStyle: 'italic',
+  },
+  foodStepFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    marginTop: 10,
+  },
+  skipButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#DDD',
+    alignItems: 'center',
+  },
+  skipButtonText: {
+    color: '#666',
+    fontWeight: '600',
+  },
+  stickyFooter: {
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    backgroundColor: '#FFFFFF',
+    marginTop: 8,
   },
 });
