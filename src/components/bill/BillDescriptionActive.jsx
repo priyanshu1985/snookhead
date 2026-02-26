@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,11 +22,26 @@ export default function BillDescriptionActive({
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cash');
   const [showPaymentConfirmModal, setShowPaymentConfirmModal] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(null);
+  const [fetchingWallet, setFetchingWallet] = useState(false);
 
   // Separate payment processing function
   const processPayment = async () => {
-    // If credit or card is selected, navigate to scanner
-    if (selectedPaymentMethod === 'credit' || selectedPaymentMethod === 'card') {
+    // If wallet/upi is selected but no customer info, we might need a scan
+    if (selectedPaymentMethod === 'wallet' && !getBillDetail('customerid')) {
+      setShowPaymentConfirmModal(false);
+      navigation.navigate('ScannerScreen', {
+        paymentContext: {
+          bill: bill,
+          amount: getBillDetail('totalAmount', '0'),
+          onPaymentComplete: onPaymentComplete,
+        },
+      });
+      return;
+    }
+
+    // Credit always requires a scan if it follows the original logic (or we can handle it similarly)
+    if (selectedPaymentMethod === 'credit') {
       setShowPaymentConfirmModal(false);
       navigation.navigate('ScannerScreen', {
         paymentContext: {
@@ -46,6 +61,42 @@ export default function BillDescriptionActive({
       }
 
       setIsProcessingPayment(true);
+
+      const customerId = getBillDetail('customerid');
+      const totalAmount = parseFloat(getBillDetail('totalAmount', '0'));
+
+      // If wallet payment, deduct from wallet first
+      if (selectedPaymentMethod === 'wallet') {
+        if (!customerId) {
+          throw new Error('No customer information found for wallet payment');
+        }
+        
+        if (walletBalance !== null && walletBalance < totalAmount) {
+          throw new Error('Insufficient wallet balance');
+        }
+
+        const walletResponse = await fetch(
+          `${API_URL}/api/wallets/deduct-money`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              customer_id: customerId,
+              amount: totalAmount,
+              note: `Payment for Bill #${bill.billNumber || bill.bill_number}`,
+            }),
+          },
+        );
+
+        if (!walletResponse.ok) {
+          const walletResult = await walletResponse.json();
+          throw new Error(walletResult.error || 'Wallet deduction failed');
+        }
+      }
+
       const response = await fetch(
         `${API_URL}/api/bills/${bill.originalBill?.id || bill.id}/pay`,
         {
@@ -55,7 +106,7 @@ export default function BillDescriptionActive({
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            payment_method: selectedPaymentMethod,
+            paymentMethod: selectedPaymentMethod,
           }),
         },
       );
@@ -66,7 +117,7 @@ export default function BillDescriptionActive({
         setShowPaymentConfirmModal(false);
         Alert.alert(
           'Payment Successful',
-          `Bill #${bill.billNumber} has been paid successfully.`,
+          `Bill #${bill.billNumber || bill.bill_number} has been paid successfully.`,
           [{ text: 'Done', onPress: () => onPaymentComplete() }],
         );
       } else {
@@ -82,6 +133,39 @@ export default function BillDescriptionActive({
   };
 
   if (!bill) return null;
+
+  useEffect(() => {
+    const customerId = getBillDetail('customerid');
+    if (customerId) {
+      fetchWalletBalance(customerId);
+    }
+  }, [bill]);
+
+  const fetchWalletBalance = async (customerId) => {
+    try {
+      setFetchingWallet(true);
+      const token = await AsyncStorage.getItem('authToken');
+      const response = await fetch(`${API_URL}/api/wallets/customer/${customerId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setWalletBalance(data.balance);
+        // If balance is sufficient, pre-select wallet payment
+        const total = parseFloat(getBillDetail('totalAmount', '0'));
+        if (data.balance >= total) {
+          setSelectedPaymentMethod('wallet');
+        }
+      }
+    } catch (error) {
+      console.log('Error fetching wallet balance:', error);
+    } finally {
+      setFetchingWallet(false);
+    }
+  };
 
   // Handle payment processing
   const handleProceedToPay = async () => {
@@ -106,6 +190,10 @@ export default function BillDescriptionActive({
 
   // Helper function to safely get bill details
   const getBillDetail = (field, defaultValue = '') => {
+    // If we're looking for customer ID, try both naming conventions
+    if (field === 'customerid' || field === 'customer_id') {
+      return bill.customerid || bill.customer_id || bill.originalBill?.customerid || bill.originalBill?.customer_id || defaultValue;
+    }
     return bill[field] || bill.originalBill?.[field] || defaultValue;
   };
 
@@ -230,7 +318,13 @@ export default function BillDescriptionActive({
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Wallet Amount :</Text>
-              <Text style={styles.detailValue}>₹ 0.00</Text> 
+              <Text style={styles.detailValue}>
+                {fetchingWallet ? (
+                  <ActivityIndicator size="small" color="#FF8C42" />
+                ) : (
+                  `₹ ${walletBalance !== null ? parseFloat(walletBalance).toFixed(2) : '0.00'}`
+                )}
+              </Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Total Amount :</Text>
@@ -370,30 +464,30 @@ export default function BillDescriptionActive({
                   </Text>
                 </TouchableOpacity>
 
-                {/* Card */}
+                {/* Wallet */}
                 <TouchableOpacity
                   style={[
                     styles.paymentOptionCard,
-                    selectedPaymentMethod === 'card' &&
+                    selectedPaymentMethod === 'wallet' &&
                       styles.paymentOptionCardActive,
                   ]}
-                  onPress={() => setSelectedPaymentMethod('card')}
+                  onPress={() => setSelectedPaymentMethod('wallet')}
                 >
                   <Icon
-                    name="card-outline"
+                    name="wallet-outline"
                     size={28}
                     color={
-                      selectedPaymentMethod === 'card' ? '#FF8C42' : '#666'
+                      selectedPaymentMethod === 'wallet' ? '#FF8C42' : '#666'
                     }
                   />
                   <Text
                     style={[
                       styles.paymentOptionCardText,
-                      selectedPaymentMethod === 'card' &&
+                      selectedPaymentMethod === 'wallet' &&
                         styles.paymentOptionCardTextActive,
                     ]}
                   >
-                    Card
+                    Wallet
                   </Text>
                 </TouchableOpacity>
 

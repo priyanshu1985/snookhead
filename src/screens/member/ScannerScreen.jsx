@@ -20,14 +20,15 @@ import Header from '../../components/common/Header';
 import { API_URL } from '../../../config';
 
 export default function ScannerScreen({ navigation, route }) {
+  const scanMode = route?.params?.scanMode;
+  const isCustomerScanMode = scanMode === 'customer';
+  const paymentContext = route?.params?.paymentContext;
+  const isPaymentMode = !!paymentContext;
+
   const [hasPermission, setHasPermission] = useState(null);
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [manualInput, setManualInput] = useState('');
-  const [isScanning, setIsScanning] = useState(false);
-
-  // Get payment context from navigation params
-  const paymentContext = route?.params?.paymentContext;
-  const isPaymentMode = !!paymentContext;
+  const [isScanning, setIsScanning] = useState(isCustomerScanMode);
 
   // Check permission on mount and focus
   useFocusEffect(
@@ -35,6 +36,17 @@ export default function ScannerScreen({ navigation, route }) {
       checkPermission();
     }, []),
   );
+
+  // Auto-request permission and start scanning if in customer mode
+  useEffect(() => {
+    if (isCustomerScanMode) {
+      if (hasPermission === false) {
+        requestCameraPermission();
+      } else if (hasPermission === true) {
+        setIsScanning(true);
+      }
+    }
+  }, [hasPermission, isCustomerScanMode]);
 
   const checkPermission = async () => {
     if (Platform.OS === 'android') {
@@ -203,6 +215,31 @@ export default function ScannerScreen({ navigation, route }) {
               {
                 text: 'Confirm Payment',
                 onPress: () => processWalletPayment(result, billAmount),
+              },
+            ],
+          );
+        } else if (isCustomerScanMode) {
+          // Return customer data to TableBookingScreen
+          Alert.alert(
+            'Customer Identified',
+            `Customer: ${result.customer?.name || 'Unknown'}\nPhone: ${result.customer?.phone || 'N/A'}`,
+            [
+              {
+                text: 'Cancel',
+                onPress: () => setShowManualEntry(true),
+                style: 'cancel',
+              },
+              {
+                text: 'Use Details',
+                onPress: () => {
+                  navigation.navigate('TableBookingScreen', {
+                    scannedCustomer: {
+                      id: result.customer?.id,
+                      name: result.customer?.name,
+                      phone: result.customer?.phone,
+                    },
+                  });
+                },
               },
             ],
           );
@@ -430,13 +467,15 @@ export default function ScannerScreen({ navigation, route }) {
 
         {/* Title and Description */}
         <Text style={styles.title}>
-          {isPaymentMode ? 'Wallet Payment' : 'QR Code Scanner'}
+          {isPaymentMode ? 'Wallet Payment' : isCustomerScanMode ? 'Scan Customer QR' : 'QR Code Scanner'}
         </Text>
         <Text style={styles.description}>
           {isPaymentMode
             ? `Scan customer's wallet QR code to deduct ₹${
                 paymentContext?.amount || '0'
               } for bill payment`
+            : isCustomerScanMode
+            ? 'Scan customer QR code to auto-fill booking details'
             : 'Scan QR codes to process payments, access customer wallets, or validate tokens'}
         </Text>
 

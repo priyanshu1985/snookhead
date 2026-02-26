@@ -23,6 +23,8 @@ import {
 import MenuItemCard from '../../components/menu/MenuItemCard';
 import VariationModal from '../../components/menu/VariationModal';
 import FrameThresholdModal from '../../components/tablebooking/FrameThresholdModal';
+import { PreparedFoodIcon, PackedFoodIcon } from '../../components/common/icon';
+
 
 export default function AfterBooking({ route, navigation }) {
   const {
@@ -296,6 +298,7 @@ export default function AfterBooking({ route, navigation }) {
           sessionData?.customer_phone ||
           sessionData?.customerphone ||
           '+91 XXXXXXXXXX',
+        customer_id: sessionData?.customerid || sessionData?.customer_id || null,
         table_id: table?.id ? parseInt(table.id) : null,
         session_id: validSessionId,
         selected_menu_items: billItems.map(item => ({
@@ -1074,6 +1077,7 @@ export default function AfterBooking({ route, navigation }) {
           sessionData?.customer_phone ||
           sessionData?.customerphone ||
           '+91 XXXXXXXXXX',
+        customer_id: sessionData?.customerid || sessionData?.customer_id || null,
         table_id: table?.id ? parseInt(table.id) : null,
         session_id: validSessionId,
         selected_menu_items: billItems.map(item => ({

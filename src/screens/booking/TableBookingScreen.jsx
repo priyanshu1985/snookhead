@@ -82,6 +82,7 @@ export default function TableBookingScreen({ route, navigation }) {
   const [customerDetails, setCustomerDetails] = useState({
     name: '',
     phone: '',
+    id: null,
   });
 
   // Menu items state (similar to AfterBooking)
@@ -257,6 +258,22 @@ export default function TableBookingScreen({ route, navigation }) {
       setAvailabilityStatus('unchecked'); // Immediate bookings don't need pre-check
     }
   }, [selectedDate, selectedTime, timerDuration]);
+  
+  // Handle scanned customer data from ScannerScreen
+  useEffect(() => {
+    if (route.params?.scannedCustomer) {
+      console.log('Received scanned customer:', route.params.scannedCustomer);
+      const { name, phone, id, customer_id } = route.params.scannedCustomer;
+      setCustomerDetails({
+        name: name || '',
+        phone: phone || '',
+        id: id || customer_id || null,
+      });
+      
+      // Clear the param to avoid re-triggering on re-focus
+      navigation.setParams({ scannedCustomer: undefined });
+    }
+  }, [route.params?.scannedCustomer]);
 
   // Check availability for selected date/time/table
   const checkAvailability = async () => {
@@ -759,6 +776,7 @@ export default function TableBookingScreen({ route, navigation }) {
       booking_type: bookingType,
       frame_count: frameCount,
       customer_name: customerDetails.name || 'Walk-in Customer',
+      customerid: customerDetails.id || null,
       cart: cart,
     };
 
@@ -801,11 +819,8 @@ export default function TableBookingScreen({ route, navigation }) {
     try {
       setIsBooking(true);
 
-      // Validate customer details
-      if (!customerDetails.name.trim() || !customerDetails.phone.trim()) {
-        Alert.alert('Error', 'Please enter customer name and phone number');
-        return;
-      }
+      const customerName = customerDetails.name.trim() || 'Walk-in Customer';
+      const customerPhone = customerDetails.phone.trim() || '+91 XXXXXXXXXX';
 
       const token = await AsyncStorage.getItem('authToken');
       const selectedDateInfo = dates.find(d => d.id === selectedDate);
@@ -836,8 +851,9 @@ export default function TableBookingScreen({ route, navigation }) {
       const reservationData = {
         table_id: safeTable.id,
         game_id: safeTable.game_id || safeTable.gameid || 1,
-        customer_name: customerDetails.name,
-        customer_phone: customerDetails.phone,
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        customer_id: customerDetails.id || null,
         reservation_date: selectedDateInfo.dateValue,
         start_time: convertTo24Hour(selectedTime),
         duration_minutes: durationMinutes,
@@ -972,7 +988,25 @@ export default function TableBookingScreen({ route, navigation }) {
         )}
 
         {/* Customer Name */}
-        <Text style={styles.sectionTitle}>Customer Details</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <Text style={styles.sectionTitle}>Customer Details</Text>
+          <TouchableOpacity 
+            style={{ 
+              flexDirection: 'row', 
+              alignItems: 'center', 
+              backgroundColor: '#FFF3E0', 
+              paddingHorizontal: 12, 
+              paddingVertical: 6, 
+              borderRadius: 20,
+              borderWidth: 1,
+              borderColor: '#FFE0B2'
+            }}
+            onPress={() => navigation.navigate('ScannerScreen', { scanMode: 'customer' })}
+          >
+            <Icon name="qr-code" size={16} color="#F57C00" style={{ marginRight: 6 }} />
+            <Text style={{ color: '#F57C00', fontWeight: 'bold', fontSize: 13 }}>Scan QR</Text>
+          </TouchableOpacity>
+        </View>
         <View style={{ marginBottom: 24, zIndex: 10 }}>
           <Text style={styles.inputLabel}>
             Select or Enter Customer (Optional)
@@ -990,11 +1024,12 @@ export default function TableBookingScreen({ route, navigation }) {
               setCustomerDetails({
                 name: member.name,
                 phone: member.phone || '',
+                id: member.id || null,
               });
             }}
             onCreateNewMember={text => {
               // Just allow them to type it in normally, it will be treated as walk-in or new
-              setCustomerDetails({ ...customerDetails, name: text });
+              setCustomerDetails({ ...customerDetails, name: text, id: null });
             }}
             placeholder="Search Name or Phone"
           />
@@ -1686,10 +1721,10 @@ export default function TableBookingScreen({ route, navigation }) {
               </Text>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Customer Name*</Text>
+                <Text style={styles.inputLabel}>Customer Name (Optional)</Text>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="Enter customer name"
+                  placeholder="Enter customer name or leave blank"
                   placeholderTextColor="#999"
                   value={customerDetails.name}
                   onChangeText={text =>
@@ -1700,10 +1735,10 @@ export default function TableBookingScreen({ route, navigation }) {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Phone Number*</Text>
+                <Text style={styles.inputLabel}>Phone Number (Optional)</Text>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="Enter phone number"
+                  placeholder="Enter phone number or leave blank"
                   placeholderTextColor="#999"
                   value={customerDetails.phone}
                   onChangeText={text =>

@@ -55,6 +55,7 @@ export default function QueueScreen({ navigation, route }) {
   const [duration, setDuration] = useState('60');
   const [frameCount, setFrameCount] = useState('1');
   const [setTime, setSetTime] = useState('');
+  const [customerid, setCustomerid] = useState(null);
 
   // Metadata
   const [games, setGames] = useState([]);
@@ -248,6 +249,7 @@ export default function QueueScreen({ navigation, route }) {
           duration_minutes:
             bookingType === 'Set Time' ? parseInt(duration) || 60 : null,
           frame_count: bookingType === 'Frame' ? parseInt(frameCount) : null,
+          customerid: customerid || null,
         }),
       });
 
@@ -262,6 +264,7 @@ export default function QueueScreen({ navigation, route }) {
         setSetTime('');
         setIsEditMode(false);
         setEditingItem(null);
+        setCustomerid(null);
         fetchQueueData();
         setShowSuccessModal(true);
       } else {
@@ -286,6 +289,7 @@ export default function QueueScreen({ navigation, route }) {
     setDuration('60');
     setFrameCount('1');
     setSetTime('');
+    setCustomerid(null);
     setShowAddModal(true);
   };
 
@@ -306,6 +310,7 @@ export default function QueueScreen({ navigation, route }) {
     setDuration(item.duration_minutes ? item.duration_minutes.toString() : '60');
     setFrameCount(item.frame_count ? item.frame_count.toString() : '1');
     setSetTime(item.set_time || '');
+    setCustomerid(item.customerid || null);
     
     setShowAddModal(true);
   };
@@ -514,7 +519,29 @@ export default function QueueScreen({ navigation, route }) {
 
                 {/* Customer Details Section */}
                 <View style={[styles.formSection, { zIndex: 10 }]}>
-                  <Text style={styles.inputLabel}>Select or Enter Customer *</Text>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.inputLabel}>Select or Enter Customer *</Text>
+                    <TouchableOpacity
+                      style={styles.scanButtonMini}
+                      onPress={() => {
+                        setShowAddModal(false);
+                        navigation.navigate('ScannerScreen', {
+                          scanMode: 'customer',
+                          onScanResult: result => {
+                            if (result?.customer) {
+                              setNewCustomerName(result.customer.name);
+                              setNewCustomerPhone(result.customer.phone || '');
+                              setCustomerid(result.customer.id);
+                              setShowAddModal(true);
+                            }
+                          },
+                        });
+                      }}
+                    >
+                      <Icon name="scan-outline" size={16} color="#FF8C42" />
+                      <Text style={styles.scanButtonMiniText}>Scan QR</Text>
+                    </TouchableOpacity>
+                  </View>
                   <MemberAutocomplete
                     value={newCustomerName}
                     onChangeText={setNewCustomerName}
@@ -1014,5 +1041,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FFFFFF',
     fontWeight: '600',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  scanButtonMini: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FF8C42',
+  },
+  scanButtonMiniText: {
+    fontSize: 12,
+    color: '#FF8C42',
+    fontWeight: '600',
+    marginLeft: 4,
   },
 });
