@@ -97,6 +97,7 @@ router.post(
         user_id,
         duration_minutes,
         customer_name,
+        customer_id,
         booking_type,
         frame_count,
         food_orders,
@@ -270,6 +271,9 @@ router.post(
             (queueEntry
               ? queueEntry.customername || queueEntry.customer_name
               : null), // Transfer queue customer name
+          customerid:
+            customer_id ||
+            (queueEntry ? queueEntry.customerid : null),
           bookingtype:
             booking_type || (queueEntry ? queueEntry.booking_type : "timer"), // Transfer queue booking type
           framecount:

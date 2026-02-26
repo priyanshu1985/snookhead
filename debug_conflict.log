@@ -543,3 +543,97 @@
   "checkingAgainst": []
 }
 
+{
+  "body": {
+    "table_id": 39,
+    "game_id": 29,
+    "user_id": null,
+    "duration_minutes": 1,
+    "booking_type": "set_time",
+    "frame_count": null,
+    "customer_name": "Walk-in Customer",
+    "cart": []
+  },
+  "tableId": 39,
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": 39,
+    "game_id": 29,
+    "user_id": null,
+    "duration_minutes": 1,
+    "booking_type": "set_time",
+    "frame_count": null,
+    "customer_name": "Walk-in Customer",
+    "cart": []
+  },
+  "tableId": 39,
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": 39,
+    "game_id": 29,
+    "user_id": null,
+    "duration_minutes": 60,
+    "booking_type": "set_time",
+    "frame_count": null,
+    "customer_name": "Walk-in Customer",
+    "customer_id": null,
+    "cart": []
+  },
+  "tableId": 39,
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": 39,
+    "game_id": 29,
+    "user_id": null,
+    "duration_minutes": 60,
+    "booking_type": "set_time",
+    "frame_count": null,
+    "customer_name": "RUTVIK PAWA",
+    "customer_id": "52fe3419-11bf-4d16-a95e-8fff7649743a",
+    "cart": []
+  },
+  "tableId": 39,
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": 39,
+    "game_id": 29,
+    "user_id": null,
+    "duration_minutes": 60,
+    "booking_type": "set_time",
+    "frame_count": null,
+    "customer_name": "Walk-in Customer",
+    "customer_id": null,
+    "cart": []
+  },
+  "tableId": 39,
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": 39,
+    "game_id": 29,
+    "user_id": null,
+    "duration_minutes": 60,
+    "booking_type": "set_time",
+    "frame_count": null,
+    "customer_name": "Walk-in Customer",
+    "customer_id": null,
+    "cart": []
+  },
+  "tableId": 39,
+  "checkingAgainst": []
+}
+

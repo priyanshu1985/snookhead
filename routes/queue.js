@@ -223,6 +223,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       duration_minutes,
       frame_count,
       set_time,
+      customerid,
     } = req.body;
 
     // Validation
@@ -283,6 +284,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         duration_minutes,
         frame_count,
         set_time,
+        customerid: customerid || null,
         food_orders: req.body.food_orders || req.body.cart || [], // Save food selection
       },
       req.stationId,
@@ -552,6 +554,7 @@ router.post(
           bookingtype: entry.booking_type || "timer",
           framecount: entry.frame_count || null,
           created_by: req.user.id,
+          customerid: entry.customerid || null,
           food_orders: entry.food_orders || JSON.stringify([]),
           advance_payment: entry.advance_payment || 0,
           reservation_id: entry.reservation_id || null,
@@ -710,6 +713,7 @@ router.post(
           bookingtype: nextEntry.booking_type || "timer",
           framecount: nextEntry.frame_count || null,
           created_by: req.user.id,
+          customerid: nextEntry.customerid || null,
           food_orders: nextEntry.food_orders || JSON.stringify([]),
           advance_payment: nextEntry.advance_payment || 0,
           reservation_id: nextEntry.reservation_id || null,

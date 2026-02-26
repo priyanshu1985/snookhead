@@ -280,7 +280,6 @@ router.get("/by-session/:sessionId", auth, stationContext, async (req, res) => {
     // Apply station filter
     const where = addStationFilter(
       { session_id: parseInt(sessionId) },
-      { session_id: parseInt(sessionId) },
       req.stationId,
       "stationid",
     );
