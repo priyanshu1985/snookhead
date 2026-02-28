@@ -141,13 +141,21 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
 
           const inventoryItem = await Inventory.findOne({ where: inventoryWhere });
 
-          if (inventoryItem) {
-            // Strict check? We already checked menu item (which should be synced).
-            // But let's double check here to be safe against race conditions.
+          if (inventoryItem && menuItem.item_type === 'packed') {
             const totalDeductionNeeded = qty * inventoryMultiplier;
-            if (inventoryItem.currentquantity < totalDeductionNeeded) {
-              throw new Error(`Insufficient inventory for ${itemNameForLog}. Required: ${totalDeductionNeeded}, Available: ${inventoryItem.currentquantity}`);
+            
+            // --- STRICT STOCK CHECK ---
+            if (inventoryItem.currentquantity <= 0) {
+              return res.status(400).json({ 
+                error: `Item "${itemNameForLog}" is out of stock.` 
+              });
             }
+            if (inventoryItem.currentquantity < totalDeductionNeeded) {
+              return res.status(400).json({ 
+                error: `Insufficient stock for "${itemNameForLog}". Available: ${inventoryItem.currentquantity}, Requested: ${totalDeductionNeeded}` 
+              });
+            }
+            // --------------------------
 
             // Deduct stock
             await inventoryItem.decrement('currentquantity', { by: totalDeductionNeeded });
@@ -178,7 +186,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         console.error("Inventory deduction failed:", invErr);
         // If strict mode, we should fail the order?
         // For now, let's return error if it's "Insufficient inventory"
-        if (invErr.message.includes("Insufficient inventory")) {
+        if (invErr.message.includes("Insufficient inventory") || invErr.message.includes("out of stock")) {
           return res.status(400).json({ error: invErr.message });
         }
       }
@@ -390,6 +398,15 @@ router.post("/:orderId/items", auth, stationContext, async (req, res) => {
 
       const priceEach = Number(menuItem.price) || 0;
       const qty = Number(cartItem.qty) || 1;
+
+      // --- STOCK CHECK (PACKED ONLY) ---
+      if (menuItem.item_type === 'packed' && menuItem.stock !== undefined && menuItem.stock < qty) {
+        return res.status(400).json({ 
+          error: `Insufficient stock for ${menuItem.name}. Available: ${menuItem.stock}` 
+        });
+      }
+      // --------------------
+
       const itemTotal = priceEach * qty;
       addedTotal += itemTotal;
 
@@ -402,8 +419,10 @@ router.post("/:orderId/items", auth, stationContext, async (req, res) => {
 
       // Decrease stock
       if (menuItem.stock !== undefined) {
-        menuItem.stock = Math.max(0, menuItem.stock - qty);
-        await menuItem.save();
+        await MenuItem.update(
+          { stock: Math.max(0, menuItem.stock - qty) },
+          { where: { id: menuItem.id } }
+        );
       }
     }
 
