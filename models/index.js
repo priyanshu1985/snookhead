@@ -10,7 +10,12 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       if (filter.order) {
@@ -62,7 +67,12 @@ const models = {
         .select(filter.attributes ? filter.attributes.join(",") : "*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       const { data, error } = await query;
@@ -106,7 +116,12 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       const { data, error } = await query;
@@ -243,7 +258,12 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       if (filter.order) {
@@ -314,7 +334,12 @@ const models = {
         .select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       const { data, error } = await query;
@@ -360,7 +385,12 @@ const models = {
         .select(filter.select || "*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       if (filter.order) {
@@ -435,7 +465,12 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       const { data, error } = await query;
@@ -469,7 +504,12 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       if (filter.order) {
@@ -606,7 +646,12 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       const { data, error } = await query;
@@ -738,7 +783,12 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       if (filter.order) {
@@ -787,7 +837,12 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       if (filter.order) {
@@ -848,7 +903,12 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       if (filter.order) {
@@ -917,7 +977,12 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       const { data, error } = await query;
@@ -972,7 +1037,12 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       const { data, error } = await query;
@@ -997,7 +1067,12 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       const { data, error } = await query;
@@ -1065,7 +1140,12 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       if (filter.order) {
@@ -1098,7 +1178,12 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       const { data, error } = await query;

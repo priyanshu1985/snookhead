@@ -64,10 +64,38 @@ router.post("/login", async (req, res) => {
     }
 
     // Fetch fresh user data to get latest station_id
-    // Fetch fresh user data to get latest station_id
     let freshUser = await User.findByPk(user.id);
     if (!freshUser) {
       return res.status(401).json({ error: "User not found" });
+    }
+
+    // Check if user is an owner and their station is active
+    if (freshUser.role === "owner") {
+      // Fetch station status
+      if (freshUser.stationid) {
+        const station = await Station.findByPk(freshUser.stationid);
+        if (station && (station.subscriptionstatus === "paused" || station.subscriptionstatus === "pending")) {
+          const isPending = station.subscriptionstatus === "pending";
+          // Distinguish between new signup (pending) and existing signup (suspended/paused)
+          // We can check if onboarding_date is very recent or status is 'removed'
+          const isRecentlyOnboarded = (new Date() - new Date(station.onboardingdate)) < (24 * 60 * 60 * 1000); // Less than 24h
+          
+          if (station.status === 'removed') {
+             return res.status(403).json({
+               error: "Your account has been deactivated by the admin. Please contact support.",
+               accountDeactivated: true
+             });
+          }
+
+          return res.status(403).json({
+            error: isPending ? 
+                   "Your account is pending admin approval. You will receive access once the admin confirms your subscription." :
+                   "The admin has paused your services. Please pay your dues or contact support to continue.",
+            approvalPending: true, // Frontend uses this to trigger the amber warning
+            isServicePaused: !isPending
+          });
+        }
+      }
     }
 
     // Self-healing: Auto-create station for owners if missing
@@ -223,9 +251,11 @@ router.post("/verify-otp", async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    let isNewOwner = user.role === "owner";
+
     // Check if user already has a station (avoid duplicates)
     let userStation = null;
-    if (!user.stationid) {
+    if (!user.stationid && isNewOwner) {
       try {
         // Try to create a minimal station for this user (isolated workspace)
         userStation = await Station.create({
@@ -234,30 +264,24 @@ router.post("/verify-otp", async (req, res) => {
           ownerphone: user.phone || "Not provided",
           locationcity: "Unknown City",
           locationstate: "Unknown State",
+          subscriptionstatus: "pending", // New owners start as pending (instead of paused)
+          subscriptiontype: "free",
+          onboardingdate: new Date(),
         });
 
-        console.log(`✅ Created station for ${user.email}:`, {
+        console.log(`✅ Created pending station for ${user.email}:`, {
           station_id: userStation.id,
           station_name: userStation.stationname,
         });
 
         // Update user with station_id and mark as verified
-        const updateResult = await User.update(
+        await User.update(
           {
             email_verified: true,
             stationid: userStation.id,
           },
           { where: { email } },
         );
-
-        console.log(`✅ Updated user ${email} with station_id:`, updateResult);
-
-        // Fetch fresh user data to ensure we have latest info
-        const updatedUser = await User.findOne({ where: { email } });
-        if (updatedUser) {
-          user.stationid = updatedUser.stationid;
-          user.email_verified = updatedUser.email_verified;
-        }
       } catch (stationError) {
         console.log(
           "❌ Station creation failed, continuing with user verification:",
@@ -267,23 +291,35 @@ router.post("/verify-otp", async (req, res) => {
         await User.update({ email_verified: true }, { where: { email } });
       }
     } else {
-      console.log(
-        `✅ User ${user.email} already has station_id: ${user.stationid}`,
-      );
-      // User already has a station, just mark as verified
+      // User already has a station or is not an owner, just mark as verified
       await User.update({ email_verified: true }, { where: { email } });
-
-      // Fetch fresh user data
-      const updatedUser = await User.findOne({ where: { email } });
-      if (updatedUser) {
-        user.email_verified = updatedUser.email_verified;
-      }
     }
 
-    // Generate tokens for the verified user (use fresh user data)
+    // Fetch fresh user data to ensure we have latest info
     const freshUserForToken = await User.findOne({ where: { email } });
     if (!freshUserForToken) {
       return res.status(404).json({ error: "User not found after update" });
+    }
+
+    // Special check for owners: if they are new or their station is still paused, show approval required message
+    const userRole = freshUserForToken.role?.toLowerCase();
+    console.log(`🔍 Checking approval for ${email}. Role: ${userRole}, StationID: ${freshUserForToken.stationid}`);
+    
+    if (userRole === "owner") {
+      const stationId = freshUserForToken.stationid;
+      const station = stationId ? await Station.findByPk(stationId) : null;
+      const status = station?.subscriptionstatus;
+      
+      console.log(`📍 Station status for ${email}: ${status}`);
+
+      if (!station || status === "paused" || status === "pending") {
+         console.log(`⚠️ Approval required for owner ${email}. Sending requiresApproval flag.`);
+         return res.json({
+           message: "Email verified successfully! Your account is now pending admin approval. You will receive access once confirmed.",
+           requiresApproval: true,
+           email: freshUserForToken.email
+         });
+      }
     }
 
     console.log(
@@ -297,21 +333,7 @@ router.post("/verify-otp", async (req, res) => {
     await tokenStore.setRefreshToken(freshUserForToken.id, refreshToken);
 
     // Return user info (exclude sensitive data)
-    const { passwordHash: _, ...userWithoutPassword } = freshUserForToken
-      ? freshUserForToken.toJSON()
-      : {};
-
-    // Attach stationphotourl to user object for frontend consumption
-    if (freshUserForToken && freshUserForToken.stationid) {
-      try {
-        const station = await Station.findByPk(freshUserForToken.stationid);
-        if (station && station.stationphotourl) {
-          userWithoutPassword.stationphotourl = station.stationphotourl;
-        }
-      } catch (err) {
-        console.error("Failed to fetch station photo during OTP verify", err);
-      }
-    }
+    const { passwordHash: _, ...userWithoutPassword } = freshUserForToken.toJSON();
 
     res.json({
       message: "Email verified successfully. Welcome!",
@@ -321,11 +343,7 @@ router.post("/verify-otp", async (req, res) => {
         ...userWithoutPassword,
         email_verified: true,
         station_id: freshUserForToken.stationid,
-      },
-      debugInfo: {
-        station_created: userStation ? userStation.id : "existing",
-        station_name: userStation ? userStation.stationname : "N/A",
-      },
+      }
     });
   } catch (err) {
     console.error("OTP verification error:", err);
