@@ -954,10 +954,36 @@ const models = {
 
   Bug: {
     tableName: "bugs",
-    async findAll() {
-      const { data, error } = await getDb().from(this.tableName).select("*");
+    async findAll(filter = {}) {
+      let query = getDb().from(this.tableName).select("*");
+      if (filter.where) {
+        Object.keys(filter.where).forEach((key) => {
+          const val = filter.where[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
+        });
+      }
+      if (filter.order) {
+        filter.order.forEach(([key, dir]) => {
+          query = query.order(key, { ascending: dir === "ASC" });
+        });
+      }
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
+    },
+
+    async findOne(filter) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .select("*")
+        .match(filter.where || filter)
+        .single();
+      if (error && error.code !== "PGRST116") throw error;
+      return data;
     },
 
     async create(bugData) {
@@ -968,6 +994,25 @@ const models = {
         .single();
       if (error) throw error;
       return data;
+    },
+
+    async update(bugData, filter) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .update(bugData)
+        .match(filter.where || filter)
+        .select();
+      if (error) throw error;
+      return data;
+    },
+
+    async destroy(filter) {
+      const { error } = await getDb()
+        .from(this.tableName)
+        .delete()
+        .match(filter.where || filter);
+      if (error) throw error;
+      return true;
     },
   },
 
@@ -1050,6 +1095,16 @@ const models = {
       return data || [];
     },
 
+    async findOne(filter) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .select("*")
+        .match(filter.where || filter)
+        .single();
+      if (error && error.code !== "PGRST116") throw error;
+      return data;
+    },
+
     async create(paymentData) {
       const { data, error } = await getDb()
         .from(this.tableName)
@@ -1080,6 +1135,16 @@ const models = {
       return data || [];
     },
 
+    async findOne(filter) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .select("*")
+        .match(filter.where || filter)
+        .single();
+      if (error && error.code !== "PGRST116") throw error;
+      return data;
+    },
+
     async create(issueData) {
       const { data, error } = await getDb()
         .from(this.tableName)
@@ -1098,6 +1163,15 @@ const models = {
         .select();
       if (error) throw error;
       return data;
+    },
+
+    async destroy(filter) {
+      const { error } = await getDb()
+        .from(this.tableName)
+        .delete()
+        .match(filter.where || filter);
+      if (error) throw error;
+      return true;
     },
   },
 

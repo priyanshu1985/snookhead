@@ -1,5 +1,5 @@
 import express from "express";
-import { Bug, User } from "../models/index.js";
+import { Bug, User, Station } from "../models/index.js";
 import { auth, authorize } from "../middleware/auth.js";
 import {
   stationContext,
@@ -22,23 +22,47 @@ router.get("/", auth, stationContext, async (req, res) => {
 
     const bugs = await Bug.findAll({
       where: whereClause,
-      include: [
-        {
-          model: User,
-          as: "reporter",
-          attributes: ["id", "name", "email"],
-        },
-        {
-          model: User,
-          as: "assignee",
-          attributes: ["id", "name", "email"],
-        },
-      ],
       order: [["createdAt", "DESC"]],
     });
 
-    res.json(bugs);
+    if (bugs.length === 0) {
+      return res.json([]);
+    }
+
+    // Manual enrichment (since our model wrapper doesn't support 'include')
+    const stationIds = [...new Set(bugs.map(b => b.stationid).filter(id => id))];
+    const reportedByIds = [...new Set(bugs.map(b => b.reportedby).filter(id => id))];
+
+    const [stations, users] = await Promise.all([
+      stationIds.length ? Station.findAll({ where: { id: stationIds } }) : [],
+      reportedByIds.length ? User.findAll({ where: { id: reportedByIds } }) : []
+    ]);
+
+    const enrichedBugs = bugs.map(bug => {
+      const station = stations.find(s => s.id === bug.stationid);
+      const reporter = users.find(u => u.id === bug.reportedby);
+
+      return {
+        ...bug,
+        station: station ? {
+          id: station.id,
+          stationname: station.stationname,
+          ownername: station.ownername
+        } : null,
+        reporter: reporter ? {
+          id: reporter.id,
+          name: reporter.name,
+          email: reporter.email
+        } : null,
+        // Support frontend names if different
+        image_url: bug.imageurl,
+        audio_url: bug.audiourl
+      };
+    });
+
+    res.json(enrichedBugs);
   } catch (err) {
+    console.error("Error fetching bugs:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -47,28 +71,34 @@ router.get("/", auth, stationContext, async (req, res) => {
 router.get("/:id", auth, stationContext, async (req, res) => {
   try {
     const where = addStationFilter({ id: req.params.id }, req.stationId);
-    const bug = await Bug.findOne({
-      where,
-      include: [
-        {
-          model: User,
-          as: "reporter",
-          attributes: ["id", "name", "email"],
-        },
-        {
-          model: User,
-          as: "assignee",
-          attributes: ["id", "name", "email"],
-        },
-      ],
-    });
+    const bug = await Bug.findOne({ where });
 
     if (!bug) {
       return res.status(404).json({ error: "Bug not found" });
     }
 
-    res.json(bug);
+    const [station, reporter] = await Promise.all([
+      bug.stationid ? Station.findByPk(bug.stationid) : null,
+      bug.reportedby ? User.findByPk(bug.reportedby) : null
+    ]);
+
+    res.json({
+      ...bug,
+      station: station ? {
+        id: station.id,
+        stationname: station.stationname,
+        ownername: station.ownername
+      } : null,
+      reporter: reporter ? {
+        id: reporter.id,
+        name: reporter.name,
+        email: reporter.email
+      } : null,
+      image_url: bug.imageurl,
+      audio_url: bug.audiourl
+    });
   } catch (err) {
+    console.error("Error fetching bug details:", err);
     res.status(500).json({ error: err.message });
   }
 });
