@@ -423,7 +423,7 @@ router.post("/autoassign", auth, stationContext, async (req, res) => {
     const t = await TableAsset.findOne({ where: tableWhere });
     if (!t) return res.status(400).json({ error: "No available table" });
     await r.update({ tableId: t.id, status: "assigned" });
-    await t.update({ status: "occupied" });
+    await t.update({ status: "reserved" });
     res.json({ success: true, table: t });
   } catch (err) {
     res.status(500).json({ error: err.message });

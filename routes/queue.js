@@ -524,9 +524,9 @@ router.post(
         { where: { id } },
       );
 
-      // Update table status to occupied
+      // Update table status to reserved
       await TableAsset.update(
-        { status: "occupied" },
+        { status: "reserved" },
         { where: { id: parseInt(tableid) } },
       );
 
@@ -683,9 +683,9 @@ router.post(
         { where: { id: nextEntry.id } },
       );
 
-      // Mark table as occupied
+      // Mark table as reserved
       await TableAsset.update(
-        { status: "occupied" },
+        { status: "reserved" },
         { where: { id: availableTable.id } },
       );
 

@@ -10,8 +10,8 @@ import {
   addStationToData,
 } from "../middleware/stationContext.js";
 
-// Helper function to check queue and auto-assign next person when table is freed
-export async function checkQueueAndAssign(tableId, gameId, stationId) {
+// Helper function to check queue and optionally auto-assign next person when table is freed
+export async function checkQueueAndAssign(tableId, gameId, stationId, autoAssign = true) {
   try {
     // Fallback: If gameId is missing, fetch it from the table asset
     if (!gameId) {
@@ -97,6 +97,15 @@ export async function checkQueueAndAssign(tableId, gameId, stationId) {
     }
 
     if (nextInQueue) {
+      if (!autoAssign) {
+        console.log(`[QueueManager] Found candidate ${nextInQueue.customername} but autoAssign is false. Returning candidate.`);
+        return { 
+          assigned: false, 
+          candidate: nextInQueue, 
+          message: `Next in queue: ${nextInQueue.customername}`
+        };
+      }
+
       // Start the session automatically
       const currentTimestamp = new Date();
       const bookingType = nextInQueue.booking_type || "timer";

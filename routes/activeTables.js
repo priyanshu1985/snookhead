@@ -481,20 +481,19 @@ router.post(
           .json({ error: "Linked table not found for billing" });
       }
 
-      // Check queue for this game - if someone is waiting, assign to them
+      // Check queue for this game - if someone is waiting, return as candidate
       const queueResult = await checkQueueAndAssign(
         table.id,
         session.gameid,
         req.stationId,
+        false // Do NOT auto-assign, return candidate for frontend pop up
       );
 
-      if (!queueResult.assigned) {
-        // No one in queue - free the table
-        await TableAsset.update(
-          { status: "available" },
-          { where: { id: table.id } },
-        );
-      }
+      // Always free the table initially when session stops
+      await TableAsset.update(
+        { status: "available" },
+        { where: { id: table.id } },
+      );
 
       // --- NEW: Sync Reservation Status ---
       // ------------------------------------
@@ -551,7 +550,7 @@ router.post(
             ? `Session stopped. ${queueResult.message}`
             : "Session stopped and table released",
           session,
-          queueAssignment: queueResult.assigned ? queueResult : null,
+          queueAssignment: queueResult.candidate || null,
         });
       }
 
@@ -596,7 +595,7 @@ router.post(
           tableAmount,
           total: grandTotal,
         },
-        queueAssignment: queueResult.assigned ? queueResult : null,
+        queueAssignment: queueResult.candidate || null,
       });
     } catch (err) {
       console.error(err);
@@ -625,8 +624,22 @@ router.post(
         return res.status(404).json({ error: "Session not found" });
       }
 
-      if (session.status !== "active") {
-        return res.status(400).json({ error: "Session is not active" });
+      if (session && session.status !== "active") {
+        if (session.status !== "completed") {
+           return res.status(400).json({ error: `Session status is ${session.status}` });
+        }
+        // If already completed, still check queue so the second caller (e.g. Dashboard) can catch waitlisted people
+        const table = await TableAsset.findByPk(session.tableid);
+        let qResult = { assigned: false };
+        if (table) {
+           qResult = await checkQueueAndAssign(table.id, session.gameid, req.stationId, false);
+        }
+        return res.json({ 
+          success: true, 
+          message: "Session was already released", 
+          session, 
+          queueAssignment: qResult.candidate || null 
+        });
       }
 
       // Close session
@@ -641,22 +654,21 @@ router.post(
       // Get table info
       const table = await TableAsset.findByPk(session.tableid);
 
-      // Check queue for this game - if someone is waiting, assign to them
+      // Check queue for this game - if someone is waiting, return as candidate
       let queueResult = { assigned: false };
       if (table) {
         queueResult = await checkQueueAndAssign(
           table.id,
           session.gameid,
           req.stationId,
+          false // Do NOT auto-assign
         );
 
-        if (!queueResult.assigned) {
-          // No one in queue - free the table
-          await TableAsset.update(
-            { status: "available" },
-            { where: { id: table.id } },
-          );
-        }
+        // Always free the table initially
+        await TableAsset.update(
+          { status: "available" },
+          { where: { id: table.id } },
+        );
       }
 
       // --- NEW: Sync Reservation Status (Auto Release) ---
@@ -742,7 +754,7 @@ router.post(
                       quantity_change: qty,
                       previous_stock: inventoryItem.currentquantity,
                       new_stock: inventoryItem.currentquantity - qty,
-                      reason: `Auto-Release (Session ID: ${session.active_id})`,
+                      reason: `Auto-Release (Session ID: ${session.activeid || session.active_id})`,
                       user_id: req.user ? req.user.id : null,
                       created_at: new Date()
                     });
@@ -789,7 +801,7 @@ router.post(
           orderId: null,
           customername: session.customer_name || "Walk-in Customer", // Use saved customer name or default
           tableid: table?.id || null,
-          sessionid: session.active_id,
+          sessionid: session.activeid || session.active_id,
           tablecharges: table_charges,
           menucharges: menu_charges,
           totalamount: total_amount,
@@ -798,8 +810,8 @@ router.post(
           itemssummary: items_summary,
           sessionduration: minutes,
           details: JSON.stringify({
-            table_id: session.table_id,
-            game_id: session.game_id,
+            table_id: session.tableid || session.table_id,
+            game_id: session.gameid || session.game_id,
             minutes,
             pricePerMin,
             auto_released: true,
@@ -830,7 +842,7 @@ router.post(
           menu_charges,
           total_amount,
         },
-        queueAssignment: queueResult.assigned ? queueResult : null,
+        queueAssignment: queueResult.candidate || null,
       });
     } catch (err) {
       console.error(err);

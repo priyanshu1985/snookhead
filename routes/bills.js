@@ -600,13 +600,17 @@ router.post(
                 } catch(e) {}
             }
 
+            let candidate = null;
             if (gameIdForQueue) {
-                 const queueResult = await checkQueueAndAssign(table_id, gameIdForQueue, req.stationId);
-                 if (queueResult && queueResult.assigned) {
-                     console.log(`[Bill] Automatically assigned Table ${table_id} to queue entry ${queueResult.queueEntry.id}`);
-                     // We could attach this info to response if needed
+                 const queueResult = await checkQueueAndAssign(table_id, gameIdForQueue, req.stationId, false);
+                 if (queueResult && queueResult.candidate) {
+                     candidate = queueResult.candidate;
+                     console.log(`[Bill] Found queue candidate ${candidate.customername} for table ${table_id}`);
                  }
             }
+            
+            // Attach candidate to response if needed
+            req.queueCandidate = candidate;
 
          } catch (tableErr) {
             console.error("Failed to release table:", tableErr);
@@ -638,6 +642,7 @@ router.post(
           total_amount,
           items_count: bill_items.length,
         },
+        queueAssignment: req.queueCandidate || null
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
