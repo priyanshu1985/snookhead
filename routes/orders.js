@@ -7,7 +7,7 @@ import {
   addStationFilter,
   addStationToData,
 } from "../middleware/stationContext.js";
-import { getIo } from "../socket.js";
+import { emitToStation } from "../socket.js";
 
 const router = express.Router();
 
@@ -220,9 +220,18 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       },
     });
 
-    // Emit socket event for real-time kitchen updates
+    // Emit socket event to station room with updated orders payload
     try {
-      getIo().emit("order-data-changed", { action: "order_created", orderId: order.id });
+      const updatedOrders = await Order.findAll({
+        where: addStationFilter({ status: 'pending' }, req.stationId, 'stationid'),
+        select: "*, OrderItems:orderitems(*, MenuItem:menuitems(*))",
+        order: [["createdAt", "DESC"]],
+      });
+      emitToStation("order-data-changed", req.stationId, {
+        action: "order_created",
+        orderId: order.id,
+        payload: { orders: updatedOrders }
+      });
     } catch (e) {
       console.error("Socket emission failed:", e);
     }
@@ -472,9 +481,19 @@ router.patch("/:id/status", auth, stationContext, async (req, res) => {
     await Order.update({ status }, { where: { id: order.id } });
     order.status = status;
 
-    // Emit socket event for real-time kitchen updates
+    // Emit socket event to station room with updated orders payload
     try {
-      getIo().emit("order-data-changed", { action: "order_status_updated", orderId: order.id, status });
+      const updatedOrders = await Order.findAll({
+        where: addStationFilter({}, req.stationId, 'stationid'),
+        select: "*, OrderItems:orderitems(*, MenuItem:menuitems(*))",
+        order: [["createdAt", "DESC"]],
+      });
+      emitToStation("order-data-changed", req.stationId, {
+        action: "order_status_updated",
+        orderId: order.id,
+        status,
+        payload: { orders: updatedOrders }
+      });
     } catch (e) {
       console.error("Socket emission failed:", e);
     }

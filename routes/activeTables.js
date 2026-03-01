@@ -28,7 +28,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 import { checkQueueAndAssign } from "../utils/queueManager.js";
-import { getIo } from "../socket.js";
+import { emitToStation } from "../socket.js";
 
 const router = express.Router();
 
@@ -426,9 +426,17 @@ router.post(
         { where: { id: table.id } },
       );
 
-      // Emit socket event for real-time update
+      // Emit socket event to station room with updated data payload
       try {
-        getIo().emit("table-data-changed", { action: "start", tableId: table.id });
+        const [updatedSessions, updatedTables] = await Promise.all([
+          ActiveTable.findAll({ where: addStationFilter({ status: 'active' }, req.stationId) }),
+          TableAsset.findAll({ where: addStationFilter({}, req.stationId) }),
+        ]);
+        emitToStation("table-data-changed", req.stationId, {
+          action: "start",
+          tableId: table.id,
+          payload: { activeSessions: updatedSessions, tables: updatedTables }
+        });
       } catch (e) {
         console.error("Socket emission failed:", e);
       }
@@ -593,9 +601,17 @@ router.post(
       );
       const bill = await Bill.create(billData);
 
-      // Emit socket event for real-time update
+      // Emit socket event to station room with updated data payload
       try {
-        getIo().emit("table-data-changed", { action: "stop", tableId: table.id });
+        const [updatedSessions, updatedTables] = await Promise.all([
+          ActiveTable.findAll({ where: addStationFilter({ status: 'active' }, req.stationId) }),
+          TableAsset.findAll({ where: addStationFilter({}, req.stationId) }),
+        ]);
+        emitToStation("table-data-changed", req.stationId, {
+          action: "stop",
+          tableId: table.id,
+          payload: { activeSessions: updatedSessions, tables: updatedTables }
+        });
       } catch (e) {
         console.error("Socket emission failed:", e);
       }
@@ -833,9 +849,17 @@ router.post(
 
       const bill = await Bill.create(billData);
 
-      // Emit socket event for real-time update
+      // Emit socket event to station room with updated data payload
       try {
-        getIo().emit("table-data-changed", { action: "auto-release", tableId: table?.id });
+        const [updatedSessions, updatedTables] = await Promise.all([
+          ActiveTable.findAll({ where: addStationFilter({ status: 'active' }, req.stationId) }),
+          TableAsset.findAll({ where: addStationFilter({}, req.stationId) }),
+        ]);
+        emitToStation("table-data-changed", req.stationId, {
+          action: "auto-release",
+          tableId: table?.id,
+          payload: { activeSessions: updatedSessions, tables: updatedTables }
+        });
       } catch (e) {
         console.error("Socket emission failed:", e);
       }

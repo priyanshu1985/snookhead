@@ -7,7 +7,7 @@ import {
   addStationFilter,
   addStationToData,
 } from "../middleware/stationContext.js";
-import { getIo } from "../socket.js";
+import { emitToStation } from "../socket.js";
 
 const router = express.Router();
 
@@ -161,9 +161,14 @@ router.post(
 
       const newTable = await TableAsset.create(tableData);
 
-      // Notify all connected clients
+      // Notify station clients with updated tables payload
       try {
-        getIo().emit("table_update", { action: "create", tableId: newTable.id });
+        const updatedTables = await TableAsset.findAll({ where: addStationFilter({}, req.stationId, 'stationid') });
+        emitToStation("table-data-changed", req.stationId, {
+          action: "create",
+          tableId: newTable.id,
+          payload: { tables: updatedTables }
+        });
       } catch (e) {
         console.error("Socket emit failed", e);
       }
@@ -227,9 +232,14 @@ router.put(
       // Fetch updated table
       const updatedTable = await TableAsset.findByPk(req.params.id);
 
-      // Notify all connected clients
+      // Notify station clients with updated tables payload
       try {
-        getIo().emit("table_update", { action: "update", tableId: updatedTable.id });
+        const updatedTables = await TableAsset.findAll({ where: addStationFilter({}, req.stationId, 'stationid') });
+        emitToStation("table-data-changed", req.stationId, {
+          action: "update",
+          tableId: updatedTable.id,
+          payload: { tables: updatedTables }
+        });
       } catch (e) {
         console.error("Socket emit failed", e);
       }
@@ -309,9 +319,14 @@ router.delete(
       // Now delete the table
       await TableAsset.destroy({ where: { id: parsedTableId } });
 
-      // Notify all connected clients
+      // Notify station clients
       try {
-        getIo().emit("table_update", { action: "delete", tableId: parsedTableId });
+        const updatedTables = await TableAsset.findAll({ where: addStationFilter({}, req.stationId, 'stationid') });
+        emitToStation("table-data-changed", req.stationId, {
+          action: "delete",
+          tableId: parsedTableId,
+          payload: { tables: updatedTables }
+        });
       } catch (e) {
         console.error("Socket emit failed", e);
       }
@@ -352,9 +367,15 @@ router.patch(
 
       await TableAsset.update({ status }, { where: { id: req.params.id } });
 
-      // Notify all connected clients
+      // Notify station clients
       try {
-        getIo().emit("table_update", { action: "status_update", tableId: req.params.id, status });
+        const updatedTables = await TableAsset.findAll({ where: addStationFilter({}, req.stationId, 'stationid') });
+        emitToStation("table-data-changed", req.stationId, {
+          action: "status_update",
+          tableId: req.params.id,
+          status,
+          payload: { tables: updatedTables }
+        });
       } catch (e) {
         console.error("Socket emit failed", e);
       }

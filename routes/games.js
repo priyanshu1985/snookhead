@@ -7,7 +7,7 @@ import {
   addStationFilter,
   addStationToData,
 } from "../middleware/stationContext.js";
-import { getIo } from "../socket.js";
+import { emitToStation } from "../socket.js";
 
 const router = express.Router();
 
@@ -100,7 +100,12 @@ router.post(
       const newG = await Game.create(payload);
 
       try {
-        getIo().emit("table_update", { action: "create_game", gameId: newG.gameid });
+        const updatedGames = await Game.findAll({ where: addStationFilter({}, req.stationId) });
+        emitToStation("table-data-changed", req.stationId, {
+          action: "create_game",
+          gameId: newG.gameid,
+          payload: { games: updatedGames }
+        });
       } catch (e) {
         console.error("Socket emit failed", e);
       }
@@ -163,7 +168,12 @@ router.put(
       const updatedGame = await Game.findByPk(req.params.id);
 
       try {
-        getIo().emit("table_update", { action: "update_game", gameId: req.params.id });
+        const updatedGames = await Game.findAll({ where: addStationFilter({}, req.stationId) });
+        emitToStation("table-data-changed", req.stationId, {
+          action: "update_game",
+          gameId: req.params.id,
+          payload: { games: updatedGames }
+        });
       } catch (e) {
         console.error("Socket emit failed", e);
       }
@@ -250,7 +260,12 @@ router.delete(
       await Game.destroy({ where: { gameid: parseInt(gameId) } });
 
       try {
-        getIo().emit("table_update", { action: "delete_game", gameId });
+        const updatedGames = await Game.findAll({ where: addStationFilter({}, req.stationId) });
+        emitToStation("table-data-changed", req.stationId, {
+          action: "delete_game",
+          gameId,
+          payload: { games: updatedGames }
+        });
       } catch (e) {
         console.error("Socket emit failed", e);
       }

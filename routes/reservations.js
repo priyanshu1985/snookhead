@@ -17,7 +17,7 @@ import {
   addStationToData,
 } from "../middleware/stationContext.js";
 import { checkTimeConflicts } from "../middleware/timeConflicts.js";
-import { getIo } from "../socket.js";
+import { emitToStation } from "../socket.js";
 
 const router = express.Router();
 
@@ -383,9 +383,16 @@ router.post(
           }
         }
 
-        // Emit socket event for real-time update
+        // Emit to station room with updated reservations payload
         try {
-          getIo().emit("table-data-changed", { action: "reservation_created", tableId: table_id });
+          const updatedReservations = await Reservation.findAll({
+            where: addStationFilter({ status: "pending" }, req.stationId),
+          });
+          emitToStation("table-data-changed", req.stationId, {
+            action: "reservation_created",
+            tableId: table_id,
+            payload: { todaysReservations: updatedReservations }
+          });
         } catch (e) {
           console.error("Socket emission failed:", e);
         }
@@ -433,9 +440,17 @@ router.post("/autoassign", auth, stationContext, async (req, res) => {
     await r.update({ tableId: t.id, status: "assigned" });
     await t.update({ status: "occupied" });
 
-    // Emit socket event for real-time update
+    // Emit to station room with updated data
     try {
-      getIo().emit("table-data-changed", { action: "reservation_autoassign", tableId: t.id });
+      const [updatedReservations, updatedTables] = await Promise.all([
+        Reservation.findAll({ where: addStationFilter({ status: "pending" }, req.stationId) }),
+        TableAsset.findAll({ where: addStationFilter({}, req.stationId) }),
+      ]);
+      emitToStation("table-data-changed", req.stationId, {
+        action: "reservation_autoassign",
+        tableId: t.id,
+        payload: { todaysReservations: updatedReservations, tables: updatedTables }
+      });
     } catch (e) {
       console.error("Socket emission failed:", e);
     }
@@ -523,9 +538,16 @@ router.put("/:id", auth, stationContext, async (req, res) => {
     // Fetch fresh copy to return
     const updatedR = await Reservation.findOne({ where });
 
-    // Emit socket event for real-time update
+    // Emit to station room with updated data
     try {
-      getIo().emit("table-data-changed", { action: "reservation_updated", tableId: updatedR?.tableId });
+      const updatedReservations = await Reservation.findAll({
+        where: addStationFilter({ status: "pending" }, req.stationId),
+      });
+      emitToStation("table-data-changed", req.stationId, {
+        action: "reservation_updated",
+        tableId: updatedR?.tableId,
+        payload: { todaysReservations: updatedReservations }
+      });
     } catch (e) {
       console.error("Socket emission failed:", e);
     }
@@ -547,9 +569,16 @@ router.post("/:id/cancel", auth, stationContext, async (req, res) => {
 
     await Reservation.update({ status: "cancelled" }, { where: { id: r.id } });
 
-    // Emit socket event for real-time update
+    // Emit to station room with updated data
     try {
-      getIo().emit("table-data-changed", { action: "reservation_cancelled", tableId: r.tableId });
+      const updatedReservations = await Reservation.findAll({
+        where: addStationFilter({ status: "pending" }, req.stationId),
+      });
+      emitToStation("table-data-changed", req.stationId, {
+        action: "reservation_cancelled",
+        tableId: r.tableId,
+        payload: { todaysReservations: updatedReservations }
+      });
     } catch (e) {
       console.error("Socket emission failed:", e);
     }
