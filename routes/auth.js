@@ -625,12 +625,12 @@ router.post("/forgot-password", async (req, res) => {
 
     // Generate a secure reset token (valid for 1 hour)
     const resetToken = crypto.randomBytes(32).toString("hex");
-    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString(); 
 
     console.log("🔍 Forgot password - Generating token:", {
       email,
       tokenGenerated: resetToken.substring(0, 10) + "...",
-      expiryTime: resetTokenExpiry.toISOString(),
+      expiryTime: resetTokenExpiry,
     });
 
     // Store the reset token in the user record
@@ -764,16 +764,14 @@ router.post("/reset-password", async (req, res) => {
         .json({ error: "Invalid reset token. Please request a new one." });
     }
 
-    const now = new Date();
-
-    // Handle potential timezone issues with string dates from DB
-    let expiryString = user.reset_token_expiry;
-    // If it's a string and looks like ISO but missing Z at end, append it to force UTC
-    if (typeof expiryString === 'string' && !expiryString.endsWith('Z') && !expiryString.includes('+')) {
-      expiryString += 'Z';
+    // Standardize expiry check to UTC
+    let expiryVal = user.reset_token_expiry;
+    if (typeof expiryVal === 'string' && !expiryVal.endsWith('Z') && !expiryVal.includes('+')) {
+      expiryVal += 'Z'; // Force UTC if missing
     }
-
-    const expiry = new Date(expiryString);
+    
+    const expiry = new Date(expiryVal);
+    const now = new Date();
 
     console.log("🔍 Token expiry check:", {
       now: now.toISOString(),
@@ -815,6 +813,115 @@ router.post("/reset-password", async (req, res) => {
     res
       .status(500)
       .json({ error: "Server error occurred. Please try again later." });
+  }
+});
+
+// @route   POST /api/auth/owner-forgot-password
+// @desc    Send PIN reset link to owner's email
+// @access  Private (already logged in)
+router.post("/owner-forgot-password", auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (user.role !== "owner") {
+      return res.status(403).json({ error: "Only owners can reset panel access" });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString(); 
+
+    await User.update(
+      {
+        reset_token: resetToken,
+        reset_token_expiry: resetTokenExpiry,
+      },
+      { where: { id: userId } },
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const resetLink = `${frontendUrl}/reset-password?token=${resetToken}&mode=owner`;
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: "Reset Your Owner Panel PIN",
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+          <h2>Owner Panel Authentication Reset</h2>
+          <p>Hello ${user.name},</p>
+          <p>You requested to reset your Owner Panel Access PIN. Click the button below to set a new PIN:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetLink}" style="background-color: #F08626; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Reset Owner PIN</a>
+          </div>
+          <p>This link will expire in 1 hour.</p>
+          <p>If you didn't request this, please secure your account.</p>
+        </div>
+      `,
+    });
+
+    res.json({ success: true, message: "PIN reset link has been sent to your email" });
+  } catch (err) {
+    console.error("Owner forgot password error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// @route   POST /api/auth/owner-reset-password
+// @desc    Reset owner panel PIN using token
+// @access  Public
+router.post("/owner-reset-password", async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: "Token and new PIN are required" });
+    }
+
+    const user = await User.findOne({ where: { reset_token: token } });
+
+    if (!user) {
+      return res.status(400).json({ error: "Invalid or expired reset token" });
+    }
+
+    // Standardize expiry check to UTC
+    let expiryVal = user.reset_token_expiry;
+    if (typeof expiryVal === 'string' && !expiryVal.endsWith('Z') && !expiryVal.includes('+')) {
+      expiryVal += 'Z';
+    }
+    
+    const expiryTime = new Date(expiryVal);
+    if (new Date() > expiryTime) {
+      return res.status(400).json({ error: "Reset token has expired" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    const updateData = {
+      ownerpanelpassword: hashedPassword,
+      ownerpanelsetup: true,
+      reset_token: null,
+      reset_token_expiry: null,
+    };
+
+    await User.update(updateData, { where: { id: user.id } });
+
+    res.json({ success: true, message: "Owner Panel PIN updated successfully" });
+  } catch (err) {
+    console.error("Owner reset password error:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 

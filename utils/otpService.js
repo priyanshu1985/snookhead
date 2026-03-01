@@ -88,7 +88,12 @@ export const verifyOTP = async (email, code) => {
             return { valid: false, message: 'Invalid code' };
         }
 
-        if (new Date() > new Date(record.expires_at)) {
+        let expiryVal = record.expires_at;
+        if (typeof expiryVal === 'string' && !expiryVal.endsWith('Z') && !expiryVal.includes('+')) {
+            expiryVal += 'Z';
+        }
+
+        if (new Date() > new Date(expiryVal)) {
             // Delete expired
             await OtpCode.destroy({ where: { id: record.id } });
             return { valid: false, message: 'Code expired' };
