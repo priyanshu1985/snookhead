@@ -1265,6 +1265,16 @@ const models = {
       return data || [];
     },
 
+    async findOne(filter) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .select("*")
+        .match(filter.where || filter)
+        .single();
+      if (error && error.code !== "PGRST116") throw error;
+      return data;
+    },
+
     async findByPk(id) {
       const { data, error } = await getDb()
         .from(this.tableName)
@@ -1293,6 +1303,33 @@ const models = {
         .select();
       if (error) throw error;
       return data;
+    },
+
+    // Atomic Helper
+    async adjustStock(id, change) {
+      const maxRetries = 10;
+      for (let i = 0; i < maxRetries; i++) {
+        const current = await this.findByPk(id);
+        if (!current) throw new Error("Inventory item not found");
+        
+        const previousStock = Number(current.currentquantity);
+        const newStock = previousStock + Number(change);
+        if (newStock < 0) throw new Error("Insufficient stock");
+
+        // Optimistic Update: only update if currentquantity is still the same
+        const { data, error } = await getDb()
+          .from(this.tableName)
+          .update({ currentquantity: newStock })
+          .match({ id, currentquantity: previousStock })
+          .select();
+        
+        if (error) throw error;
+        if (data && data.length > 0) return { previousStock, newStock }; // Success!
+        
+        // If data.length is 0, someone else modified it. Retry.
+        await new Promise(r => setTimeout(r, 30 * (i + 1))); // Small backoff
+      }
+      throw new Error("Failed to update stock after multiple retries due to high concurrency.");
     },
 
     async destroy(filter) {

@@ -142,43 +142,41 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
           const inventoryItem = await Inventory.findOne({ where: inventoryWhere });
 
           if (inventoryItem && menuItem.item_type === 'packed') {
-            const totalDeductionNeeded = qty * inventoryMultiplier;
-            
-            // --- STRICT STOCK CHECK ---
-            if (inventoryItem.currentquantity <= 0) {
-              return res.status(400).json({ 
-                error: `Item "${itemNameForLog}" is out of stock.` 
-              });
-            }
-            if (inventoryItem.currentquantity < totalDeductionNeeded) {
-              return res.status(400).json({ 
-                error: `Insufficient stock for "${itemNameForLog}". Available: ${inventoryItem.currentquantity}, Requested: ${totalDeductionNeeded}` 
-              });
-            }
-            // --------------------------
+            const totalChange = qty * inventoryMultiplier;
+            const isCancellation = order_source === 'active_session' && req.body.status === 'cancelled';
+            const changeAmount = isCancellation ? totalChange : -totalChange;
 
-            // Deduct stock
-            await inventoryItem.decrement('currentquantity', { by: totalDeductionNeeded });
-            console.log(`Deducted ${totalDeductionNeeded} from inventory for ${itemNameForLog}`);
-
-            // Log the deduction
-            const { InventoryLog } = await import("../models/index.js");
-            if (InventoryLog) {
-              await InventoryLog.create({
-                menu_item_id: menuItemId,
-                item_name: menuItem.name,
-                category: menuItem.category,
-                stationid: req.stationId,
-                action: 'DEDUCT',
-                quantity_change: totalDeductionNeeded,
-                previous_stock: inventoryItem.currentquantity,
-                new_stock: inventoryItem.currentquantity - totalDeductionNeeded,
-                reason: `Order Created (Order ID: ${order.id})`,
-                user_id: req.user ? req.user.id : null,
-                created_at: new Date()
-              });
+            try {
+              const { previousStock, newStock } = await Inventory.adjustStock(inventoryItem.id, changeAmount);
+              
+              // Log the change
+              const { InventoryLog } = await import("../models/index.js");
+              if (InventoryLog) {
+                await InventoryLog.create({
+                  menu_item_id: menuItemId,
+                  item_name: menuItem.name,
+                  category: menuItem.category,
+                  stationid: req.stationId,
+                  action: isCancellation ? 'RESTORE' : 'DEDUCT',
+                  quantity_change: totalChange,
+                  previous_stock: previousStock,
+                  new_stock: newStock,
+                  reason: isCancellation 
+                    ? `Order Removal Sync (Active Session)` 
+                    : `Order Created (Order ID: ${order.id})`,
+                  user_id: req.user ? req.user.id : null,
+                  created_at: new Date()
+                });
+              }
+            } catch (invErr) {
+               console.error("Atomic Inventory update failed:", invErr.message);
+               if (invErr.message.includes("Insufficient stock")) {
+                 return res.status(400).json({ error: `Insufficient stock for "${itemNameForLog}"` });
+               }
+               throw invErr;
             }
-          } else {
+          }
+ else {
             console.warn(`No inventory item found for ${itemNameForLog}, skipping inventory deduction.`);
           }
         }
@@ -192,8 +190,16 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       }
 
       if (menuItem.stock !== undefined) {
-        const totalDeductionNeeded = qty * inventoryMultiplier;
-        const newStock = Math.max(0, menuItem.stock - totalDeductionNeeded);
+        const totalChange = qty * inventoryMultiplier;
+        const isCancellation = order_source === 'active_session' && req.body.status === 'cancelled';
+        
+        let newStock;
+        if (isCancellation) {
+          newStock = Number(menuItem.stock) + totalChange;
+        } else {
+          newStock = Math.max(0, Number(menuItem.stock) - totalChange);
+        }
+
         await MenuItem.update(
           { stock: newStock },
           { where: { id: menuItem.id } },

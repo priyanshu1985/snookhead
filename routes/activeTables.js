@@ -383,23 +383,27 @@ router.post(
 
                 const inventoryItem = await Inventory.findOne({ where: inventoryWhere });
                 if (inventoryItem) {
-                  await inventoryItem.decrement('currentquantity', { by: qty });
-                  
-                  // Log the deduction
-                  if (InventoryLog) {
-                    await InventoryLog.create({
-                      menu_item_id: menuItem.id,
-                      item_name: menuItem.name,
-                      category: menuItem.category,
-                      stationid: req.stationId,
-                      action: 'DEDUCT',
-                      quantity_change: qty,
-                      previous_stock: inventoryItem.currentquantity,
-                      new_stock: inventoryItem.currentquantity - qty,
-                      reason: `Booking Created (Session ID: ${session.activeid || session.active_id})`,
-                      user_id: req.user ? req.user.id : null,
-                      created_at: new Date()
-                    });
+                  try {
+                    const { previousStock, newStock } = await Inventory.adjustStock(inventoryItem.id, -Number(qty));
+                    
+                    // Log the deduction
+                    if (InventoryLog) {
+                      await InventoryLog.create({
+                        menu_item_id: menuItem.id,
+                        item_name: menuItem.name,
+                        category: menuItem.category,
+                        stationid: req.stationId,
+                        action: 'DEDUCT',
+                        quantity_change: qty,
+                        previous_stock: previousStock,
+                        new_stock: newStock,
+                        reason: `Booking Created (Session ID: ${session.activeid || session.active_id})`,
+                        user_id: req.user ? req.user.id : null,
+                        created_at: new Date()
+                      });
+                    }
+                  } catch (adjErr) {
+                    console.error("Initial session inventory deduction failed:", adjErr.message);
                   }
                 }
               }
