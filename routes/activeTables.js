@@ -28,6 +28,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 import { checkQueueAndAssign } from "../utils/queueManager.js";
+import { getIo } from "../socket.js";
 
 const router = express.Router();
 
@@ -384,7 +385,7 @@ router.post(
                 const inventoryItem = await Inventory.findOne({ where: inventoryWhere });
                 if (inventoryItem) {
                   await inventoryItem.decrement('currentquantity', { by: qty });
-                  
+
                   // Log the deduction
                   if (InventoryLog) {
                     await InventoryLog.create({
@@ -424,6 +425,13 @@ router.post(
         { status: "reserved" }, // Use 'reserved' as 'occupied' is not in ENUM
         { where: { id: table.id } },
       );
+
+      // Emit socket event for real-time update
+      try {
+        getIo().emit("table-data-changed", { action: "start", tableId: table.id });
+      } catch (e) {
+        console.error("Socket emission failed:", e);
+      }
 
       res.status(201).json({
         message: "Session started",
@@ -584,6 +592,13 @@ router.post(
         req.stationId,
       );
       const bill = await Bill.create(billData);
+
+      // Emit socket event for real-time update
+      try {
+        getIo().emit("table-data-changed", { action: "stop", tableId: table.id });
+      } catch (e) {
+        console.error("Socket emission failed:", e);
+      }
 
       res.json({
         message: queueResult.assigned
@@ -817,6 +832,13 @@ router.post(
       }
 
       const bill = await Bill.create(billData);
+
+      // Emit socket event for real-time update
+      try {
+        getIo().emit("table-data-changed", { action: "auto-release", tableId: table?.id });
+      } catch (e) {
+        console.error("Socket emission failed:", e);
+      }
 
       res.json({
         message: queueResult.assigned

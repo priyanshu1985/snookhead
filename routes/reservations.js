@@ -17,6 +17,7 @@ import {
   addStationToData,
 } from "../middleware/stationContext.js";
 import { checkTimeConflicts } from "../middleware/timeConflicts.js";
+import { getIo } from "../socket.js";
 
 const router = express.Router();
 
@@ -70,8 +71,8 @@ router.get("/", auth, stationContext, async (req, res) => {
             reservation.duration_minutes ||
             (reservation.toTime && reservation.fromTime
               ? (new Date(reservation.toTime) -
-                  new Date(reservation.fromTime)) /
-                60000
+                new Date(reservation.fromTime)) /
+              60000
               : 60),
         };
 
@@ -205,12 +206,12 @@ router.post(
         ) {
           activeEnd = new Date(
             activeSession.bookingendtime ||
-              activeSession.endtimer ||
-              activeSession.endtime,
+            activeSession.endtimer ||
+            activeSession.endtime,
           );
         } else if (
           (activeSession.bookingtype || activeSession.booking_type) ===
-            "timer" &&
+          "timer" &&
           activeDuration
         ) {
           activeEnd = new Date(activeStart.getTime() + activeDuration * 60000);
@@ -266,8 +267,8 @@ router.post(
         const existingEnd = r.toTime
           ? new Date(r.toTime)
           : new Date(
-              existingStart.getTime() + (r.durationminutes || 60) * 60000,
-            );
+            existingStart.getTime() + (r.durationminutes || 60) * 60000,
+          );
 
         // Check for time overlap
         const overlap = fromTime < existingEnd && toTime > existingStart;
@@ -277,15 +278,15 @@ router.post(
       if (conflictingReservation) {
         const existStart = new Date(
           conflictingReservation.fromTime ||
-            conflictingReservation.reservationtime ||
-            conflictingReservation.fromtime,
+          conflictingReservation.reservationtime ||
+          conflictingReservation.fromtime,
         );
         const existEnd = conflictingReservation.toTime
           ? new Date(conflictingReservation.toTime)
           : new Date(
-              existStart.getTime() +
-                (conflictingReservation.durationminutes || 60) * 60000,
-            );
+            existStart.getTime() +
+            (conflictingReservation.durationminutes || 60) * 60000,
+          );
 
         const holderName =
           conflictingReservation.customerName ||
@@ -382,6 +383,13 @@ router.post(
           }
         }
 
+        // Emit socket event for real-time update
+        try {
+          getIo().emit("table-data-changed", { action: "reservation_created", tableId: table_id });
+        } catch (e) {
+          console.error("Socket emission failed:", e);
+        }
+
         res.status(201).json({
           success: true,
           message: "Reservation created successfully",
@@ -424,6 +432,14 @@ router.post("/autoassign", auth, stationContext, async (req, res) => {
     if (!t) return res.status(400).json({ error: "No available table" });
     await r.update({ tableId: t.id, status: "assigned" });
     await t.update({ status: "occupied" });
+
+    // Emit socket event for real-time update
+    try {
+      getIo().emit("table-data-changed", { action: "reservation_autoassign", tableId: t.id });
+    } catch (e) {
+      console.error("Socket emission failed:", e);
+    }
+
     res.json({ success: true, table: t });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -475,9 +491,9 @@ router.put("/:id", auth, stationContext, async (req, res) => {
         updates.start_time ||
         (r.fromTime
           ? new Date(r.fromTime).toLocaleTimeString("en-GB", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })
+            hour: "2-digit",
+            minute: "2-digit",
+          })
           : null);
 
       if (dateStr && timeStr) {
@@ -506,6 +522,14 @@ router.put("/:id", auth, stationContext, async (req, res) => {
 
     // Fetch fresh copy to return
     const updatedR = await Reservation.findOne({ where });
+
+    // Emit socket event for real-time update
+    try {
+      getIo().emit("table-data-changed", { action: "reservation_updated", tableId: updatedR?.tableId });
+    } catch (e) {
+      console.error("Socket emission failed:", e);
+    }
+
     res.json({ success: true, reservation: updatedR });
   } catch (err) {
     console.error("Update reservation error:", err);
@@ -522,6 +546,14 @@ router.post("/:id/cancel", auth, stationContext, async (req, res) => {
     if (!r) return res.status(404).json({ error: "Not found" });
 
     await Reservation.update({ status: "cancelled" }, { where: { id: r.id } });
+
+    // Emit socket event for real-time update
+    try {
+      getIo().emit("table-data-changed", { action: "reservation_cancelled", tableId: r.tableId });
+    } catch (e) {
+      console.error("Socket emission failed:", e);
+    }
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

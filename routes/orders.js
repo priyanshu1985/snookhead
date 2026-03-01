@@ -7,6 +7,7 @@ import {
   addStationFilter,
   addStationToData,
 } from "../middleware/stationContext.js";
+import { getIo } from "../socket.js";
 
 const router = express.Router();
 
@@ -143,16 +144,16 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
 
           if (inventoryItem && menuItem.item_type === 'packed') {
             const totalDeductionNeeded = qty * inventoryMultiplier;
-            
+
             // --- STRICT STOCK CHECK ---
             if (inventoryItem.currentquantity <= 0) {
-              return res.status(400).json({ 
-                error: `Item "${itemNameForLog}" is out of stock.` 
+              return res.status(400).json({
+                error: `Item "${itemNameForLog}" is out of stock.`
               });
             }
             if (inventoryItem.currentquantity < totalDeductionNeeded) {
-              return res.status(400).json({ 
-                error: `Insufficient stock for "${itemNameForLog}". Available: ${inventoryItem.currentquantity}, Requested: ${totalDeductionNeeded}` 
+              return res.status(400).json({
+                error: `Insufficient stock for "${itemNameForLog}". Available: ${inventoryItem.currentquantity}, Requested: ${totalDeductionNeeded}`
               });
             }
             // --------------------------
@@ -218,6 +219,13 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         orderDate: order.createdAt, // key mapped to createdAt
       },
     });
+
+    // Emit socket event for real-time kitchen updates
+    try {
+      getIo().emit("order-data-changed", { action: "order_created", orderId: order.id });
+    } catch (e) {
+      console.error("Socket emission failed:", e);
+    }
   } catch (err) {
     console.error("Order creation error:", err);
     res.status(500).json({ error: err.message });
@@ -401,8 +409,8 @@ router.post("/:orderId/items", auth, stationContext, async (req, res) => {
 
       // --- STOCK CHECK (PACKED ONLY) ---
       if (menuItem.item_type === 'packed' && menuItem.stock !== undefined && menuItem.stock < qty) {
-        return res.status(400).json({ 
-          error: `Insufficient stock for ${menuItem.name}. Available: ${menuItem.stock}` 
+        return res.status(400).json({
+          error: `Insufficient stock for ${menuItem.name}. Available: ${menuItem.stock}`
         });
       }
       // --------------------
@@ -463,6 +471,13 @@ router.patch("/:id/status", auth, stationContext, async (req, res) => {
 
     await Order.update({ status }, { where: { id: order.id } });
     order.status = status;
+
+    // Emit socket event for real-time kitchen updates
+    try {
+      getIo().emit("order-data-changed", { action: "order_status_updated", orderId: order.id, status });
+    } catch (e) {
+      console.error("Socket emission failed:", e);
+    }
 
     res.json({
       message: "Order status updated",

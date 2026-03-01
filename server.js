@@ -16,6 +16,8 @@ if (dns.setDefaultResultOrder) {
 }
 import express from "express";
 import cors from "cors";
+import http from "http"; // <--- Add http
+import { initSocket } from "./socket.js"; // <--- Import initSocket
 
 import { getSupabase, testConnection } from "./config/supabase.js";
 import { securityHeaders } from "./middleware/security.js";
@@ -116,7 +118,13 @@ async function startServer() {
 
     const PORT = process.env.PORT || 4000; // Use port 4000 to match frontend config
 
-    const server = app.listen(PORT, () => {
+    // Create HTTP Server
+    const server = http.createServer(app);
+
+    // Initialize Socket.io
+    const io = initSocket(server);
+
+    server.listen(PORT, () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
       console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
       console.log(`👥 Users API: http://localhost:${PORT}/api/users`);

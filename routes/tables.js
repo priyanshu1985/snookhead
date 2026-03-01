@@ -7,6 +7,7 @@ import {
   addStationFilter,
   addStationToData,
 } from "../middleware/stationContext.js";
+import { getIo } from "../socket.js";
 
 const router = express.Router();
 
@@ -160,6 +161,13 @@ router.post(
 
       const newTable = await TableAsset.create(tableData);
 
+      // Notify all connected clients
+      try {
+        getIo().emit("table_update", { action: "create", tableId: newTable.id });
+      } catch (e) {
+        console.error("Socket emit failed", e);
+      }
+
       res.status(201).json({
         message: "Table added successfully",
         table: newTable,
@@ -210,7 +218,7 @@ router.put(
       if (pricePerMin !== undefined) updateData.pricePerMin = pricePerMin;
       if (status !== undefined) updateData.status = status;
       if (frameCharge !== undefined) updateData.frameCharge = frameCharge;
-      
+
       // Handle game_id mapping logic
       if (game_id !== undefined) updateData.gameid = game_id;
       else if (gameid !== undefined) updateData.gameid = gameid;
@@ -219,9 +227,16 @@ router.put(
       // Fetch updated table
       const updatedTable = await TableAsset.findByPk(req.params.id);
 
+      // Notify all connected clients
+      try {
+        getIo().emit("table_update", { action: "update", tableId: updatedTable.id });
+      } catch (e) {
+        console.error("Socket emit failed", e);
+      }
+
       res.json({
         message: "Table updated successfully",
-        table,
+        table: updatedTable,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -294,6 +309,13 @@ router.delete(
       // Now delete the table
       await TableAsset.destroy({ where: { id: parsedTableId } });
 
+      // Notify all connected clients
+      try {
+        getIo().emit("table_update", { action: "delete", tableId: parsedTableId });
+      } catch (e) {
+        console.error("Socket emit failed", e);
+      }
+
       res.json({ message: "Table deleted successfully" });
     } catch (err) {
       console.error("Table delete error:", err);
@@ -329,6 +351,13 @@ router.patch(
       }
 
       await TableAsset.update({ status }, { where: { id: req.params.id } });
+
+      // Notify all connected clients
+      try {
+        getIo().emit("table_update", { action: "status_update", tableId: req.params.id, status });
+      } catch (e) {
+        console.error("Socket emit failed", e);
+      }
 
       res.json({
         message: "Status updated successfully",

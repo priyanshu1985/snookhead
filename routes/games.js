@@ -7,6 +7,7 @@ import {
   addStationFilter,
   addStationToData,
 } from "../middleware/stationContext.js";
+import { getIo } from "../socket.js";
 
 const router = express.Router();
 
@@ -97,6 +98,13 @@ router.post(
 
       console.log("Game creation payload:", payload);
       const newG = await Game.create(payload);
+
+      try {
+        getIo().emit("table_update", { action: "create_game", gameId: newG.gameid });
+      } catch (e) {
+        console.error("Socket emit failed", e);
+      }
+
       res.status(201).json(newG);
     } catch (err) {
       console.error(err);
@@ -153,6 +161,13 @@ router.put(
 
       await Game.update(updateData, { where: { gameid: req.params.id } });
       const updatedGame = await Game.findByPk(req.params.id);
+
+      try {
+        getIo().emit("table_update", { action: "update_game", gameId: req.params.id });
+      } catch (e) {
+        console.error("Socket emit failed", e);
+      }
+
       res.json(g);
     } catch (err) {
       console.error(err);
@@ -233,6 +248,12 @@ router.delete(
 
       // 5. Finally delete the game
       await Game.destroy({ where: { gameid: parseInt(gameId) } });
+
+      try {
+        getIo().emit("table_update", { action: "delete_game", gameId });
+      } catch (e) {
+        console.error("Socket emit failed", e);
+      }
 
       res.json({
         success: true,
