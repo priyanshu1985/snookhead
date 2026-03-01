@@ -701,7 +701,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     // Total Expenses
     let expensesQuery = supabase
       .from("expenses")
-      .select("amount")
+      .select("amount, category")
       .gte("date", startDate.toISOString().split('T')[0])
       .lte("date", endDate.toISOString().split('T')[0]);
 
@@ -711,7 +711,16 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     }
 
     const { data: expensesData } = await expensesQuery;
-    let totalExpenses = (expensesData || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    
+    // Categorize expenses
+    const expenseCategories = {};
+    let totalExpenses = 0;
+    (expensesData || []).forEach(item => {
+      const cat = item.category || 'Operational';
+      const amt = Number(item.amount) || 0;
+      expenseCategories[cat] = (expenseCategories[cat] || 0) + amt;
+      totalExpenses += amt;
+    });
 
     // --- Estimated Labour Cost Calculation ---
     // Fetch employees of this owner (or all if admin)
@@ -864,6 +873,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
         activeTables,
         totalTables,
         breakdown,
+        expenseCategories,
         employee_shifts // Added field
       },
     });
