@@ -316,21 +316,24 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         }
 
         if (validItems.length > 0) {
-          // Create Pending Order linked to Queue
+          // Track if any prepared items exist
+          const hasPreparedItems = validItems.some(vi => (vi.menuItem.item_type || 'prepared') !== 'packed');
+
+          // Create Order linked to Queue
           const orderData = addStationToData(
             {
               userId: req.user.id,
               personName: customername,
               total: orderTotal,
               paymentMethod: "offline", // Default for queue
-              status: "pending",
+              status: hasPreparedItems ? "pending" : "completed",
               order_source: "queue",
               queue_id: entry.id,
               created_by: req.user.id,
             },
             req.stationId,
             "stationid",
-          ); // Use stationid for Order creation too if it uses that column (Assuming Orders uses same pattern, verifying in next step)
+          );
 
           const order = await Order.create(orderData);
 
@@ -343,7 +346,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
               priceEach: vi.price,
             });
 
-            // Optional: Decrease Stock? (Maybe wait until confirmed? But standard flow decreases it)
+            // Decrease Stock
             if (vi.menuItem.stock !== undefined) {
               const newStock = Math.max(0, vi.menuItem.stock - vi.qty);
               await MenuItem.update(

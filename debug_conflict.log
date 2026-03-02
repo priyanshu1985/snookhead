@@ -354,3 +354,64 @@
   "checkingAgainst": []
 }
 
+{
+  "body": {
+    "table_id": "41",
+    "game_id": 24,
+    "duration_minutes": 30,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "41",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "51",
+    "game_id": 24,
+    "duration_minutes": 30,
+    "customer_name": "RUTVIK PAWA",
+    "user_id": "52fe3419-11bf-4d16-a95e-8fff7649743a",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "51",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "51",
+    "game_id": 24,
+    "duration_minutes": 30,
+    "customer_name": "Test Customer 2",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "51",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "41",
+    "game_id": 24,
+    "duration_minutes": 30,
+    "customer_name": "Test Customer 3",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "41",
+  "checkingAgainst": []
+}
+

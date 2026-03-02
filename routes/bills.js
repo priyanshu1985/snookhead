@@ -362,6 +362,7 @@ router.post(
             price: parseFloat(menuItem.price),
             quantity: quantity,
             total: itemTotal,
+            item_type: menuItem.item_type || 'prepared',
             category: menuItem.category,
             unit: menuItem.unit,
           });

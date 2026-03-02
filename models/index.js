@@ -1425,7 +1425,13 @@ const models = {
       let query = getDb().from(this.tableName).select("*");
       if (filter.where) {
         Object.keys(filter.where).forEach((key) => {
-          query = query.eq(key, filter.where[key]);
+          const val = filter.where[key];
+          if (val && typeof val === 'object' && !Array.isArray(val)) {
+            if (val.gte) query = query.gte(key, val.gte);
+            if (val.lte) query = query.lte(key, val.lte);
+          } else {
+            query = query.eq(key, val);
+          }
         });
       }
       if (filter.order) {

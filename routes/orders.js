@@ -72,27 +72,23 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
 
     // Create OrderItems for each item in cart
     let calculatedTotal = 0;
+    let hasPreparedItems = false;
 
     for (const cartItem of cart) {
-      // Handle both nested and flat structures for robustness
       const menuItemId = cartItem.menu_item_id || (cartItem.item && cartItem.item.id);
       const qty = Number(cartItem.quantity || cartItem.qty || (cartItem.item && cartItem.item.qty) || 1);
       const variationId = cartItem.variation_id || (cartItem.item && cartItem.item.variation_id);
 
-      if (!menuItemId) {
-        console.warn("Skipping cart item with missing ID:", cartItem);
-        continue;
-      }
+      if (!menuItemId) continue;
 
       const menuWhere = addStationFilter({ id: menuItemId }, req.stationId, "stationid");
-
       const menuItem = await MenuItem.findOne({ where: menuWhere });
-      if (!menuItem) {
-        return res.status(404).json({
-          error: `Menu item ${cartItem.name || (cartItem.item && cartItem.item.name) || menuItemId} not found`,
-        });
-      }
+      if (!menuItem) continue;
 
+      // Track if any prepared items exist
+      if ((menuItem.item_type || 'prepared') !== 'packed') {
+        hasPreparedItems = true;
+      }
       // Check if variation was chosen
       const { getSupabase: getDb } = await import("../config/supabase.js");
       let priceEach = Number(menuItem.price) || 0;
@@ -124,8 +120,6 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         priceEach,
       });
 
-      // Optional: Decrease stock if MenuItem has stock field
-      // Optional: Decrease stock if MenuItem has stock field
       // ------------------------------------------------------------------
       // INVENTORY SYNC: Deduct from actual inventory
       // ------------------------------------------------------------------
@@ -133,87 +127,59 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
         const { Inventory } = await import("../models/index.js");
         if (Inventory) {
           const menuName = menuItem.name.trim();
-          const inventoryWhere = {
-            itemname: menuName,
-            isactive: true
-          };
+          const inventoryWhere = { itemname: menuName, isactive: true };
           if (req.stationId) inventoryWhere.stationid = req.stationId;
 
           const inventoryItem = await Inventory.findOne({ where: inventoryWhere });
 
-          if (inventoryItem && menuItem.item_type === 'packed') {
+          if (inventoryItem && (menuItem.item_type || 'prepared') === 'packed') {
             const totalChange = qty * inventoryMultiplier;
             const isCancellation = order_source === 'active_session' && req.body.status === 'cancelled';
             const changeAmount = isCancellation ? totalChange : -totalChange;
 
-            try {
-              const { previousStock, newStock } = await Inventory.adjustStock(inventoryItem.id, changeAmount);
-              
-              // Log the change
-              const { InventoryLog } = await import("../models/index.js");
-              if (InventoryLog) {
-                await InventoryLog.create({
-                  menu_item_id: menuItemId,
-                  item_name: menuItem.name,
-                  category: menuItem.category,
-                  stationid: req.stationId,
-                  action: isCancellation ? 'RESTORE' : 'DEDUCT',
-                  quantity_change: totalChange,
-                  previous_stock: previousStock,
-                  new_stock: newStock,
-                  reason: isCancellation 
-                    ? `Order Removal Sync (Active Session)` 
-                    : `Order Created (Order ID: ${order.id})`,
-                  user_id: req.user ? req.user.id : null,
-                  created_at: new Date()
-                });
-              }
-            } catch (invErr) {
-               console.error("Atomic Inventory update failed:", invErr.message);
-               if (invErr.message.includes("Insufficient stock")) {
-                 return res.status(400).json({ error: `Insufficient stock for "${itemNameForLog}"` });
-               }
-               throw invErr;
+            const { previousStock, newStock } = await Inventory.adjustStock(inventoryItem.id, changeAmount);
+            
+            const { InventoryLog } = await import("../models/index.js");
+            if (InventoryLog) {
+              await InventoryLog.create({
+                menu_item_id: menuItemId,
+                item_name: menuItem.name,
+                category: menuItem.category,
+                stationid: req.stationId,
+                action: isCancellation ? 'RESTORE' : 'DEDUCT',
+                quantity_change: totalChange,
+                previous_stock: previousStock,
+                new_stock: newStock,
+                reason: isCancellation ? `Order Removal Sync` : `Order Created (ID: ${order.id})`,
+                user_id: req.user ? req.user.id : null,
+                created_at: new Date()
+              });
             }
-          }
- else {
-            console.warn(`No inventory item found for ${itemNameForLog}, skipping inventory deduction.`);
           }
         }
       } catch (invErr) {
         console.error("Inventory deduction failed:", invErr);
-        // If strict mode, we should fail the order?
-        // For now, let's return error if it's "Insufficient inventory"
-        if (invErr.message.includes("Insufficient inventory") || invErr.message.includes("out of stock")) {
-          return res.status(400).json({ error: invErr.message });
-        }
       }
 
       if (menuItem.stock !== undefined) {
         const totalChange = qty * inventoryMultiplier;
-        const isCancellation = order_source === 'active_session' && req.body.status === 'cancelled';
-        
-        let newStock;
-        if (isCancellation) {
-          newStock = Number(menuItem.stock) + totalChange;
-        } else {
-          newStock = Math.max(0, Number(menuItem.stock) - totalChange);
-        }
-
-        await MenuItem.update(
-          { stock: newStock },
-          { where: { id: menuItem.id } },
-        );
+        const newStock = Math.max(0, Number(menuItem.stock) - totalChange);
+        await MenuItem.update({ stock: newStock }, { where: { id: menuItem.id } });
       }
     }
 
-    // Update order total with calculated amount
-    // order is a plain object, so no .save() method
-    await Order.update({ total: calculatedTotal }, { where: { id: order.id } });
-    order.total = calculatedTotal; // update local object for response
+    // Update order total and status if all items were packed
+    const finalUpdate = { total: calculatedTotal };
+    if (!hasPreparedItems && calculatedTotal > 0) {
+      finalUpdate.status = 'completed';
+      order.status = 'completed';
+    }
+
+    await Order.update(finalUpdate, { where: { id: order.id } });
+    order.total = calculatedTotal;
 
     res.status(201).json({
-      message: "Order created successfully",
+      message: !hasPreparedItems ? "Order completed (packed items only)" : "Order created successfully",
       order: {
         id: order.id,
         personName: order.personName,

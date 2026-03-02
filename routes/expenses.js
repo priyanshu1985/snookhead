@@ -17,7 +17,15 @@ router.get("/", auth, stationContext, authorize("owner", "admin"), async (req, r
       return res.json([]);
     }
 
+    const { dateFrom, dateTo } = req.query;
     const where = addStationFilter({}, req.stationId);
+    
+    if (dateFrom || dateTo) {
+      where.date = {};
+      if (dateFrom) where.date.gte = dateFrom;
+      if (dateTo) where.date.lte = dateTo;
+    }
+
     const expenses = await Expense.findAll({
       where,
       order: [["date", "DESC"]],

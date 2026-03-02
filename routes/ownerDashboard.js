@@ -10,46 +10,54 @@ const router = express.Router();
 
 // Helper: Get date range based on period
 function getDateRange(period, customStart, customEnd) {
-  const now = new Date();
-  let startDate;
-  let endDate = now;
-
-  // If custom period is provided, use it
-  if (period === 'custom' && customStart && customEnd) {
-    startDate = new Date(customStart);
-    endDate = new Date(customEnd);
-    // Ensure end date includes the full day
-    endDate.setHours(23, 59, 59, 999);
-    // Ensure start date starts at beginning of day
-    startDate.setHours(0, 0, 0, 0);
-    return { startDate, endDate };
+  // Respect custom dates if they are provided from frontend
+  if (customStart && customEnd) {
+    const s = new Date(customStart);
+    const e = new Date(customEnd);
+    s.setHours(0, 0, 0, 0);
+    e.setHours(23, 59, 59, 999);
+    return { startDate: s, endDate: e };
   }
 
+  const now = new Date();
+  let startDate = new Date(now);
+  let endDate = new Date(now);
+
   switch (period.toLowerCase()) {
+    case "today":
     case "day":
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       startDate.setHours(0, 0, 0, 0);
       endDate.setHours(23, 59, 59, 999);
       break;
-    case "week":
-      startDate = new Date(now);
-      startDate.setDate(now.getDate() - 7);
+    case "yesterday":
+      startDate.setDate(now.getDate() - 1);
       startDate.setHours(0, 0, 0, 0);
+      endDate.setDate(now.getDate() - 1);
+      endDate.setHours(23, 59, 59, 999);
+      break;
+    case "week":
+      // Start of this week (Sunday)
+      const day = now.getDay();
+      startDate.setDate(now.getDate() - day);
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
       break;
     case "month":
-      startDate = new Date(now);
-      startDate.setMonth(now.getMonth() - 1);
+      // 1st of current month
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
       startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
       break;
     case "year":
-      startDate = new Date(now);
-      startDate.setFullYear(now.getFullYear() - 1);
+      startDate = new Date(now.getFullYear(), 0, 1);
       startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
       break;
     default:
-      startDate = new Date(now);
+      // Default to last 7 days if unknown
       startDate.setDate(now.getDate() - 7);
       startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
   }
 
   return { startDate, endDate };
@@ -75,8 +83,8 @@ const calculateTrend = (current, previous) => {
 // GET /api/owner/dashboard/stats - Get dashboard statistics (filtered by station)
 router.get("/stats", auth, stationContext, async (req, res) => {
   try {
-    const { period = "week", startDate: customStart, endDate: customEnd } = req.query;
-    const { startDate, endDate } = getDateRange(period, customStart, customEnd);
+    const { period = "week", startDate: customStart, endDate: customEnd, dateFrom, dateTo } = req.query;
+    const { startDate, endDate } = getDateRange(period, customStart || dateFrom, customEnd || dateTo);
     const prevEndDate = startDate;
     const supabase = getSupabase();
 
@@ -187,8 +195,8 @@ router.get("/stats", auth, stationContext, async (req, res) => {
 // GET /api/owner/dashboard/game-utilization - filtered by station
 router.get("/game-utilization", auth, stationContext, async (req, res) => {
   try {
-    const { period = "week", startDate: customStart, endDate: customEnd } = req.query;
-    const { startDate, endDate } = getDateRange(period, customStart, customEnd);
+    const { period = "week", startDate: customStart, endDate: customEnd, dateFrom, dateTo } = req.query;
+    const { startDate, endDate } = getDateRange(period, customStart || dateFrom, customEnd || dateTo);
     const supabase = getSupabase();
 
     // Get all games for this station
@@ -290,8 +298,8 @@ router.get("/game-utilization", auth, stationContext, async (req, res) => {
 // GET /api/owner/dashboard/revenue - filtered by station
 router.get("/revenue", auth, stationContext, async (req, res) => {
   try {
-    const { period = "week", startDate: customStart, endDate: customEnd } = req.query;
-    const { startDate, endDate } = getDateRange(period, customStart, customEnd);
+    const { period = "week", startDate: customStart, endDate: customEnd, dateFrom, dateTo } = req.query;
+    const { startDate, endDate } = getDateRange(period, customStart || dateFrom, customEnd || dateTo);
     const supabase = getSupabase();
 
     // Total revenue in period
@@ -369,8 +377,8 @@ router.get("/revenue", auth, stationContext, async (req, res) => {
 // GET /api/owner/dashboard/summary - filtered by station
 router.get("/summary", auth, stationContext, async (req, res) => {
   try {
-    const { period = "week", startDate: customStart, endDate: customEnd } = req.query;
-    const { startDate, endDate } = getDateRange(period, customStart, customEnd);
+    const { period = "week", startDate: customStart, endDate: customEnd, dateFrom, dateTo } = req.query;
+    const { startDate, endDate } = getDateRange(period, customStart || dateFrom, customEnd || dateTo);
     const supabase = getSupabase();
 
     // Current date for display
@@ -451,7 +459,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     // Total Revenue (bills paid in dates) - Get tablecharges and menucharges
     let revenueQuery = supabase
       .from("bills")
-      .select("totalamount, tablecharges, menucharges, sessionduration, createdAt, sessionid, details, paymentmethod, created_by")
+      .select("totalamount, tablecharges, menucharges, sessionduration, createdAt, sessionid, details, paymentmethod, created_by, billitems")
       .gte("createdAt", startDate.toISOString())
       .lte("createdAt", endDate.toISOString())
       .eq("status", "paid");
@@ -494,6 +502,14 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       .lt("quantity", 5);
     lowStockQuery = applyStationFilter(lowStockQuery, req.stationId);
 
+    // Debtor List (Wallets with negative balance)
+    let debtorsQuery = supabase
+      .from("wallets")
+      .select("balance, customerid, customers(name)")
+      .lt("balance", 0)
+      .order("balance", { ascending: true }); // Most negative first
+    debtorsQuery = applyStationFilter(debtorsQuery, req.stationId);
+
     const [
       { count: activeWallets },
       { count: prevActiveWallets },
@@ -503,6 +519,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       { count: prevInactiveWallets },
       { count: creditMembers },
       { count: prevCreditMembers },
+      { data: debtorsData },
       { data: revenueData },
       { data: prevRevenueData },
       { count: totalSessions },
@@ -519,6 +536,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       prevInactiveWalletsQuery,
       creditMembersQuery,
       prevCreditMembersQuery,
+      debtorsQuery,
       revenueQuery,
       prevRevenueQuery,
       totalSessionsQuery,
@@ -527,6 +545,8 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       lowStockQuery,
       applyStationFilter(supabase.from("games").select("gameid, gamename"), req.stationId)
     ]);
+
+    const totalOwed = (debtorsData || []).reduce((sum, d) => sum + Math.abs(Number(d.balance) || 0), 0);
 
     const gamesList = gamesResult.data || [];
     const gamesMap = gamesList.reduce((acc, g) => ({ ...acc, [g.gameid]: g }), {});
@@ -555,7 +575,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     const breakdown = {
       flow: { dashboard: 0, queue: 0, reservation: 0 },
       bookingType: { timer: 0, set: 0, frame: 0 },
-      foodSource: { table: 0, order_screen: 0 },
+      foodSource: { prepared: 0, packed: 0 },
       paymentMode: { cash: 0, upi: 0, wallet: 0 },
       gameReal: {}
     };
@@ -590,136 +610,83 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       breakdown.bookingType[bType] = (breakdown.bookingType[bType] || 0) + tableCharges;
 
       if (menuCharges > 0) {
-        if (bill.sessionid) {
-          breakdown.foodSource.table += menuCharges;
+        // Segregate food revenue by item type (prepared vs packed)
+        let items = bill.billitems || [];
+        if (typeof items === 'string') {
+          try { items = JSON.parse(items); } catch(e) { items = []; }
+        }
+
+        if (Array.isArray(items) && items.length > 0) {
+          items.forEach(item => {
+            const type = (item.item_type || 'prepared').toLowerCase();
+            if (breakdown.foodSource[type] !== undefined) {
+               breakdown.foodSource[type] += (Number(item.total) || 0);
+            } else {
+               breakdown.foodSource.prepared += (Number(item.total) || 0);
+            }
+          });
         } else {
-          breakdown.foodSource.order_screen += menuCharges;
+          // Fallback: If items are missing but menuCharges exist, attribute to prepared
+          breakdown.foodSource.prepared += menuCharges;
         }
       }
+
+      const pm = (bill.paymentmethod || 'cash').toLowerCase();
+      if (pm.includes('cash')) breakdown.paymentMode.cash += amount;
+      else if (pm.includes('upi') || pm.includes('online')) breakdown.paymentMode.upi += amount;
+      else if (pm.includes('wallet')) breakdown.paymentMode.wallet += amount;
 
       if (session && session.gameid) {
         breakdown.gameReal[session.gameid] = (breakdown.gameReal[session.gameid] || 0) + tableCharges;
       }
 
-      let pMode = (bill.paymentmethod || 'cash').toLowerCase();
-      if (pMode === 'online' || pMode === 'card') pMode = 'upi';
-      if (breakdown.paymentMode[pMode] !== undefined) {
-        breakdown.paymentMode[pMode] += amount;
-      } else {
-        breakdown.paymentMode['cash'] += amount;
-      }
-
       return sum + amount;
     }, 0);
 
-    const gameRevenue = bills.reduce((sum, b) => sum + (Number(b.tablecharges) || 0), 0);
-    const foodRevenue = bills.reduce((sum, b) => sum + (Number(b.menucharges) || 0), 0);
+    // --- FINANCIAL SUMMARY ---
+    const gameRevenue = Object.values(breakdown.gameReal).reduce((s, v) => s + v, 0);
+    const foodRevenue = breakdown.foodSource.prepared + breakdown.foodSource.packed;
+    // netProfit will be the total revenue minus total expenses.
 
-    const validDurationBills = bills.filter(b => b.sessionduration > 0);
-    const avgSessionDuration = validDurationBills.length > 0
-      ? Math.round(validDurationBills.reduce((sum, b) => sum + b.sessionduration, 0) / validDurationBills.length)
+    // --- OTHER STATS ---
+    const avgSessionDuration = bills.length > 0 
+      ? Math.round(bills.reduce((s, b) => s + (Number(b.sessionduration) || 0), 0) / bills.length)
       : 0;
 
-    // --- EMPLOYEE SHIFT PERFORMANCE ---
-    // Fetch all shifts in this period 
-    let shiftsQuery = supabase
-      .from("shifts")
-      .select(`
-            id, 
-            user_id, 
-            check_in_time, 
-            check_out_time, 
-            total_hours, 
-            status,
-            users!inner(name, role, stationid)
-        `)
-      .gte("check_in_time", startDate.toISOString())
-      .lte("check_in_time", endDate.toISOString())
-      .order("check_in_time", { ascending: false });
-
-    if (req.stationId) {
-      shiftsQuery.eq("users.stationid", req.stationId);
-    }
-
-    const { data: shiftsData } = await shiftsQuery;
-
-    const employee_shifts = (shiftsData || []).map(shift => {
-      const shiftStart = new Date(shift.check_in_time);
-      const shiftEnd = shift.check_out_time ? new Date(shift.check_out_time) : new Date();
-
-      // Find bills generated by this user DURING this shift
-      // Logic: Bill created_by == shift.user_id AND created_at within shift time
-      const shiftBills = bills.filter(b => {
-        const billTime = new Date(b.createdAt);
-        // Safety check for created_by presence (added in recent migration)
-        // If b.created_by is missing, we can't attribute it.
-        if (b.created_by !== shift.user_id) return false;
-        return billTime >= shiftStart && billTime <= shiftEnd;
-      });
-
-      const billsGenerated = shiftBills.length;
-      const totalRevenue = shiftBills.reduce((sum, b) => sum + (Number(b.totalamount) || 0), 0);
-
-      // Calculate duration formatted
-      let durationStr = "Active";
-      if (shift.total_hours) {
-        durationStr = `${shift.total_hours} hrs`;
-      } else if (shift.check_out_time) {
-        const diff = (new Date(shift.check_out_time) - shiftStart) / (1000 * 60 * 60);
-        durationStr = `${diff.toFixed(2)} hrs`;
-      } else {
-        // Active
-        const diff = (new Date() - shiftStart) / (1000 * 60 * 60);
-        durationStr = `${diff.toFixed(2)} hrs (Active)`;
-      }
-
-      return {
-        id: shift.id,
-        user_id: shift.user_id,
-        name: shift.users?.name || "Unknown",
-        role: shift.users?.role || "Staff",
-        date: shiftStart.toLocaleDateString(),
-        time: `${shiftStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${shift.check_out_time ? new Date(shift.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Active'}`,
-        duration: durationStr,
-        bills_generated: billsGenerated,
-        revenue: totalRevenue,
-        revenueFormatted: `₹${totalRevenue.toFixed(2)}`
-      };
-    });
-
-    const hoursMap = new Array(24).fill(0);
+    // peak hour logic
+    const hourCounts = new Array(24).fill(0);
     bills.forEach(b => {
-      const date = new Date(b.createdAt);
-      const hour = date.getHours();
-      hoursMap[hour]++;
+      const h = new Date(b.createdAt).getHours();
+      hourCounts[h]++;
     });
-    const peakHourVal = Math.max(...hoursMap);
-    const peakHourIndex = hoursMap.indexOf(peakHourVal);
-    const peakHourLabel = `${peakHourIndex}:00 - ${peakHourIndex + 1}:00`;
+    const peakHourIndex = hourCounts.indexOf(Math.max(...hourCounts));
+    const peakHourLabel = `${peakHourIndex % 12 || 12}${peakHourIndex >= 12 ? 'PM' : 'AM'}`;
 
-    const prevRevenueVal = (prevRevenueData || []).reduce((sum, b) => sum + (Number(b.totalamount) || 0), 0);
-    // Total Expenses
+    // --- EXPENSES ---
     let expensesQuery = supabase
       .from("expenses")
       .select("amount, category")
-      .gte("date", startDate.toISOString().split('T')[0])
-      .lte("date", endDate.toISOString().split('T')[0]);
-
-    // Filter expenses by station
-    if (req.stationId) {
-      expensesQuery.eq("station_id", req.stationId);
-    }
-
+      .gte("date", startDate.toLocaleDateString('en-CA'))
+      .lte("date", endDate.toLocaleDateString('en-CA'));
+    if (req.stationId) expensesQuery.eq("stationid", req.stationId);
     const { data: expensesData } = await expensesQuery;
     
-    // Categorize expenses
-    const expenseCategories = {};
+    const expenseCats = {};
+    const segregation = { owner: 0, inventory: 0, kitchen: 0 };
     let totalExpenses = 0;
     (expensesData || []).forEach(item => {
       const cat = item.category || 'Operational';
       const amt = Number(item.amount) || 0;
-      expenseCategories[cat] = (expenseCategories[cat] || 0) + amt;
+      expenseCats[cat] = (expenseCats[cat] || 0) + amt;
       totalExpenses += amt;
+
+      if (cat === 'Inventory') {
+        segregation.inventory += amt;
+      } else if (cat === 'Kitchen') {
+        segregation.kitchen += amt;
+      } else {
+        segregation.owner += amt;
+      }
     });
 
     // --- Estimated Labour Cost Calculation ---
@@ -779,81 +746,87 @@ router.get("/summary", auth, stationContext, async (req, res) => {
         }
       });
 
-      totalExpenses += labourCost;
     }
 
     const expenses = totalExpenses;
     const netProfit = totalRevenue - expenses;
 
+    // Financial Breakdown for Profit Tab
+    const estimatedProfitBySource = {
+      game: Math.max(0, gameRevenue - segregation.owner),
+      prepared: Math.max(0, breakdown.foodSource.prepared - segregation.kitchen),
+      packed: Math.max(0, breakdown.foodSource.packed - segregation.inventory)
+    };
+
+    // employee shift summary
+    let shiftActivityQuery = supabase
+      .from("shifts")
+      .select("*, users!inner(name, role, stationid)")
+      .gte("check_in_time", startDate.toISOString())
+      .lte("check_in_time", endDate.toISOString());
+    if (req.stationId) shiftActivityQuery.eq("users.stationid", req.stationId);
+    const { data: shiftsData } = await shiftActivityQuery;
+
+    const employee_shifts = (shiftsData || []).map(shift => {
+      const sStart = new Date(shift.check_in_time);
+      const sEnd = shift.check_out_time ? new Date(shift.check_out_time) : new Date();
+      const sBills = bills.filter(b => b.created_by === shift.user_id && new Date(b.createdAt) >= sStart && new Date(b.createdAt) <= sEnd);
+      const rev = sBills.reduce((sum, b) => sum + (Number(b.totalamount) || 0), 0);
+      return {
+        id: shift.id,
+        name: shift.users?.name || "Staff",
+        date: sStart.toLocaleDateString(),
+        revenue: rev,
+        bills_generated: sBills.length
+      };
+    });
+
     // --- GAME DATA (Real) ---
     const gameData = await Promise.all(
       (gamesList || []).map(async (game) => {
-        let sessionCountQuery = supabase
+        let scQuery = supabase
           .from("activetables")
           .select("activeid", { count: "exact", head: true })
           .eq("gameid", game.gameid)
           .gte("starttime", startDate.toISOString())
           .lte("starttime", endDate.toISOString());
-        sessionCountQuery = applyStationFilter(sessionCountQuery, req.stationId);
-        const { count: sessionCount } = await sessionCountQuery;
-
-        const usage = (totalSessions || 0) > 0
-          ? Math.round(((sessionCount || 0) / (totalSessions || 1)) * 100)
-          : 0;
-
-        const realRevenue = breakdown.gameReal[game.gameid] || 0;
-
+        scQuery = applyStationFilter(scQuery, req.stationId);
+        const { count: sc } = await scQuery;
+        const usage = (totalSessions || 0) > 0 ? Math.round(((sc || 0) / (totalSessions || 1)) * 100) : 0;
+        const realRev = breakdown.gameReal[game.gameid] || 0;
         return {
-          name: game.gamename || game.game_name || "Game",
+          name: game.gamename || "Game",
           usage,
-          revenue: `₹${realRevenue.toFixed(0)}`,
-          revenueValue: realRevenue,
-          status: usage >= 70 ? "High usage" : usage >= 40 ? "Good usage" : "Low usage",
+          revenue: `₹${realRev.toFixed(0)}`,
+          revenueValue: realRev,
+          status: usage >= 70 ? "High usage" : usage >= 40 ? "Good" : "Low",
           statusColor: usage >= 70 ? "#FF8C42" : usage >= 40 ? "#FFC107" : "#FF5252",
           icon: "game-controller-outline",
         };
       })
     );
-    const colors = ["#FF8C42", "#FFC107", "#FF5252", "#4CAF50", "#2196F3", "#9C27B0"];
     gameData.sort((a, b) => b.usage - a.usage);
+
+    const prevRevenueVal = (prevRevenueData || []).reduce((sum, b) => sum + (Number(b.totalamount) || 0), 0);
 
     res.json({
       currentDate,
       period,
       stats: [
-        {
-          title: "Active Wallets",
-          value: activeWallets,
-          trend: calculateTrend(activeWallets, prevActiveWallets),
-          positive: activeWallets >= prevActiveWallets
-        },
-        {
-          title: "New Members",
-          value: newMembers,
-          trend: calculateTrend(newMembers, prevNewMembers),
-          positive: newMembers >= prevNewMembers
-        },
-        {
-          title: "Low Stock Items",
-          value: lowStockCount,
-          trend: lowStockCount > 5 ? "Critical" : lowStockCount > 0 ? "Warning" : "Healthy",
-          positive: lowStockCount === 0
-        },
-        {
-          title: "Inactive Wallets",
-          value: inactiveWallets,
-          trend: calculateTrend(inactiveWallets, prevInactiveWallets),
-          positive: inactiveWallets <= prevInactiveWallets
-        },
-        {
-          title: "Credit Members",
-          value: creditMembers,
-          trend: calculateTrend(creditMembers, prevCreditMembers),
-          positive: creditMembers <= prevCreditMembers
-        }
+        { title: "Active Wallets", value: activeWallets, trend: calculateTrend(activeWallets, prevActiveWallets), positive: activeWallets >= prevActiveWallets },
+        { title: "New Members", value: newMembers, trend: calculateTrend(newMembers, prevNewMembers), positive: newMembers >= prevNewMembers },
+        { title: "Low Stock Items", value: lowStockCount, trend: lowStockCount > 5 ? "Critical" : "Healthy" },
+        { title: "Inactive Wallets", value: inactiveWallets, trend: calculateTrend(inactiveWallets, prevInactiveWallets), positive: inactiveWallets <= prevInactiveWallets },
+        { title: "Credit Members", value: creditMembers, trend: `To Take: ₹${totalOwed.toLocaleString()}`, positive: creditMembers <= prevCreditMembers }
       ],
+      debtors: (debtorsData || []).map(d => ({
+        name: d.customers?.name || "Unknown",
+        balance: d.balance,
+        id: d.customerid
+      })),
+      totalOwed,
       gameData: gameData.slice(0, 5),
-      chartData: gameData.slice(0, 5).map((g, i) => ({ game: g.name, value: g.usage, color: colors[i % colors.length] })),
+      chartData: gameData.slice(0, 5).map((g, i) => ({ game: g.name, value: g.usage, color: ["#FF8C42", "#FFC107", "#FF5252", "#4CAF50", "#2196F3"][i % 5] })),
       summary: {
         totalRevenue,
         totalRevenueFormatted: `₹${totalRevenue.toFixed(2)}`,
@@ -861,7 +834,6 @@ router.get("/summary", auth, stationContext, async (req, res) => {
         gameRevenueFormatted: `₹${gameRevenue.toFixed(2)}`,
         foodRevenue,
         foodRevenueFormatted: `₹${foodRevenue.toFixed(2)}`,
-        revenueTrend: calculateTrend(totalRevenue, prevRevenueVal),
         netProfit,
         netProfitFormatted: `₹${netProfit.toFixed(2)}`,
         expenses,
@@ -873,8 +845,11 @@ router.get("/summary", auth, stationContext, async (req, res) => {
         activeTables,
         totalTables,
         breakdown,
-        expenseCategories,
-        employee_shifts // Added field
+        employee_shifts,
+        totalOwed,
+        expenseCategories: expenseCats,
+        expenseSegregation: segregation,
+        estimatedProfitBySource
       },
     });
   } catch (error) {

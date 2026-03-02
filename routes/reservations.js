@@ -348,21 +348,23 @@ router.post(
               }
 
               if (validItems.length > 0) {
+                // Track if any prepared items exist
+                const hasPreparedItems = validItems.some(vi => (vi.menuItem.item_type || 'prepared') !== 'packed');
+
                 const orderData = addStationToData(
                   {
                     userId: req.user.id,
                     personName: customer_name,
                     total: orderTotal,
                     paymentMethod: "offline", // Pay Later
-                    status: "pending", // Pending Kitchen Order
+                    status: hasPreparedItems ? "pending" : "completed",
                     order_source: "reservation",
                     reservation_id: reservation.id,
                     created_by: req.user.id,
-                    // table_id? We have it, but maybe better to link when seated.
-                    // Linking generic table_id helps filtering?
                     table_id: table_id ? parseInt(table_id) : null,
                   },
                   req.stationId,
+                  "stationid",
                 );
 
                 const order = await Order.create(orderData);
@@ -373,7 +375,13 @@ router.post(
                     qty: vi.qty,
                     priceEach: vi.price,
                   });
-                  // Stock deduction logic can go here
+                  // Stock deduction
+                  if (vi.menuItem.stock !== undefined) {
+                    await MenuItem.update(
+                      { stock: Math.max(0, vi.menuItem.stock - vi.qty) },
+                      { where: { id: vi.menuItem.id } }
+                    );
+                  }
                 }
               }
             } catch (e) {
