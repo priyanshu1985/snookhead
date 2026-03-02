@@ -657,7 +657,7 @@ router.post("/forgot-password", async (req, res) => {
 
     // Create reset link
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
+    const resetLink = `${frontendUrl}/reset-password?token=${resetToken}&mode=owner`;
 
     // Send email with reset link
     const transporter = nodemailer.createTransport({
