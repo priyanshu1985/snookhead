@@ -576,7 +576,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       flow: { dashboard: 0, queue: 0, reservation: 0 },
       bookingType: { timer: 0, set: 0, frame: 0 },
       foodSource: { prepared: 0, packed: 0 },
-      paymentMode: { cash: 0, upi: 0, wallet: 0 },
+      paymentMode: { cash: 0, upi: 0, wallet: 0, credit: 0 },
       gameReal: {}
     };
 
@@ -635,6 +635,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       if (pm.includes('cash')) breakdown.paymentMode.cash += amount;
       else if (pm.includes('upi') || pm.includes('online')) breakdown.paymentMode.upi += amount;
       else if (pm.includes('wallet')) breakdown.paymentMode.wallet += amount;
+      else if (pm.includes('credit') || pm.includes('member')) breakdown.paymentMode.credit += amount;
 
       if (session && session.gameid) {
         breakdown.gameReal[session.gameid] = (breakdown.gameReal[session.gameid] || 0) + tableCharges;
@@ -665,27 +666,55 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     // --- EXPENSES ---
     let expensesQuery = supabase
       .from("expenses")
-      .select("amount, category")
-      .gte("date", startDate.toLocaleDateString('en-CA'))
-      .lte("date", endDate.toLocaleDateString('en-CA'));
+      .select("amount, category, expense_type, date");
     if (req.stationId) expensesQuery.eq("stationid", req.stationId);
-    const { data: expensesData } = await expensesQuery;
+    
+    const { data: allExpensesData } = await expensesQuery;
     
     const expenseCats = {};
     const segregation = { owner: 0, inventory: 0, kitchen: 0 };
+    const ownerTypeBreakdown = { fixed: 0, log: 0 };
     let totalExpenses = 0;
-    (expensesData || []).forEach(item => {
-      const cat = item.category || 'Operational';
-      const amt = Number(item.amount) || 0;
-      expenseCats[cat] = (expenseCats[cat] || 0) + amt;
-      totalExpenses += amt;
 
-      if (cat === 'Inventory') {
-        segregation.inventory += amt;
-      } else if (cat === 'Kitchen') {
-        segregation.kitchen += amt;
+    (allExpensesData || []).forEach(item => {
+      const itemDate = new Date(item.date);
+      const amt = Number(item.amount) || 0;
+      const cat = item.category || 'Operational';
+
+      if (item.expense_type === 'fixed') {
+        // 1. Fixed Expenses: Count for every month from its creation up to the period's end
+        let recurrenceCount = 0;
+        let calcStart = new Date(Math.max(itemDate, startDate));
+        calcStart = new Date(calcStart.getFullYear(), calcStart.getMonth(), 1);
+        const calcEnd = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+        
+        if (itemDate <= endDate) {
+          const monthDiff = (calcEnd.getFullYear() - calcStart.getFullYear()) * 12 + (calcEnd.getMonth() - calcStart.getMonth());
+          recurrenceCount = Math.max(0, monthDiff + 1);
+        }
+
+        if (recurrenceCount > 0) {
+          const totalAmt = amt * recurrenceCount;
+          expenseCats[cat] = (expenseCats[cat] || 0) + totalAmt;
+          totalExpenses += totalAmt;
+          segregation.owner += totalAmt;
+          ownerTypeBreakdown.fixed += totalAmt;
+        }
       } else {
-        segregation.owner += amt;
+        // 2. Log/Variable Expenses: Only count if within the specific range
+        if (itemDate >= startDate && itemDate <= endDate) {
+          expenseCats[cat] = (expenseCats[cat] || 0) + amt;
+          totalExpenses += amt;
+          
+          if (cat === 'Inventory') {
+            segregation.inventory += amt;
+          } else if (cat === 'Kitchen') {
+            segregation.kitchen += amt;
+          } else {
+            segregation.owner += amt;
+            ownerTypeBreakdown.log += amt;
+          }
+        }
       }
     });
 
@@ -849,6 +878,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
         totalOwed,
         expenseCategories: expenseCats,
         expenseSegregation: segregation,
+        ownerTypeBreakdown,
         estimatedProfitBySource
       },
     });

@@ -39,7 +39,7 @@ router.get("/", auth, stationContext, authorize("owner", "admin"), async (req, r
 // Add new expense
 router.post("/", auth, stationContext, requireStation, authorize("owner", "admin"), async (req, res) => {
   try {
-    const { title, amount, category, date, description } = req.body;
+    const { title, amount, category, date, description, expenseType } = req.body;
 
     if (!title || !amount || !date) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -51,6 +51,7 @@ router.post("/", auth, stationContext, requireStation, authorize("owner", "admin
       category: category || "Other",
       date,
       description,
+      expense_type: expenseType || "log",
       created_by: req.user.id,
       createdAt: new Date(),
       updatedAt: new Date(),
