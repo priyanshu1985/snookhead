@@ -210,7 +210,7 @@ router.put(
       if (pricePerMin !== undefined) updateData.pricePerMin = pricePerMin;
       if (status !== undefined) updateData.status = status;
       if (frameCharge !== undefined) updateData.frameCharge = frameCharge;
-      
+
       // Handle game_id mapping logic
       if (game_id !== undefined) updateData.gameid = game_id;
       else if (gameid !== undefined) updateData.gameid = gameid;
@@ -258,7 +258,7 @@ router.delete(
 
       // Check for active sessions on this table
       const activeSessions = await ActiveTable.findAll({
-        where: addStationFilter({ tableid: parsedTableId, status: "active" }, req.stationId),
+        where: addStationFilter({ tableid: parsedTableId, status: ["active", "paused"] }, req.stationId),
       });
 
       if (activeSessions.length > 0) {

@@ -29,6 +29,10 @@ module.exports = (sequelize, DataTypes) => {
       reservation_id: { type: DataTypes.INTEGER, allowNull: true },
       // Actual timestamp for the current frame timer
       current_frame_start_time: { type: DataTypes.DATE, allowNull: true },
+      // Backend pause syncing
+      pause_start_time: { type: DataTypes.DATE, allowNull: true },
+      accumulated_pause_seconds: { type: DataTypes.INTEGER, defaultValue: 0 },
+      auto_resume_at: { type: DataTypes.DATE, allowNull: true },
       status: {
         type: DataTypes.ENUM("active", "paused", "completed"),
         defaultValue: "active",

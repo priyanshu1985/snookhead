@@ -36,7 +36,7 @@ router.get("/", auth, stationContext, async (req, res) => {
   try {
     // Filter for active sessions only by default if no other status provided
     // This prevents fetching entire history
-    const baseFilter = { status: "active" };
+    const baseFilter = { status: ["active", "paused"] };
 
     // Allow overriding status via query param if needed (e.g. for reports later) but default to active
     const where = addStationFilter(
@@ -118,7 +118,7 @@ router.post(
         // to prevent "ghost" sessions.
         const existingSessions = await ActiveTable.findAll({
           where: addStationFilter(
-            { tableid: table_id, status: "active" },
+            { tableid: table_id, status: ["active", "paused"] },
             req.stationId,
           ),
         });
@@ -130,7 +130,7 @@ router.post(
             { endtime: endTime, status: "completed" },
             {
               where: addStationFilter(
-                { tableid: table_id, status: "active" },
+                { tableid: table_id, status: ["active", "paused"] },
                 req.stationId,
               ),
             },
@@ -462,17 +462,28 @@ router.post(
         return res.status(404).json({ error: "Session not found" });
       }
 
-      if (session.status !== "active") {
-        return res.status(400).json({ error: "Session is not active" });
+      if (session.status !== "active" && session.status !== "paused") {
+        return res.status(400).json({ error: "Session is not active or paused" });
       }
 
       // close session
       const endTime = new Date();
       const startTime = new Date(session.starttime); // Use starttime from DB
+
+      let finalAccumulatedPause = session.accumulated_pause_seconds || 0;
+      if (session.status === 'paused' && session.pause_start_time) {
+        let actualResumeTime = endTime;
+        if (session.auto_resume_at && endTime > new Date(session.auto_resume_at)) {
+          actualResumeTime = new Date(session.auto_resume_at);
+        }
+        const activePauseMs = Math.max(0, actualResumeTime - new Date(session.pause_start_time));
+        finalAccumulatedPause += Math.floor(activePauseMs / 1000);
+      }
+
       session.endtime = endTime;
       session.status = "completed";
       await ActiveTable.update(
-        { endtime: endTime, status: "completed" },
+        { endtime: endTime, status: "completed", accumulated_pause_seconds: finalAccumulatedPause },
         { where: { activeid: session.activeid } },
       );
 
@@ -558,9 +569,10 @@ router.post(
         });
       }
 
-      // compute time in minutes (rounded up)
-      const diffMs = endTime - startTime;
-      const minutes = Math.ceil(diffMs / 60000);
+      // compute time in minutes (rounded up), deducting paused time
+      let diffMs = endTime - startTime;
+      diffMs -= (finalAccumulatedPause * 1000);
+      const minutes = Math.max(0, Math.ceil(diffMs / 60000));
 
       const pricePerMin = Number(table.pricePerMin || 0);
       const frameCharge = Number(table.frameCharge || 0);
@@ -648,10 +660,19 @@ router.post(
 
       // Close session
       const endTime = new Date();
-      // session.endtime = endTime;
-      // session.status = "completed";
+
+      let finalAccumulatedPause = session.accumulated_pause_seconds || 0;
+      if (session.status === 'paused' && session.pause_start_time) {
+        let actualResumeTime = endTime;
+        if (session.auto_resume_at && endTime > new Date(session.auto_resume_at)) {
+          actualResumeTime = new Date(session.auto_resume_at);
+        }
+        const activePauseMs = Math.max(0, actualResumeTime - new Date(session.pause_start_time));
+        finalAccumulatedPause += Math.floor(activePauseMs / 1000);
+      }
+
       await ActiveTable.update(
-        { endtime: endTime, status: "completed" },
+        { endtime: endTime, status: "completed", accumulated_pause_seconds: finalAccumulatedPause },
         { where: { activeid: session.activeid } },
       );
 
@@ -709,8 +730,9 @@ router.post(
       // Compute table charges
       // Use booked duration if available (timer mode), otherwise use elapsed time
       const startTime = new Date(session.starttime);
-      const diffMs = endTime - startTime;
-      const elapsedMinutes = Math.ceil(diffMs / 60000);
+      let diffMs = endTime - startTime;
+      diffMs -= (finalAccumulatedPause * 1000);
+      const elapsedMinutes = Math.max(0, Math.ceil(diffMs / 60000));
       const minutes = session.durationminutes || elapsedMinutes;
       const pricePerMin = Number(table?.pricePerMin || 0);
       // Don't add frame charges for timer-based sessions (only for frame-based bookings)
@@ -909,7 +931,140 @@ router.put(
   },
 );
 
-// Get session by ID
+// ----------------------------------------------------
+// NEW: PAUSE / RESUME ROUTES
+// ----------------------------------------------------
+
+// Get info about max pause time based on upcoming reservations
+router.get("/:id/pause-info", auth, stationContext, async (req, res) => {
+  try {
+    const where = addStationFilter({ activeid: req.params.id }, req.stationId);
+    const session = await ActiveTable.findOne({ where });
+    if (!session) return res.status(404).json({ error: "Session not found" });
+
+    // Find next pending reservation for this table
+    const now = new Date();
+    const tableReservations = await Reservation.findAll({
+      where: addStationFilter({ tableId: session.tableid, status: "pending" }, req.stationId),
+    });
+
+    // Sort by reservation time
+    tableReservations.sort((a, b) => new Date(a.reservationtime || a.fromTime) - new Date(b.reservationtime || b.fromTime));
+
+    const nextRes = tableReservations.find(r => new Date(r.reservationtime || r.fromTime) > now);
+
+    let maxPauseMinutes = null;
+
+    if (nextRes) {
+      const rTime = new Date(nextRes.reservationtime || nextRes.fromTime);
+
+      // Calculate projected end time of current game. 
+      // If timer mode, it has an end time. If stopwatch/frame, assume now.
+      let projectedEndTime = now;
+      if (session.bookingtype === 'timer' && session.bookingendtime) {
+        projectedEndTime = new Date(session.bookingendtime);
+      }
+
+      const diffMs = rTime - projectedEndTime;
+      if (diffMs > 0) {
+        // Leave a 5 min buffer before the reservation starts
+        maxPauseMinutes = Math.max(0, Math.floor(diffMs / 60000) - 5);
+      } else {
+        maxPauseMinutes = 0; // Already bleeding into reservation or at edge
+      }
+    }
+
+    res.json({ max_pause_minutes: maxPauseMinutes });
+  } catch (err) {
+    console.error("Pause Info Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Pause session
+router.post("/:id/pause", auth, stationContext, authorize("staff", "owner", "admin", "manager"), async (req, res) => {
+  try {
+    const where = addStationFilter({ activeid: req.params.id }, req.stationId);
+    const session = await ActiveTable.findOne({ where });
+    if (!session) return res.status(404).json({ error: "Session not found" });
+
+    console.log("PAUSE ROUTE - session status:", session.status, session);
+
+    if (session.status !== 'active') return res.status(400).json({ error: "Only active sessions can be paused." });
+
+    const now = new Date();
+    const { max_pause_minutes } = req.body; // optionally passed from frontend
+
+    const updates = {
+      status: 'paused',
+      pause_start_time: now
+    };
+
+    let autoResumeAt = null;
+    if (max_pause_minutes !== undefined && max_pause_minutes !== null) {
+      autoResumeAt = new Date(now.getTime() + max_pause_minutes * 60000);
+    }
+    updates.auto_resume_at = autoResumeAt;
+
+    await ActiveTable.update(updates, { where });
+
+    res.json({ message: "Game paused", auto_resume_at: autoResumeAt });
+  } catch (err) {
+    console.error("Pause Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Resume session
+router.post("/:id/resume", auth, stationContext, authorize("staff", "owner", "admin", "manager"), async (req, res) => {
+  try {
+    const where = addStationFilter({ activeid: req.params.id }, req.stationId);
+    const session = await ActiveTable.findOne({ where });
+    if (!session) return res.status(404).json({ error: "Session not found" });
+
+    if (session.status !== 'paused') return res.status(400).json({ error: "Session is not paused." });
+
+    const now = new Date();
+    const pauseStart = new Date(session.pause_start_time || session.starttime);
+
+    // If auto_resume_at passed while the frontend was offline, cap the resume time
+    let actualResumeTime = now;
+    if (session.auto_resume_at && now > new Date(session.auto_resume_at)) {
+      actualResumeTime = new Date(session.auto_resume_at);
+    }
+    const diffMs = Math.max(0, actualResumeTime - pauseStart);
+    const diffSeconds = Math.floor(diffMs / 1000);
+
+    const newAccumulated = (session.accumulated_pause_seconds || 0) + diffSeconds;
+
+    const updates = {
+      status: 'active',
+      pause_start_time: null,
+      auto_resume_at: null,
+      accumulated_pause_seconds: newAccumulated
+    };
+
+    // If timer mode, push booking end time
+    if (session.bookingtype === 'timer' && session.bookingendtime) {
+      const oldEnd = new Date(session.bookingendtime);
+      updates.bookingendtime = new Date(oldEnd.getTime() + diffMs);
+    }
+
+    // If frame mode, push current frame start time to not penalize them
+    if (session.bookingtype === 'frame' && session.current_frame_start_time) {
+      const oldFrameStart = new Date(session.current_frame_start_time);
+      updates.current_frame_start_time = new Date(oldFrameStart.getTime() + diffMs);
+    }
+
+    await ActiveTable.update(updates, { where });
+    const updatedSession = await ActiveTable.findOne({ where });
+
+    res.json({ message: "Game resumed", session: updatedSession });
+  } catch (err) {
+    console.error("Resume Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 router.get("/:id", auth, stationContext, async (req, res) => {
   try {
     const where = addStationFilter({ activeid: req.params.id }, req.stationId);

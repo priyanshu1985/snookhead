@@ -70,8 +70,8 @@ router.get("/", auth, stationContext, async (req, res) => {
             reservation.duration_minutes ||
             (reservation.toTime && reservation.fromTime
               ? (new Date(reservation.toTime) -
-                  new Date(reservation.fromTime)) /
-                60000
+                new Date(reservation.fromTime)) /
+              60000
               : 60),
         };
 
@@ -182,7 +182,7 @@ router.post(
       // Check for conflicts with ACTIVE SESSIONS
       const activeSession = await ActiveTable.findOne({
         where: addStationFilter(
-          { tableid: table_id, status: "active" },
+          { tableid: table_id, status: ["active", "paused"] },
           req.stationId,
         ),
       });
@@ -205,12 +205,12 @@ router.post(
         ) {
           activeEnd = new Date(
             activeSession.bookingendtime ||
-              activeSession.endtimer ||
-              activeSession.endtime,
+            activeSession.endtimer ||
+            activeSession.endtime,
           );
         } else if (
           (activeSession.bookingtype || activeSession.booking_type) ===
-            "timer" &&
+          "timer" &&
           activeDuration
         ) {
           activeEnd = new Date(activeStart.getTime() + activeDuration * 60000);
@@ -266,8 +266,8 @@ router.post(
         const existingEnd = r.toTime
           ? new Date(r.toTime)
           : new Date(
-              existingStart.getTime() + (r.durationminutes || 60) * 60000,
-            );
+            existingStart.getTime() + (r.durationminutes || 60) * 60000,
+          );
 
         // Check for time overlap
         const overlap = fromTime < existingEnd && toTime > existingStart;
@@ -277,15 +277,15 @@ router.post(
       if (conflictingReservation) {
         const existStart = new Date(
           conflictingReservation.fromTime ||
-            conflictingReservation.reservationtime ||
-            conflictingReservation.fromtime,
+          conflictingReservation.reservationtime ||
+          conflictingReservation.fromtime,
         );
         const existEnd = conflictingReservation.toTime
           ? new Date(conflictingReservation.toTime)
           : new Date(
-              existStart.getTime() +
-                (conflictingReservation.durationminutes || 60) * 60000,
-            );
+            existStart.getTime() +
+            (conflictingReservation.durationminutes || 60) * 60000,
+          );
 
         const holderName =
           conflictingReservation.customerName ||
@@ -483,9 +483,9 @@ router.put("/:id", auth, stationContext, async (req, res) => {
         updates.start_time ||
         (r.fromTime
           ? new Date(r.fromTime).toLocaleTimeString("en-GB", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })
+            hour: "2-digit",
+            minute: "2-digit",
+          })
           : null);
 
       if (dateStr && timeStr) {
