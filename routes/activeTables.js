@@ -385,7 +385,7 @@ router.post(
                 if (inventoryItem) {
                   try {
                     const { previousStock, newStock } = await Inventory.adjustStock(inventoryItem.id, -Number(qty));
-                    
+
                     // Log the deduction
                     if (InventoryLog) {
                       await InventoryLog.create({
@@ -630,19 +630,19 @@ router.post(
 
       if (session && session.status !== "active") {
         if (session.status !== "completed") {
-           return res.status(400).json({ error: `Session status is ${session.status}` });
+          return res.status(400).json({ error: `Session status is ${session.status}` });
         }
         // If already completed, still check queue so the second caller (e.g. Dashboard) can catch waitlisted people
         const table = await TableAsset.findByPk(session.tableid);
         let qResult = { assigned: false };
         if (table) {
-           qResult = await checkQueueAndAssign(table.id, session.gameid, req.stationId, false);
+          qResult = await checkQueueAndAssign(table.id, session.gameid, req.stationId, false);
         }
-        return res.json({ 
-          success: true, 
-          message: "Session was already released", 
-          session, 
-          queueAssignment: qResult.candidate || null 
+        return res.json({
+          success: true,
+          message: "Session was already released",
+          session,
+          queueAssignment: qResult.candidate || null
         });
       }
 
@@ -887,11 +887,8 @@ router.put(
         allowedUpdates.durationminutes = updates.duration_minutes; // REVERTED
       if (updates.food_orders !== undefined)
         allowedUpdates.food_orders = updates.food_orders; // New persistent cart
-
-      // Custom logic for "Add Next Frame" action
-      if (updates.add_next_frame) {
-        allowedUpdates.framecount = (session.framecount || session.frame_count || 0) + 1;
-        allowedUpdates.current_frame_start_time = new Date().toISOString();
+      if (updates.current_frame_start_time !== undefined) {
+        allowedUpdates.current_frame_start_time = updates.current_frame_start_time;
       }
 
       if (Object.keys(allowedUpdates).length === 0) {
