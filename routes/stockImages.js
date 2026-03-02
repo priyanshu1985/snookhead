@@ -1,141 +1,93 @@
 import express from "express";
-import fs from "fs/promises";
-import path from "path";
-import { fileURLToPath } from "url";
-import { auth } from "../middleware/auth.js";
+import { v2 as cloudinary } from "cloudinary";
+import { Readable } from "stream";
 import fetch from "node-fetch";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { auth } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// Directory containing stock game images
-const GAME_IMAGES_DIR = path.join(__dirname, "..", "public", "game-images");
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
-// Directory containing stock menu images
-const MENU_IMAGES_DIR = path.join(__dirname, "..", "public", "menu-images");
+// Helper: upload a buffer to Cloudinary via stream
+const uploadBufferToCloudinary = (buffer, options = {}) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { resource_type: "image", ...options },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      }
+    );
+    Readable.from(buffer).pipe(uploadStream);
+  });
+};
 
-// Allowed image extensions
-const ALLOWED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"];
+// Helper: list images from a Cloudinary folder
+const listCloudinaryImages = async (folder) => {
+  const result = await cloudinary.api.resources({
+    type: "upload",
+    prefix: folder,
+    max_results: 200,
+  });
+
+  return (result.resources || []).map((r) => ({
+    key: r.public_id,
+    filename: r.public_id.split("/").pop(),
+    url: r.secure_url,
+  }));
+};
 
 /**
  * GET /api/stock-images/games
- * Lists all stock images available for games
- * Returns array of { key, filename, url }
+ * Lists all stock game images stored in Cloudinary
  */
 router.get("/games", auth, async (req, res) => {
   try {
-    // Check if directory exists
-    try {
-      await fs.access(GAME_IMAGES_DIR);
-    } catch {
-      // Directory doesn't exist, return empty array
-      return res.json([]);
-    }
-
-    // Read directory contents
-    const files = await fs.readdir(GAME_IMAGES_DIR);
-
-    // Filter for image files and map to response format
-    const images = files
-      .filter((file) => {
-        const ext = path.extname(file).toLowerCase();
-        return ALLOWED_EXTENSIONS.includes(ext);
-      })
-      .map((filename) => {
-        const key = filename;
-        return {
-          key,
-          filename,
-          url: "/static/game-images/" + encodeURIComponent(filename),
-        };
-      })
-      .sort((a, b) => a.filename.localeCompare(b.filename));
-
+    const images = await listCloudinaryImages("snookhead/stock-images/games");
     res.json(images);
   } catch (err) {
-    console.error("Error listing stock images:", err);
-    res.status(500).json({ error: "Failed to list stock images" });
+    console.error("Error listing stock game images:", err);
+    // Return empty array rather than crashing if folder doesn't exist yet
+    res.json([]);
   }
 });
 
 /**
  * GET /api/stock-images/menu
- * Lists all stock images available for menu items
- * Returns array of { key, filename, url }
+ * Lists all stock menu images stored in Cloudinary
  */
 router.get("/menu", auth, async (req, res) => {
   try {
-    // Check if directory exists
-    try {
-      await fs.access(MENU_IMAGES_DIR);
-    } catch {
-      // Directory doesn't exist, return empty array
-      return res.json([]);
-    }
-
-    // Read directory contents
-    const files = await fs.readdir(MENU_IMAGES_DIR);
-
-    // Filter for image files and map to response format
-    const images = files
-      .filter((file) => {
-        const ext = path.extname(file).toLowerCase();
-        return ALLOWED_EXTENSIONS.includes(ext);
-      })
-      .map((filename) => {
-        const key = filename;
-        return {
-          key,
-          filename,
-          url: "/static/menu-images/" + encodeURIComponent(filename),
-        };
-      })
-      .sort((a, b) => a.filename.localeCompare(b.filename));
-
+    const images = await listCloudinaryImages("snookhead/stock-images/menu");
     res.json(images);
   } catch (err) {
-    console.error("Error listing menu stock images:", err);
-    res.status(500).json({ error: "Failed to list menu stock images" });
+    console.error("Error listing stock menu images:", err);
+    res.json([]);
   }
 });
 
-// Add image to stock (download from URL)
+/**
+ * POST /api/stock-images/add
+ * Downloads an external image URL and saves it to Cloudinary
+ * Body: { folder: 'games' | 'menu', imageUrl: string }
+ */
 router.post("/add", auth, async (req, res) => {
   try {
     const { folder, imageUrl } = req.body;
 
-    if (!folder || !['games', 'menu'].includes(folder)) {
+    if (!folder || !["games", "menu"].includes(folder)) {
       return res.status(400).json({ error: "Invalid folder. Must be 'games' or 'menu'." });
     }
     if (!imageUrl) {
       return res.status(400).json({ error: "Image URL is required." });
     }
 
-    const targetDir = folder === 'games' ? GAME_IMAGES_DIR : MENU_IMAGES_DIR;
-
-    // Ensure directory exists
-    try {
-      await fs.access(targetDir);
-    } catch {
-      await fs.mkdir(targetDir, { recursive: true });
-    }
-
-    // Determine filename
-    // Try to get extension from URL or default to .jpg
-    let ext = path.extname(imageUrl).split('?')[0].toLowerCase(); // Remove query params
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      ext = ".jpg"; // Fallback
-    }
-
-    // Create unique filename
-    const timestamp = Date.now();
-    const cleanName = path.basename(imageUrl, ext).replace(/[^a-z0-9]/gi, '_').substring(0, 20);
-    const filename = `stock_${cleanName}_${timestamp}${ext}`;
-    const filePath = path.join(targetDir, filename);
-
-    // Fetch and save
+    // Fetch the image from the external URL
     const response = await fetch(imageUrl);
     if (!response.ok) {
       throw new Error(`Failed to fetch image: ${response.statusText}`);
@@ -144,15 +96,19 @@ router.post("/add", auth, async (req, res) => {
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    await fs.writeFile(filePath, buffer);
+    // Build a clean filename from the URL
+    const timestamp = Date.now();
+    const rawName = imageUrl.split("/").pop().split("?")[0].replace(/[^a-z0-9]/gi, "_").substring(0, 20);
+    const publicId = `snookhead/stock-images/${folder}/stock_${rawName}_${timestamp}`;
+
+    const result = await uploadBufferToCloudinary(buffer, { public_id: publicId, overwrite: false });
 
     res.json({
       success: true,
-      key: filename, // The key is the filename for stock images
-      url: `/static/${folder}-images/${filename}`,
-      filename: filename
+      key: result.public_id,
+      url: result.secure_url,
+      filename: result.public_id.split("/").pop(),
     });
-
   } catch (err) {
     console.error("Error adding stock image:", err);
     res.status(500).json({ error: "Failed to add image to stock" });
