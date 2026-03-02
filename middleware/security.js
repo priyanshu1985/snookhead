@@ -8,7 +8,7 @@ const securityHeaders = (req, res, next) => {
   );
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' data: https://cdnjs.cloudflare.com https://r2cdn.perplexity.ai; img-src 'self' data: https:; connect-src 'self' http://localhost:4000 ws://localhost:5173 https://fciukqmsyflflzdytqrt.supabase.co;"
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' data: https://cdnjs.cloudflare.com https://r2cdn.perplexity.ai; img-src 'self' data: https:; connect-src 'self' http://localhost:4000 ws://localhost:5173 https://fciukqmsyflflzdytqrt.supabase.co https://snookhead.onrender.com;"
   );
   res.removeHeader("X-Powered-By");
   next();

@@ -4,12 +4,12 @@ import "dotenv/config";
 import dns from "node:dns";
 
 // 🔥 Bypassing local DNS hijacking by forcing Google DNS
-try {
-  dns.setServers(["8.8.8.8", "8.8.4.4"]);
-  console.log("🛠️ DNS servers forced to Google DNS (8.8.8.8)");
-} catch (error) {
-  console.warn("⚠️ Failed to set custom DNS servers:", error.message);
-}
+// try {
+//   dns.setServers(["8.8.8.8", "8.8.4.4"]);
+//   console.log("🛠️ DNS servers forced to Google DNS (8.8.8.8)");
+// } catch (error) {
+//   console.warn("⚠️ Failed to set custom DNS servers:", error.message);
+// }
 
 if (dns.setDefaultResultOrder) {
   dns.setDefaultResultOrder("ipv4first");
