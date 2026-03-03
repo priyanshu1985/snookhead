@@ -271,7 +271,7 @@ router.post(
   authorize("staff", "admin", "owner"),
   async (req, res) => {
     try {
-      const { customer_id, amount } = req.body;
+      const { customer_id, amount, paymentMethod } = req.body;
 
       if (!amount || amount <= 0) {
         return res.status(400).json({ error: "Invalid amount" });
@@ -298,7 +298,7 @@ router.post(
           balanceafter: newBalance,
           stationid: req.stationId,
           type: "TOPUP",
-          description: "Money Added via Panel",
+          description: `Money Added via ${paymentMethod || "Cash"}`,
           createdAt: new Date()
         }
       );
@@ -309,6 +309,62 @@ router.post(
       res.json({
         message: "Amount added",
         new_balance: wallet.balance,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+/* =====================================================
+   CLEAR CREDIT - Set negative balance to zero
+   ===================================================== */
+router.post(
+  "/clear-credit",
+  auth,
+  stationContext,
+  authorize("staff", "admin", "owner"),
+  async (req, res) => {
+    try {
+      const { customer_id, paymentMethod } = req.body;
+
+      const wallet = await findWalletByCustomerId(customer_id, req.stationId);
+      if (!wallet) {
+        return res.status(404).json({ error: "Wallet not found for this customer" });
+      }
+
+      if (Number(wallet.balance) >= 0) {
+        return res.status(400).json({ error: "No credit to clear. Wallet balance is already zero or positive." });
+      }
+
+      const deficitAmount = Math.abs(Number(wallet.balance));
+      const newBalance = 0;
+
+      await Wallet.update({
+        balance: newBalance,
+        lasttransactionat: new Date()
+      }, { where: { id: wallet.id } });
+
+      // Create Transaction Record
+      await WalletTransaction.create(
+        {
+          walletid: wallet.id,
+          customerid: wallet.customerid,
+          amount: deficitAmount,
+          balancebefore: wallet.balance,
+          balanceafter: newBalance,
+          stationid: req.stationId,
+          type: "TOPUP",
+          description: `Credit Cleared via ${paymentMethod || "Cash"}`,
+          createdAt: new Date()
+        }
+      );
+
+      res.json({
+        message: "Credit cleared successfully",
+        new_balance: newBalance,
+        cleared_amount: deficitAmount,
       });
     } catch (err) {
       console.error(err);
@@ -435,6 +491,65 @@ router.post(
   }
 );
 
+
+
+/* =====================================================
+   CLEAR CREDIT - filtered by station
+   ===================================================== */
+router.post(
+  "/clear-credit",
+  auth,
+  stationContext,
+  authorize("staff", "admin", "owner"),
+  async (req, res) => {
+    try {
+      const { customer_id, paymentMethod } = req.body;
+
+      const wallet = await findWalletByCustomerId(customer_id, req.stationId);
+      if (!wallet) {
+        return res.status(404).json({ error: "Wallet not found for this customer" });
+      }
+
+      if (Number(wallet.balance) >= 0) {
+        return res.status(400).json({ error: "No credit to clear. Wallet balance is positive or zero." });
+      }
+
+      const deficitAmount = Math.abs(Number(wallet.balance));
+      const newBalance = 0;
+
+      await Wallet.update({
+        balance: newBalance,
+        lasttransactionat: new Date()
+      }, { where: { id: wallet.id } });
+
+      // Create Transaction Record
+      await WalletTransaction.create(
+        {
+          walletid: wallet.id,
+          customerid: wallet.customerid,
+          amount: deficitAmount,
+          balancebefore: wallet.balance,
+          balanceafter: newBalance,
+          stationid: req.stationId,
+          type: "TOPUP",
+          description: "Clear Credit via " + (paymentMethod || "Cash"),
+          createdAt: new Date()
+        }
+      );
+
+      // Update local object for response
+      wallet.balance = newBalance;
+
+      res.json({
+        message: "Credit cleared",
+        new_balance: wallet.balance,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
 /* =====================================================
    SCAN QR → Get Customer + Wallet - filtered by station
    ===================================================== */
