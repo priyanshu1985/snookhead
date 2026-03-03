@@ -572,28 +572,48 @@ router.post(
       // compute time in minutes (rounded up), deducting paused time
       let diffMs = endTime - startTime;
       diffMs -= (finalAccumulatedPause * 1000);
-      const minutes = Math.max(0, Math.ceil(diffMs / 60000));
+      const session_duration = Math.max(0, Math.ceil(diffMs / 60000));
 
-      const pricePerMin = Number(table.pricePerMin || 0);
-      const frameCharge = Number(table.frameCharge || 0);
-      const tableAmount = minutes * pricePerMin + frameCharge;
+      const actualPricePerMin = Number(table.pricePerMin || table.price_per_min || 0);
+      const actualPricePerHalfHour = Number(table.pricePerHalfHour || table.price_per_half_hour || 0);
+      const actualPricePerHour = Number(table.pricePerHour || table.price_per_hour || 0);
+      const actualFrameCharges = Number(table.frameCharge || table.frame_charge || 0);
 
-      const grandTotal = tableAmount;
+      let table_charges = 0;
+
+      if (actualPricePerHour > 0 && actualPricePerHalfHour > 0) {
+        const hours = Math.floor(session_duration / 60);
+        const remainderMins = Math.floor(session_duration % 60);
+
+        let durationCost = hours * actualPricePerHour;
+        if (remainderMins > 0 && remainderMins <= 10) {
+          durationCost += remainderMins * actualPricePerMin;
+        } else if (remainderMins > 10 && remainderMins <= 30) {
+          durationCost += actualPricePerHalfHour;
+        } else if (remainderMins > 30) {
+          durationCost += actualPricePerHour;
+        }
+        table_charges = durationCost + actualFrameCharges;
+      } else {
+        table_charges = session_duration * actualPricePerMin + actualFrameCharges;
+      }
 
       // create bill record with station_id
       const billData = addStationToData(
         {
           orderId: null,
           customername: session.customer_name || "Walk-in Customer", // Use saved customer name or default
-          total: grandTotal,
+          total: table_charges,
           status: "pending",
           details: JSON.stringify({
             table_id: session.tableid,
             game_id: session.gameid,
-            minutes,
-            pricePerMin,
-            frameCharge,
-            tableAmount,
+            minutes: session_duration,
+            pricePerMin: actualPricePerMin,
+            pricePerHalfHour: actualPricePerHalfHour,
+            pricePerHour: actualPricePerHour,
+            frameCharge: actualFrameCharges,
+            tableAmount: table_charges,
           }),
         },
         req.stationId,
