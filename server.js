@@ -43,6 +43,7 @@ import ownerDashboardRoutes from "./routes/ownerDashboard.js";
 import ownerPanelRoutes from "./routes/ownerPanel.js";
 import stockImagesRoutes from "./routes/stockImages.js";
 import expensesRoutes from "./routes/expenses.js";
+import kitchenExpensesRoutes from "./routes/kitchenExpenses.js";
 
 const app = express();
 
@@ -94,6 +95,7 @@ app.use("/api/owner/dashboard", ownerDashboardRoutes);
 app.use("/api/owner/panel", ownerPanelRoutes);
 app.use("/api/stock-images", stockImagesRoutes);
 app.use("/api/expenses", expensesRoutes);
+app.use("/api/kitchen-expenses", kitchenExpensesRoutes);
 import attendanceRoutes from "./routes/attendance.js";
 app.use("/api/attendance", attendanceRoutes);
 import uploadRoutes from "./routes/upload.js";

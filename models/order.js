@@ -44,8 +44,8 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 0,
       },
       status: {
-        type: DataTypes.ENUM("pending", "ready", "completed", "cancelled"),
-        defaultValue: "pending",
+        type: DataTypes.ENUM("received", "pending", "ready", "completed", "cancelled"),
+        defaultValue: "received",
       },
       order_source: {
         type: DataTypes.ENUM("table_booking", "counter", "zomato", "swiggy"),

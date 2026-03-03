@@ -1524,6 +1524,60 @@ const models = {
       return data;
     },
   },
+  KitchenExpense: {
+    tableName: "kitchen_expenses",
+    async findAll(filter = {}) {
+      let query = getDb().from(this.tableName).select("*");
+      if (filter.where) {
+        Object.keys(filter.where).forEach((key) => {
+          const val = filter.where[key];
+          if (val && typeof val === 'object' && !Array.isArray(val)) {
+            if (val.gte) query = query.gte(key, val.gte);
+            if (val.lte) query = query.lte(key, val.lte);
+          } else {
+            query = query.eq(key, val);
+          }
+        });
+      }
+      if (filter.order) {
+        filter.order.forEach(([key, dir]) => {
+          query = query.order(key, { ascending: dir === "ASC" });
+        });
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+
+    async create(data) {
+      const { data: res, error } = await getDb()
+        .from(this.tableName)
+        .insert(data)
+        .select()
+        .single();
+      if (error) throw error;
+      return res;
+    },
+
+    async update(updateData, filter) {
+      const { data, error } = await getDb()
+        .from(this.tableName)
+        .update(updateData)
+        .match(filter.where || filter)
+        .select();
+      if (error) throw error;
+      return data;
+    },
+
+    async destroy(filter) {
+      const { error } = await getDb()
+        .from(this.tableName)
+        .delete()
+        .match(filter.where || filter);
+      if (error) throw error;
+      return true;
+    },
+  },
 };
 
 export const {
@@ -1550,6 +1604,7 @@ export const {
   Token,
   Expense,
   Shift,
+  KitchenExpense,
   WalletTransaction,
   InventoryLog,
   MenuItemVariation,

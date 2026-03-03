@@ -56,7 +56,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
           paymentMethod === "online" || paymentMethod === "hybrid"
             ? Number(onlineAmount)
             : 0,
-        status: "pending", // pending, completed, cancelled
+        status: "received", // received, pending, ready, completed, cancelled
         order_source,
         session_id: session_id ? parseInt(session_id) : null,
         table_id: table_id ? parseInt(table_id) : null,
@@ -418,7 +418,7 @@ router.patch("/:id/status", auth, stationContext, async (req, res) => {
   try {
     const { status } = req.body;
 
-    if (!["pending", "ready", "completed", "cancelled"].includes(status)) {
+    if (!["received", "pending", "ready", "completed", "cancelled"].includes(status)) {
       return res.status(400).json({ error: "Invalid status" });
     }
 
