@@ -5,7 +5,7 @@ import db from './models/index.js';
 async function alter() {
     const sequelize = db.ActiveTable.sequelize;
     try {
-        await sequelize.query('ALTER TABLE active_tables ADD COLUMN pause_start_time DATETIME NULL;');
+        await sequelize.query('ALTER TABLE active_tables ADD COLUMN pause_start_time TIMESTAMP WITH TIME ZONE NULL;');
         console.log('Added pause_start_time');
     } catch (e) { console.log(e.message); }
     try {
