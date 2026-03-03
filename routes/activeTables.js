@@ -734,9 +734,26 @@ router.post(
       diffMs -= (finalAccumulatedPause * 1000);
       const elapsedMinutes = Math.max(0, Math.ceil(diffMs / 60000));
       const minutes = session.durationminutes || elapsedMinutes;
-      const pricePerMin = Number(table?.pricePerMin || 0);
-      // Don't add frame charges for timer-based sessions (only for frame-based bookings)
-      const table_charges = minutes * pricePerMin;
+      const pricePerMin = Number(table?.pricePerMin || table?.price_per_min || 0);
+      const pricePerHalfHour = Number(table?.pricePerHalfHour || table?.price_per_half_hour || 0);
+      const pricePerHour = Number(table?.pricePerHour || table?.price_per_hour || 0);
+
+      let table_charges = 0;
+      if (pricePerHour > 0 && pricePerHalfHour > 0) {
+        const hours = Math.floor(minutes / 60);
+        const remainderMins = Math.floor(minutes % 60);
+        let durationCost = hours * pricePerHour;
+        if (remainderMins > 0 && remainderMins <= 10) {
+          durationCost += remainderMins * pricePerMin;
+        } else if (remainderMins > 10 && remainderMins <= 30) {
+          durationCost += pricePerHalfHour;
+        } else if (remainderMins > 30) {
+          durationCost += pricePerHour;
+        }
+        table_charges = durationCost;
+      } else {
+        table_charges = minutes * pricePerMin;
+      }
 
       // Calculate menu charges from cart items
       let menu_charges = 0;
@@ -840,6 +857,8 @@ router.post(
             game_id: session.gameid || session.game_id,
             minutes,
             pricePerMin,
+            pricePerHalfHour,
+            pricePerHour,
             auto_released: true,
             advance_payment: req.body.advance_payment || 0,
           }),

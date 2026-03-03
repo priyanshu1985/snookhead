@@ -16,6 +16,8 @@ module.exports = (sequelize, DataTypes) => {
       onboardDate: { type: DataTypes.DATEONLY },
       type: { type: DataTypes.STRING(32) },
       pricePerMin: { type: DataTypes.DECIMAL(10, 2) },
+      pricePerHalfHour: { type: DataTypes.DECIMAL(10, 2) },
+      pricePerHour: { type: DataTypes.DECIMAL(10, 2) },
       status: {
         type: DataTypes.ENUM("available", "reserved", "maintenance"),
         defaultValue: "available",
