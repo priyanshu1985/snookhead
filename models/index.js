@@ -670,11 +670,19 @@ const models = {
     },
 
     async findOne(filter) {
-      const { data, error } = await getDb()
-        .from(this.tableName)
-        .select("*")
-        .match(filter.where || filter)
-        .single();
+      let query = getDb().from(this.tableName).select("*");
+      const whereObj = filter.where || filter;
+      if (whereObj) {
+        Object.keys(whereObj).forEach((key) => {
+          const val = whereObj[key];
+          if (Array.isArray(val)) {
+            query = query.in(key, val);
+          } else {
+            query = query.eq(key, val);
+          }
+        });
+      }
+      const { data, error } = await query.limit(1).single();
       if (error && error.code !== "PGRST116") throw error;
       return data;
     },
@@ -1311,7 +1319,7 @@ const models = {
       for (let i = 0; i < maxRetries; i++) {
         const current = await this.findByPk(id);
         if (!current) throw new Error("Inventory item not found");
-        
+
         const previousStock = Number(current.currentquantity);
         const newStock = previousStock + Number(change);
         if (newStock < 0) throw new Error("Insufficient stock");
@@ -1322,10 +1330,10 @@ const models = {
           .update({ currentquantity: newStock })
           .match({ id, currentquantity: previousStock })
           .select();
-        
+
         if (error) throw error;
         if (data && data.length > 0) return { previousStock, newStock }; // Success!
-        
+
         // If data.length is 0, someone else modified it. Retry.
         await new Promise(r => setTimeout(r, 30 * (i + 1))); // Small backoff
       }

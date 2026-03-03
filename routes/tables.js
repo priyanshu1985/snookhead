@@ -124,6 +124,8 @@ router.post(
         onboardDate,
         type,
         pricePerMin,
+        pricePerHalfHour,
+        pricePerHour,
         status,
         frameCharge,
         game_id,
@@ -150,6 +152,8 @@ router.post(
           onboardDate: onboardDate,
           type,
           pricePerMin: pricePerMin,
+          price_per_half_hour: pricePerHalfHour,
+          price_per_hour: pricePerHour,
           status,
           frameCharge: frameCharge,
           gameid: game_id,
@@ -195,6 +199,8 @@ router.put(
         onboardDate,
         type,
         pricePerMin,
+        pricePerHalfHour,
+        pricePerHour,
         status,
         frameCharge,
         game_id,
@@ -208,9 +214,11 @@ router.put(
       if (onboardDate !== undefined) updateData.onboardDate = onboardDate;
       if (type !== undefined) updateData.type = type;
       if (pricePerMin !== undefined) updateData.pricePerMin = pricePerMin;
+      if (pricePerHalfHour !== undefined) updateData.price_per_half_hour = pricePerHalfHour;
+      if (pricePerHour !== undefined) updateData.price_per_hour = pricePerHour;
       if (status !== undefined) updateData.status = status;
       if (frameCharge !== undefined) updateData.frameCharge = frameCharge;
-      
+
       // Handle game_id mapping logic
       if (game_id !== undefined) updateData.gameid = game_id;
       else if (gameid !== undefined) updateData.gameid = gameid;
@@ -258,7 +266,7 @@ router.delete(
 
       // Check for active sessions on this table
       const activeSessions = await ActiveTable.findAll({
-        where: addStationFilter({ tableid: parsedTableId, status: "active" }, req.stationId),
+        where: addStationFilter({ tableid: parsedTableId, status: ["active", "paused"] }, req.stationId),
       });
 
       if (activeSessions.length > 0) {
