@@ -189,7 +189,7 @@ router.delete(
 
       // Check for active sessions using this game
       const activeSessions = await ActiveTable.findAll({
-        where: addStationFilter({ gameid: parseInt(gameId), status: "active" }, req.stationId),
+        where: addStationFilter({ gameid: parseInt(gameId), status: ["active", "paused"] }, req.stationId),
       });
 
       if (activeSessions.length > 0) {

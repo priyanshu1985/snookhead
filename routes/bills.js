@@ -57,7 +57,7 @@ router.get(
       // 3. Fetch specific sessions and their games
       let sessionsMap = {}; // sessionId -> { ...session, game: {...} }
       let gameIds = new Set();
-      
+
       // We need sessions to get game_id.
       // But bills usually have 'details' with game information if we updated them.
       // Legacy bills might rely on session.
@@ -66,12 +66,12 @@ router.get(
       // Optimization: For now, we will live with Promise.all for unique session lookup or fetch all 'completed' sessions?
       // Actually, if we just want Game Name...
       // Let's rely on Table -> Game mapping? No, Table can change games.
-      
+
       // Alternative: Verify if Bill.details usually has game_id?
       // If not, we SHOULD fetch session.
       // Let's do a simplified approach: Fetch ALL Games. Games are few.
       const games = await Game.findAll();
-      const gamesMap = {}; 
+      const gamesMap = {};
       games.forEach(g => gamesMap[g.gameid] = g);
 
       // We still need to know WHICH game a session was.
@@ -83,12 +83,12 @@ router.get(
       // Step 1850 showed manual limit/offset support. Current route does findAll without limit.
       // If bills are many, this is slow. 
       // Proceeding with Promise.all for sessions of *fetched* bills.
-      
+
       const distinctSessionIds = sessionIds;
       const sessionPromises = distinctSessionIds.map(id => ActiveTable.findByPk(id));
       const sessions = await Promise.all(sessionPromises);
       sessions.forEach(s => {
-          if(s) sessionsMap[s.activeid || s.active_id] = s;
+        if (s) sessionsMap[s.activeid || s.active_id] = s;
       });
 
       // Transform
@@ -101,28 +101,28 @@ router.get(
 
         // Prefer Game Name from details (if we start saving it there) or resolved via session
         // If we don't have session (deleted?), we fallback to "Unknown Game" or maybe details has it?
-        
+
         const gameName = game.name || game.gamename || "Unknown Game";
-        
+
         let itemsSummary = bill.itemssummary;
         const billItems = bill.billitems || [];
-        
+
         if (!itemsSummary) {
-           if (billItems.length > 0) {
-             itemsSummary = billItems.map((item) => `${item.name} x${item.quantity}`).join(", ");
-           } else {
-             itemsSummary = "Table charges";
-           }
+          if (billItems.length > 0) {
+            itemsSummary = billItems.map((item) => `${item.name} x${item.quantity}`).join(", ");
+          } else {
+            itemsSummary = "Table charges";
+          }
         }
 
         // Order Items formatting
         const orderItemsFormatted = billItems.map((item) => ({
-             name: item.name || "Item",
-             quantity: `${item.quantity || 1} unit`,
-             price: item.price || 0,
-             item_name: item.name,
-             qty: item.quantity || 1,
-             amount: item.total || item.price || 0,
+          name: item.name || "Item",
+          quantity: `${item.quantity || 1} unit`,
+          price: item.price || 0,
+          item_name: item.name,
+          qty: item.quantity || 1,
+          amount: item.total || item.price || 0,
         }));
 
         return {
@@ -178,27 +178,27 @@ router.get(
       const game = gameId ? await Game.findByPk(gameId) : {};
 
       const gameName = game ? (game.name || game.gamename) : "Unknown Game";
-      
+
       // Parse details/items
       const details = typeof bill.details === 'string' ? JSON.parse(bill.details) : (bill.details || {});
       const billItems = bill.billitems || [];
-      
+
       let itemsSummary = bill.itemssummary;
       if (!itemsSummary) {
-           if (billItems.length > 0) {
-             itemsSummary = billItems.map((item) => `${item.name} x${item.quantity}`).join(", ");
-           } else {
-             itemsSummary = "Table charges";
-           }
+        if (billItems.length > 0) {
+          itemsSummary = billItems.map((item) => `${item.name} x${item.quantity}`).join(", ");
+        } else {
+          itemsSummary = "Table charges";
+        }
       }
 
       const orderItemsFormatted = billItems.map((item) => ({
-           name: item.name || "Item",
-           quantity: `${item.quantity || 1} unit`,
-           price: item.price || 0,
-           item_name: item.name,
-           qty: item.quantity || 1,
-           amount: item.total || item.price || 0,
+        name: item.name || "Item",
+        quantity: `${item.quantity || 1} unit`,
+        price: item.price || 0,
+        item_name: item.name,
+        qty: item.quantity || 1,
+        amount: item.total || item.price || 0,
       }));
 
       const transformedBill = {
@@ -251,10 +251,10 @@ router.post(
       const { paymentMethod } = req.body;
 
       await Bill.update(
-        { 
-            status: "paid", 
-            paidat: new Date(),
-            paymentmethod: paymentMethod || "cash"
+        {
+          status: "paid",
+          paidat: new Date(),
+          paymentmethod: paymentMethod || "cash"
         },
         { where: { id: bill.id } }
       );
@@ -298,9 +298,6 @@ router.post(
         frame_charges = 0,
       } = req.body;
 
-      console.log("DEBUG: Bill Create Body:", JSON.stringify(req.body, null, 2));
-      console.log("DEBUG: Selected Menu Items:", selected_menu_items);
-
       // 1. Calculate table charges
       let table_charges = 0;
       let actualPricePerMin = 0;
@@ -314,28 +311,29 @@ router.post(
         }
 
         // Use provided price per min, or fallback to table's price
-        actualPricePerMin =
-          table_price_per_min !== undefined
-            ? Number(table_price_per_min)
-            : Number(table.pricePerMin || 0);
+        actualPricePerMin = table_price_per_min !== undefined ? Number(table_price_per_min) : Number(table.pricePerMin || table.price_per_min || 0);
+        let actualPricePerHalfHour = Number(table.pricePerHalfHour || table.price_per_half_hour || 0);
+        let actualPricePerHour = Number(table.pricePerHour || table.price_per_hour || 0);
 
-        // Only use frame charges if explicitly provided (not from table defaults)
-        // frame_charges of 0 means no frame charges, don't fallback to table.frameCharge
-        actualFrameCharges =
-          frame_charges !== undefined ? Number(frame_charges) : 0;
+        actualFrameCharges = frame_charges !== undefined ? Number(frame_charges) : 0;
 
-        table_charges =
-          session_duration * actualPricePerMin + actualFrameCharges;
-        
-        // Ensure table charges reflect frame mode correctly if session_duration is 0 but we have frame charges
-        // (The formula above works if duration is 0, but good to be explicit about logging)
-        
-        console.log("DEBUG: Table Charges Calc:", {
-            session_duration,
-            actualPricePerMin,
-            actualFrameCharges,
-            table_charges
-        });
+        if (actualPricePerHour > 0 && actualPricePerHalfHour > 0) {
+          const hours = Math.floor(session_duration / 60);
+          const remainderMins = Math.floor(session_duration % 60);
+
+          let durationCost = hours * actualPricePerHour;
+          if (remainderMins > 0 && remainderMins <= 10) {
+            durationCost += remainderMins * actualPricePerMin;
+          } else if (remainderMins > 10 && remainderMins <= 30) {
+            durationCost += actualPricePerHalfHour;
+          } else if (remainderMins > 30) {
+            durationCost += actualPricePerHour;
+          }
+          table_charges = durationCost + actualFrameCharges;
+        } else {
+          // Fallback to strict per minute logic
+          table_charges = session_duration * actualPricePerMin + actualFrameCharges;
+        }
       }
 
       // 2. Calculate menu charges
@@ -354,7 +352,6 @@ router.post(
           const quantity = item.quantity || 1;
           const itemTotal = parseFloat(menuItem.price) * quantity;
           menu_charges += itemTotal;
-          console.log(`DEBUG: Item ${menuItem.name}, Price: ${menuItem.price}, Qty: ${quantity}, Total: ${itemTotal}`);
 
           bill_items.push({
             menu_item_id: menuItem.id,
@@ -389,9 +386,9 @@ router.post(
       // Check if it's frame mode (implied by frame_charges > 0 and duration near 0, or explicit booking_type logic if we had it)
       // Since we don't have explicit booking_type in body here, we infer.
       const isFrameMode = frame_charges > 0 && session_duration === 0;
-      const tableChargeLabel = isFrameMode 
-          ? `Table charges (${req.body.frame_count || '?'} frames)`
-          : `Table charges (${session_duration} min)`;
+      const tableChargeLabel = isFrameMode
+        ? `Table charges (${req.body.frame_count || '?'} frames)`
+        : `Table charges (${session_duration} min)`;
 
       const items_summary =
         [
@@ -407,34 +404,34 @@ router.post(
       let bookingType = 'timer';
       let session = null;
       if (session_id) {
-          try {
-             // Retrieve session from DB if possible using model helper (or raw Supabase if needed)
-             // Using defined model:
-             session = await ActiveTable.findByPk(session_id);
-             if (session) {
-                 bookingSource = session.bookingsource; 
-                 bookingType = session.bookingtype || 'timer';
+        try {
+          // Retrieve session from DB if possible using model helper (or raw Supabase if needed)
+          // Using defined model:
+          session = await ActiveTable.findByPk(session_id);
+          if (session) {
+            bookingSource = session.bookingsource;
+            bookingType = session.bookingtype || 'timer';
 
-                 // Fallback: Check Linked Order if source missing in ActiveTable
-                 if (!bookingSource) {
-                     const linkedOrder = await Order.findOne({ where: { activeid: session_id } }); // Note: Order uses active_id fk usually, but check schema
-                     // Schema says: `active_id` int in Orders table.
-                     if (linkedOrder && linkedOrder.order_source) {
-                         bookingSource = linkedOrder.order_source;
-                     }
-                 }
-                 // Final default
-                 bookingSource = bookingSource || 'dashboard';
+            // Fallback: Check Linked Order if source missing in ActiveTable
+            if (!bookingSource) {
+              const linkedOrder = await Order.findOne({ where: { activeid: session_id } }); // Note: Order uses active_id fk usually, but check schema
+              // Schema says: `active_id` int in Orders table.
+              if (linkedOrder && linkedOrder.order_source) {
+                bookingSource = linkedOrder.order_source;
+              }
+            }
+            // Final default
+            bookingSource = bookingSource || 'dashboard';
 
-                 // Fallback: Set table_id if missing in request
-                 if (!table_id && session.tableid) {
-                     table_id = session.tableid;
-                     console.log(`[Bill] Resolved table_id ${table_id} from session.`);
-                 }
-             }
-          } catch (e) {
-             console.log("Error fetching session for bill details:", e);
+            // Fallback: Set table_id if missing in request
+            if (!table_id && session.tableid) {
+              table_id = session.tableid;
+              console.log(`[Bill] Resolved table_id ${table_id} from session.`);
+            }
           }
+        } catch (e) {
+          console.log("Error fetching session for bill details:", e);
+        }
       }
 
       // 6. Create the bill with station_id
@@ -478,8 +475,8 @@ router.post(
       // Check if fully paid via advance payment
       const advancePayment = Number(req.body.advance_payment || 0);
       if (advancePayment >= total_amount && total_amount > 0) {
-          billData.status = 'paid';
-          billData.paidat = new Date();
+        billData.status = 'paid';
+        billData.paidat = new Date();
       }
 
       const bill = await Bill.create(billData);
@@ -499,15 +496,15 @@ router.post(
           });
 
           if (queueEntries.length > 0) {
-              for (const q of queueEntries) {
-                  await Queue.update(
-                    { status: "served" },
-                    { where: { id: q.id } }
-                  );
-                  console.log(`[Bill] Updated Queue ID ${q.id} (Status: ${q.status}) to served for table ${table_id}`);
-              }
+            for (const q of queueEntries) {
+              await Queue.update(
+                { status: "served" },
+                { where: { id: q.id } }
+              );
+              console.log(`[Bill] Updated Queue ID ${q.id} (Status: ${q.status}) to served for table ${table_id}`);
+            }
           } else {
-             console.log(`[Bill] No linked queue entry found for table ${table_id} (Checked seated/assigned)`);
+            console.log(`[Bill] No linked queue entry found for table ${table_id} (Checked seated/assigned)`);
           }
         } catch (qErr) {
           console.error("Failed to update queue status on billing:", qErr);
@@ -519,104 +516,104 @@ router.post(
       // Lookup session by table_id if session_id is missing/invalid
       let targetSessionId = session_id;
       if (!targetSessionId && table_id) {
-          try {
-             // Find active session for this table
-             const activeSession = await ActiveTable.findOne({
-                 where: { 
-                     tableid: table_id, 
-                     status: 'active' 
-                 }
-             });
-             if (activeSession) {
-                 targetSessionId = activeSession.activeid;
-                 console.log(`[Bill] Found active session ${targetSessionId} for table ${table_id} (was missing in request)`);
-             }
-          } catch (findErr) {
-             console.error("Failed to find active session for table:", findErr);
+        try {
+          // Find active session for this table
+          const activeSession = await ActiveTable.findOne({
+            where: {
+              tableid: table_id,
+              status: 'active'
+            }
+          });
+          if (activeSession) {
+            targetSessionId = activeSession.activeid;
+            console.log(`[Bill] Found active session ${targetSessionId} for table ${table_id} (was missing in request)`);
           }
+        } catch (findErr) {
+          console.error("Failed to find active session for table:", findErr);
+        }
       }
 
       if (targetSessionId) {
         try {
-           await ActiveTable.update(
-             { 
-               status: 'completed',
-               endtime: new Date(), 
-               // final_amount: total_amount // Optional if schema supports it
-             },
-             { where: { activeid: targetSessionId } }
-           );
-           console.log(`[Bill] Stopped ActiveTable session ${targetSessionId}`);
+          await ActiveTable.update(
+            {
+              status: 'completed',
+              endtime: new Date(),
+              // final_amount: total_amount // Optional if schema supports it
+            },
+            { where: { activeid: targetSessionId } }
+          );
+          console.log(`[Bill] Stopped ActiveTable session ${targetSessionId}`);
         } catch (stopErr) {
-           console.error("Failed to stop session on billing:", stopErr);
+          console.error("Failed to stop session on billing:", stopErr);
         }
       }
 
 
 
-       // Always release table if we have a table_id
-       if (table_id) {
-         try {
-            await TableAsset.update(
-              { status: 'available' },
-              { where: { id: table_id } }
+      // Always release table if we have a table_id
+      if (table_id) {
+        try {
+          await TableAsset.update(
+            { status: 'available' },
+            { where: { id: table_id } }
+          );
+          console.log(`[Bill] Set Table ${table_id} to available`);
+
+          try {
+            // Close any active OR strictly pending (if stuck) reservations for this table
+            // Split into two updates to avoid ORM array/enum issues
+            await Reservation.update(
+              { status: 'done' },
+              { where: { tableId: table_id, status: 'active' } }
             );
-            console.log(`[Bill] Set Table ${table_id} to available`);
-            
+            await Reservation.update(
+              { status: 'done' },
+              { where: { tableId: table_id, status: 'pending' } }
+            );
+            console.log(`[Bill] Closed active/pending reservations for table ${table_id}`);
+          } catch (resErr) {
+            console.error("Failed to close linked reservation:", resErr);
+          }
+
+          // --- CHECK QUEUE AND ASSIGN ---
+          // Now that table is available, check if anyone is waiting for this game
+          let gameIdForQueue = null;
+          if (session && session.gameid) {
+            gameIdForQueue = session.gameid;
+          } else if (targetSessionId) {
+            // Re-fetch active session if we only have ID, to get game_id
+            // But wait, the session is now 'completed'.
+            // We should have fetched it before or used 'activeSession' from line 510 if it was found there.
+            // activeSession from line 510 is locally scoped. 
+            // Let's try to fetch it again or better, trust that table belongs to a game?
+            // Actually, Queue assignment needs gameId.
+            // We can fetch the table asset to get gameId if it's fixed? No, gameId is per session usually.
+            // But TableAsset might have a default game associated or we rely on the finished session.
+
+            // Optimized: Fetch session details if we don't have gameId
             try {
-                // Close any active OR strictly pending (if stuck) reservations for this table
-                // Split into two updates to avoid ORM array/enum issues
-                await Reservation.update(
-                    { status: 'done' },
-                    { where: { tableId: table_id, status: 'active' } }
-                );
-                await Reservation.update(
-                    { status: 'done' },
-                    { where: { tableId: table_id, status: 'pending' } }
-                );
-                console.log(`[Bill] Closed active/pending reservations for table ${table_id}`);
-            } catch (resErr) {
-                console.error("Failed to close linked reservation:", resErr);
-            }
+              const finishedSession = await ActiveTable.findOne({ where: { activeid: targetSessionId } });
+              if (finishedSession) gameIdForQueue = finishedSession.gameid;
+            } catch (e) { }
+          }
 
-            // --- CHECK QUEUE AND ASSIGN ---
-            // Now that table is available, check if anyone is waiting for this game
-            let gameIdForQueue = null;
-            if (session && session.gameid) {
-                gameIdForQueue = session.gameid;
-            } else if (targetSessionId) {
-                // Re-fetch active session if we only have ID, to get game_id
-                // But wait, the session is now 'completed'.
-                // We should have fetched it before or used 'activeSession' from line 510 if it was found there.
-                // activeSession from line 510 is locally scoped. 
-                // Let's try to fetch it again or better, trust that table belongs to a game?
-                // Actually, Queue assignment needs gameId.
-                // We can fetch the table asset to get gameId if it's fixed? No, gameId is per session usually.
-                // But TableAsset might have a default game associated or we rely on the finished session.
-                
-                // Optimized: Fetch session details if we don't have gameId
-                try {
-                     const finishedSession = await ActiveTable.findOne({ where: { activeid: targetSessionId } });
-                     if (finishedSession) gameIdForQueue = finishedSession.gameid;
-                } catch(e) {}
+          let candidate = null;
+          if (gameIdForQueue) {
+            const queueResult = await checkQueueAndAssign(table_id, gameIdForQueue, req.stationId, false);
+            if (queueResult && queueResult.candidate) {
+              candidate = queueResult.candidate;
+              console.log(`[Bill] Found queue candidate ${candidate.customername} for table ${table_id}`);
             }
+          }
 
-            let candidate = null;
-            if (gameIdForQueue) {
-                 const queueResult = await checkQueueAndAssign(table_id, gameIdForQueue, req.stationId, false);
-                 if (queueResult && queueResult.candidate) {
-                     candidate = queueResult.candidate;
-                     console.log(`[Bill] Found queue candidate ${candidate.customername} for table ${table_id}`);
-                 }
-            }
-            
-            // Attach candidate to response if needed
-            req.queueCandidate = candidate;
+          // Attach candidate to response if needed
+          req.queueCandidate = candidate;
 
-         } catch (tableErr) {
-            console.error("Failed to release table:", tableErr);
-         }
-       }
+        } catch (tableErr) {
+          console.error("Failed to release table:", tableErr);
+        }
+      }
       // -----------------------------------------------
       // -----------------------------------------
 
@@ -674,17 +671,37 @@ router.post("/calculate-pricing", auth, stationContext, async (req, res) => {
 
     // Calculate table charges
     if (table_id) {
-       // Validate table belongs to station
-       const tableWhere = addStationFilter({ id: table_id }, req.stationId);
-       const table = await TableAsset.findOne({ where: tableWhere });
+      // Validate table belongs to station
+      const tableWhere = addStationFilter({ id: table_id }, req.stationId);
+      const table = await TableAsset.findOne({ where: tableWhere });
 
-       if (table) {
-        const pricePerMin = parseFloat(table.pricePerMin || 0);
-        const frameCharge = parseFloat(table.frameCharge || 0);
-        pricing.table_charges = session_duration * pricePerMin + frame_charges;
+      if (table) {
+        const pricePerMin = parseFloat(table.pricePerMin || table.price_per_min || 0);
+        const pricePerHalfHour = parseFloat(table.pricePerHalfHour || table.price_per_half_hour || 0);
+        const pricePerHour = parseFloat(table.pricePerHour || table.price_per_hour || 0);
+        const frameCharge = parseFloat(table.frameCharge || table.frame_charge || 0);
+
+        if (pricePerHour > 0 && pricePerHalfHour > 0) {
+          const hours = Math.floor(session_duration / 60);
+          const remainderMins = Math.floor(session_duration % 60);
+          let durationCost = hours * pricePerHour;
+          if (remainderMins > 0 && remainderMins <= 10) {
+            durationCost += remainderMins * pricePerMin;
+          } else if (remainderMins > 10 && remainderMins <= 30) {
+            durationCost += pricePerHalfHour;
+          } else if (remainderMins > 30) {
+            durationCost += pricePerHour;
+          }
+          pricing.table_charges = durationCost + frame_charges;
+        } else {
+          pricing.table_charges = session_duration * pricePerMin + frame_charges;
+        }
+
         pricing.breakdown.table_info = {
           name: table.name,
           price_per_min: pricePerMin,
+          price_per_half_hour: pricePerHalfHour,
+          price_per_hour: pricePerHour,
           frame_charge: frameCharge,
           duration_minutes: session_duration,
           total: pricing.table_charges,

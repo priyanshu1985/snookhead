@@ -1,72 +1,67 @@
 import express from "express";
 import multer from "multer";
-import path from "path";
-import fs from "fs";
-import { v4 as uuidv4 } from "uuid";
+import { v2 as cloudinary } from "cloudinary";
+import { Readable } from "stream";
 
 const router = express.Router();
 
-// Ensure upload directory exists
-const uploadDir = path.join(process.cwd(), "public/uploads");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Configure storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  },
+// Configure Cloudinary from env vars
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// File filter
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = [
-    "image/jpeg",
-    "image/png",
-    "image/gif",
-    "audio/mpeg",
-    "audio/wav",
-    "audio/mp3",
-    "audio/webm", // For browser recording
-  ];
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error("Invalid file type. Only images and audio are allowed."), false);
-  }
+// Use memory storage — no disk writes, buffer goes straight to Cloudinary
+const upload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+      "audio/mpeg",
+      "audio/wav",
+      "audio/mp3",
+      "audio/webm",
+    ];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only images and audio are allowed."), false);
+    }
+  },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+});
+
+// Helper: upload a buffer to Cloudinary via stream
+const uploadBufferToCloudinary = (buffer, options = {}) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { folder: "snookhead/uploads", resource_type: "auto", ...options },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      }
+    );
+    Readable.from(buffer).pipe(uploadStream);
+  });
 };
 
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
-});
-
-// Upload route
-router.post("/", upload.single("file"), (req, res) => {
+// POST /api/upload
+router.post("/", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
 
-    // Return the URL
-    // Assuming backend serves static files from /static pointing to /public
-    const storedFilename = req.file.filename;
-    const fileUrl = `${req.protocol}://${req.get(
-      "host"
-    )}/static/uploads/${storedFilename}`;
+    const result = await uploadBufferToCloudinary(req.file.buffer);
 
     res.json({
       success: true,
-      url: fileUrl,
-      filename: storedFilename,
+      url: result.secure_url,       // permanent HTTPS CDN URL
+      filename: result.public_id,
       mimetype: req.file.mimetype,
     });
   } catch (err) {
