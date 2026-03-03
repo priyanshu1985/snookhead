@@ -79,18 +79,18 @@ router.post("/login", async (req, res) => {
           // Distinguish between new signup (pending) and existing signup (suspended/paused)
           // We can check if onboarding_date is very recent or status is 'removed'
           const isRecentlyOnboarded = (new Date() - new Date(station.onboardingdate)) < (24 * 60 * 60 * 1000); // Less than 24h
-          
+
           if (station.status === 'removed') {
-             return res.status(403).json({
-               error: "Your account has been deactivated by the admin. Please contact support.",
-               accountDeactivated: true
-             });
+            return res.status(403).json({
+              error: "Your account has been deactivated by the admin. Please contact support.",
+              accountDeactivated: true
+            });
           }
 
           return res.status(403).json({
-            error: isPending ? 
-                   "Your account is pending admin approval. You will receive access once the admin confirms your subscription." :
-                   "The admin has paused your services. Please pay your dues or contact support to continue.",
+            error: isPending ?
+              "Your account is pending admin approval. You will receive access once the admin confirms your subscription." :
+              "The admin has paused your services. Please pay your dues or contact support to continue.",
             approvalPending: true, // Frontend uses this to trigger the amber warning
             isServicePaused: !isPending
           });
@@ -304,21 +304,21 @@ router.post("/verify-otp", async (req, res) => {
     // Special check for owners: if they are new or their station is still paused, show approval required message
     const userRole = freshUserForToken.role?.toLowerCase();
     console.log(`🔍 Checking approval for ${email}. Role: ${userRole}, StationID: ${freshUserForToken.stationid}`);
-    
+
     if (userRole === "owner") {
       const stationId = freshUserForToken.stationid;
       const station = stationId ? await Station.findByPk(stationId) : null;
       const status = station?.subscriptionstatus;
-      
+
       console.log(`📍 Station status for ${email}: ${status}`);
 
       if (!station || status === "paused" || status === "pending") {
-         console.log(`⚠️ Approval required for owner ${email}. Sending requiresApproval flag.`);
-         return res.json({
-           message: "Email verified successfully! Your account is now pending admin approval. You will receive access once confirmed.",
-           requiresApproval: true,
-           email: freshUserForToken.email
-         });
+        console.log(`⚠️ Approval required for owner ${email}. Sending requiresApproval flag.`);
+        return res.json({
+          message: "Email verified successfully! Your account is now pending admin approval. You will receive access once confirmed.",
+          requiresApproval: true,
+          email: freshUserForToken.email
+        });
       }
     }
 
@@ -625,7 +625,7 @@ router.post("/forgot-password", async (req, res) => {
 
     // Generate a secure reset token (valid for 1 hour)
     const resetToken = crypto.randomBytes(32).toString("hex");
-    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString(); 
+    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
     console.log("🔍 Forgot password - Generating token:", {
       email,
@@ -656,8 +656,8 @@ router.post("/forgot-password", async (req, res) => {
     });
 
     // Create reset link
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    const resetLink = `${frontendUrl}/reset-password?token=${resetToken}&mode=owner`;
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5174";
+    const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
 
     // Send email with reset link
     const transporter = nodemailer.createTransport({
@@ -769,7 +769,7 @@ router.post("/reset-password", async (req, res) => {
     if (typeof expiryVal === 'string' && !expiryVal.endsWith('Z') && !expiryVal.includes('+')) {
       expiryVal += 'Z'; // Force UTC if missing
     }
-    
+
     const expiry = new Date(expiryVal);
     const now = new Date();
 
@@ -833,7 +833,7 @@ router.post("/owner-forgot-password", auth, async (req, res) => {
     }
 
     const resetToken = crypto.randomBytes(32).toString("hex");
-    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString(); 
+    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
     await User.update(
       {
@@ -843,7 +843,7 @@ router.post("/owner-forgot-password", auth, async (req, res) => {
       { where: { id: userId } },
     );
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5174";
     const resetLink = `${frontendUrl}/reset-password?token=${resetToken}&mode=owner`;
 
     const transporter = nodemailer.createTransport({
@@ -901,7 +901,7 @@ router.post("/owner-reset-password", async (req, res) => {
     if (typeof expiryVal === 'string' && !expiryVal.endsWith('Z') && !expiryVal.includes('+')) {
       expiryVal += 'Z';
     }
-    
+
     const expiryTime = new Date(expiryVal);
     if (new Date() > expiryTime) {
       return res.status(400).json({ error: "Reset token has expired" });
