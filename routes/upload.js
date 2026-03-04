@@ -2,6 +2,9 @@ import express from "express";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import { Readable } from "stream";
+import fs from "fs";
+import path from "path";
+import { v4 as uuidv4 } from "uuid";
 
 const router = express.Router();
 
@@ -56,14 +59,39 @@ router.post("/", upload.single("file"), async (req, res) => {
       return res.status(400).json({ error: "No file uploaded" });
     }
 
-    const result = await uploadBufferToCloudinary(req.file.buffer);
+    // Check if Cloudinary is configured
+    if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
+      const result = await uploadBufferToCloudinary(req.file.buffer);
 
-    res.json({
-      success: true,
-      url: result.secure_url,       // permanent HTTPS CDN URL
-      filename: result.public_id,
-      mimetype: req.file.mimetype,
-    });
+      return res.json({
+        success: true,
+        url: result.secure_url,       // permanent HTTPS CDN URL
+        filename: result.public_id,
+        mimetype: req.file.mimetype,
+      });
+    } else {
+      // Fallback to local storage if Cloudinary is not configured
+      console.log("⚠️ Cloudinary not configured, falling back to local storage");
+      
+      const ext = req.file.mimetype.split("/")[1]?.split("+")[0] || "jpg";
+      const filename = `${uuidv4()}.${ext}`;
+      const uploadsDir = path.join(process.cwd(), "public", "uploads");
+      
+      // Ensure directory exists
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      
+      const uploadPath = path.join(uploadsDir, filename);
+      await fs.promises.writeFile(uploadPath, req.file.buffer);
+      
+      return res.json({
+        success: true,
+        url: `/static/uploads/${filename}`,
+        filename: filename,
+        mimetype: req.file.mimetype,
+      });
+    }
   } catch (err) {
     console.error("Upload error:", err);
     res.status(500).json({ error: "File upload failed" });
