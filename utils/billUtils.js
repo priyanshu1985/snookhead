@@ -31,25 +31,39 @@ export const generateSequentialBillNo = async (stationId) => {
     const day = String(nowIST.getUTCDate()).padStart(2, '0');
     const dateKey = `${year}${month}${day}`;
 
-    // Count bills for this station created today
+    // Fetch all bill numbers for this station created today to find the maximum
+    // This is more robust than counting if bills were deleted.
     let query = supabase
       .from("bills")
-      .select("*", { count: "exact", head: true })
+      .select("billnumber")
       .gte("createdAt", startUTC.toISOString());
 
-    // Apply station filter if it exists (multi-tenancy)
     if (stationId) {
       query = query.eq("stationid", stationId);
     }
 
-    const { count, error } = await query;
+    const { data: bills, error } = await query;
 
     if (error) {
       console.error("DB Error Detail:", JSON.stringify(error, null, 2));
       throw error;
     }
 
-    const nextNum = (count || 0) + 1;
+    // Extract the numeric part (N) from #YYYYMMDD-N and find the max
+    let maxNum = 0;
+    if (bills && bills.length > 0) {
+      bills.forEach(b => {
+        const parts = b.billnumber?.split('-');
+        if (parts && parts.length > 1) {
+          const num = parseInt(parts[1], 10);
+          if (!isNaN(num) && num > maxNum) {
+            maxNum = num;
+          }
+        }
+      });
+    }
+
+    const nextNum = maxNum + 1;
     
     // Final Format: #YYYYMMDD-N
     return `#${dateKey}-${nextNum}`;
