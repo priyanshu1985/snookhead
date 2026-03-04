@@ -670,7 +670,7 @@ router.get("/summary", auth, stationContext, async (req, res) => {
     if (req.stationId) expensesQuery.eq("stationid", req.stationId);
     
     const { data: allExpensesData } = await expensesQuery;
-    
+
     const expenseCats = {};
     const segregation = { owner: 0, inventory: 0, kitchen: 0 };
     const ownerTypeBreakdown = { fixed: 0, log: 0 };
@@ -680,6 +680,10 @@ router.get("/summary", auth, stationContext, async (req, res) => {
       const itemDate = new Date(item.date);
       const amt = Number(item.amount) || 0;
       const cat = item.category || 'Operational';
+
+      // Skip 'Kitchen' or 'Inventory' categories in the general expenses table 
+      // to avoid double counting, as we now pull them from dedicated sources.
+      if (cat === 'Kitchen' || cat === 'Inventory') return;
 
       if (item.expense_type === 'fixed') {
         // 1. Fixed Expenses: Count for every month from its creation up to the period's end
@@ -706,17 +710,122 @@ router.get("/summary", auth, stationContext, async (req, res) => {
           expenseCats[cat] = (expenseCats[cat] || 0) + amt;
           totalExpenses += amt;
           
-          if (cat === 'Inventory') {
-            segregation.inventory += amt;
-          } else if (cat === 'Kitchen') {
-            segregation.kitchen += amt;
-          } else {
-            segregation.owner += amt;
-            ownerTypeBreakdown.log += amt;
-          }
+          segregation.owner += amt;
+          ownerTypeBreakdown.log += amt;
         }
       }
     });
+
+    // --- ENHANCED FOOD EXPENSES (Source 1: Inventory Stock Additions, Source 2: Kitchen Expenses) ---
+    const foodBreakdown = {
+      inventory: 0,
+      kitchen: 0,
+      total: 0,
+      inventoryItems: [],
+      kitchenItems: []
+    };
+
+    // Source 1: Inventory Tracking (Stock Additions)
+    // We need to fetch ADD logs and join with menuitems to get purchasePrice
+    let inventoryLogsQuery = supabase
+        .from("inventory_logs")
+        .select("menu_item_id, item_name, quantity_change, created_at")
+        .eq("action", "ADD")
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString());
+    if (req.stationId) inventoryLogsQuery.eq("stationid", req.stationId);
+    
+    const { data: invAdditions } = await inventoryLogsQuery;
+
+    if (invAdditions && invAdditions.length > 0) {
+      // Get unique menu item IDs and names to fetch purchase prices
+      const menuIds = [...new Set(invAdditions.map(l => l.menu_item_id).filter(Boolean))];
+      const itemNames = [...new Set(invAdditions.map(l => l.item_name).filter(Boolean))];
+      
+      let pricesMap = {};
+      
+      // 1. Fetch from menuitems
+      if (menuIds.length > 0) {
+        const { data: menus } = await supabase
+          .from("menuitems")
+          .select("id, name, purchasePrice")
+          .in("id", menuIds);
+        (menus || []).forEach(m => {
+          pricesMap[m.id] = Number(m.purchasePrice) || 0;
+          if (m.name) pricesMap[m.name.trim()] = Number(m.purchasePrice) || 0;
+        });
+      }
+
+      // 2. Fetch from inventory table (as fallback or primary for non-menu items)
+      if (itemNames.length > 0) {
+        const { data: invItems } = await supabase
+          .from("inventory")
+          .select("itemname, costperunit")
+          .in("itemname", itemNames);
+        (invItems || []).forEach(inv => {
+          const key = (inv.itemname || "").trim();
+          // If we already have a price from menuitems, keep it? Or use inventory price?
+          // Usually inventory price is more "raw material" focused.
+          // Let's only use inventory price if not already set or it's non-zero.
+          if (!pricesMap[key] || pricesMap[key] === 0) {
+            pricesMap[key] = Number(inv.costperunit) || 0;
+          }
+        });
+      }
+
+      // Calculate totals and item-level breakdown
+      const invMap = {};
+      invAdditions.forEach(log => {
+        // Try getting price by ID first, then by Name
+        let price = (log.menu_item_id && pricesMap[log.menu_item_id]) ? pricesMap[log.menu_item_id] : 0;
+        if (!price && log.item_name) {
+          price = pricesMap[log.item_name.trim()] || 0;
+        }
+
+        const cost = Number(log.quantity_change) * price;
+        foodBreakdown.inventory += cost;
+        
+        const key = log.item_name || "Unknown Item";
+        if (!invMap[key]) invMap[key] = { name: key, qty: 0, cost: 0 };
+        invMap[key].qty += Number(log.quantity_change);
+        invMap[key].cost += cost;
+      });
+      foodBreakdown.inventoryItems = Object.values(invMap).sort((a, b) => b.cost - a.cost);
+    }
+
+    // Source 2: Kitchen Expenses Table
+    let kitchenExpQuery = supabase
+      .from("kitchen_expenses")
+      .select("*")
+      .gte("purchaseDate", startDate.toISOString())
+      .lte("purchaseDate", endDate.toISOString());
+    if (req.stationId) kitchenExpQuery.eq("stationid", req.stationId);
+    
+    const { data: kitchenExps } = await kitchenExpQuery;
+
+    if (kitchenExps && kitchenExps.length > 0) {
+      const kitMap = {};
+      kitchenExps.forEach(exp => {
+        const cost = Number(exp.cost) || 0;
+        foodBreakdown.kitchen += cost;
+        
+        const key = exp.itemName || "Unknown Item";
+        if (!kitMap[key]) kitMap[key] = { name: key, qty: 0, cost: 0, unit: exp.unit };
+        kitMap[key].qty += Number(exp.quantity);
+        kitMap[key].cost += cost;
+      });
+      foodBreakdown.kitchenItems = Object.values(kitMap).sort((a, b) => b.cost - a.cost);
+    }
+
+    foodBreakdown.total = foodBreakdown.inventory + foodBreakdown.kitchen;
+    
+    // Add to main expenses
+    segregation.kitchen = foodBreakdown.total;
+    totalExpenses += foodBreakdown.total;
+    
+    // Add specialized categories for chart
+    expenseCats["Inventory Expenses"] = foodBreakdown.inventory;
+    expenseCats["Kitchen Operating Expenses"] = foodBreakdown.kitchen;
 
     // --- Estimated Labour Cost Calculation ---
     // Fetch employees of this owner (or all if admin)
@@ -879,7 +988,8 @@ router.get("/summary", auth, stationContext, async (req, res) => {
         expenseCategories: expenseCats,
         expenseSegregation: segregation,
         ownerTypeBreakdown,
-        estimatedProfitBySource
+        estimatedProfitBySource,
+        foodBreakdown
       },
     });
   } catch (error) {

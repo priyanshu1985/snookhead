@@ -53,10 +53,6 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-      receiptUrl: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
-      },
       stationid: {
         type: DataTypes.INTEGER,
         allowNull: true,

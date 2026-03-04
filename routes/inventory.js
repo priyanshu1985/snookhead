@@ -87,7 +87,14 @@ router.get("/history", auth, stationContext, async (req, res) => {
       limit = 50
     } = req.query;
 
-    let query = getDb().from("inventory_logs").select("*");
+    let query = getDb()
+      .from("inventory_logs")
+      .select(`
+        *,
+        menuitems (
+          purchasePrice
+        )
+      `);
 
     // Apply filters
     if (req.stationId) {
@@ -106,24 +113,20 @@ router.get("/history", auth, stationContext, async (req, res) => {
       .order("created_at", { ascending: false })
       .range(offset, offset + parseInt(limit) - 1);
 
-    const { data, error, count } = await query; // count not supported directly in select(*) without refined query in some clients, but simple range usually returns data. 
-    // To get count we might need a separate query or exact option.
-    // For now, let's just return data.
-
+    const { data, error } = await query;
     if (error) throw error;
 
-    // Enrich with user names if needed? 
-    // Usually log has user_id, client can fetch user map or we join.
-    // Supabase join: .select('*, users(name)') if FK exists.
-    // Let's assume frontend shows user_id or we keep it simple for now.
-
+    // Flatten unit_cost from joined menuitems
+    const enrichedData = (data || []).map(log => ({
+      ...log,
+      unit_cost: log.menuitems?.purchasePrice || 0
+    }));
     res.json({
       success: true,
-      data: data,
+      data: enrichedData,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        // total: ... (requires count query)
       }
     });
 
@@ -533,6 +536,28 @@ router.patch("/:id/quantity", auth, stationContext, async (req, res) => {
     }
 
     await item.update(updateData);
+
+    // --- LOGGING ---
+    try {
+      const { InventoryLog } = await getModels();
+      if (InventoryLog) {
+        await InventoryLog.create({
+          item_name: item.itemname,
+          category: item.category,
+          stationid: req.stationId,
+          action: operation === "add" ? 'ADD' : 'DEDUCT',
+          quantity_change: actual_quantity_change,
+          previous_stock: item.currentquantity,
+          new_stock: newQuantity,
+          reason: reason || `Manual update via Inventory router (${operation})`,
+          user_id: req.user ? req.user.id : null,
+          created_at: new Date()
+        });
+      }
+    } catch (logErr) {
+      console.error("Failed to log inventory update:", logErr);
+    }
+    // ---------------
 
     // Fetch updated item
     const updatedItem = await Inventory.findByPk(id);

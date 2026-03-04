@@ -49,7 +49,7 @@ router.get("/", auth, stationContext, authorize("owner", "admin"), async (req, r
 
 router.post("/", auth, stationContext, requireStation, authorize("owner", "admin"), async (req, res) => {
   try {
-    const { itemName, category, quantity, unit, cost, purchaseDate, supplier, notes, receiptUrl } = req.body;
+    const { itemName, category, quantity, unit, cost, purchaseDate, supplier, notes } = req.body;
 
     if (!itemName || !cost || !purchaseDate) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -64,7 +64,6 @@ router.post("/", auth, stationContext, requireStation, authorize("owner", "admin
       purchaseDate,
       supplier,
       notes,
-      receiptUrl,
     }, req.stationId);
 
     const newExpense = await KitchenExpense.create(expenseData);
