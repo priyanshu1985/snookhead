@@ -28,6 +28,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 import { checkQueueAndAssign } from "../utils/queueManager.js";
+import { generateSequentialBillNo } from "../utils/billUtils.js";
 
 const router = express.Router();
 
@@ -599,8 +600,11 @@ router.post(
       }
 
       // create bill record with station_id
+      const bill_station_id = session.stationid || req.stationId;
+      const bill_number = await generateSequentialBillNo(bill_station_id);
       const billData = addStationToData(
         {
+          billnumber: bill_number,
           orderId: null,
           customername: session.customer_name || "Walk-in Customer", // Use saved customer name or default
           total: table_charges,
@@ -844,10 +848,8 @@ router.post(
       const total_amount = table_charges + menu_charges;
 
       // Generate bill number
-      const bill_number = `BILL-${Date.now()}-${Math.random()
-        .toString(36)
-        .substr(2, 9)
-        .toUpperCase()}`;
+      const bill_station_id = session.stationid || req.stationId;
+      const bill_number = await generateSequentialBillNo(bill_station_id);
 
       // Create items summary
       const items_summary = [
@@ -1104,6 +1106,133 @@ router.post("/:id/resume", auth, stationContext, authorize("staff", "owner", "ad
     res.status(500).json({ error: err.message });
   }
 });
+// Get current running bill for an active session
+router.get("/:id/current-bill", auth, stationContext, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const where = addStationFilter({ activeid: id }, req.stationId);
+    const session = await ActiveTable.findOne({
+      where,
+      include: [{ model: TableAsset }],
+    });
+
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    const table = session.TableAsset || (await TableAsset.findByPk(session.tableid));
+    if (!table) {
+      return res.status(404).json({ error: "Table not found" });
+    }
+
+    // Fetch game to get name
+    const game = await Game.findByPk(session.gameid || table.gameid || table.game_id);
+    const gameName = game ? (game.name || game.gamename) : "Unknown Game";
+
+    // Calculate table charges
+    const startTime = new Date(session.starttime);
+    const endTime = session.endtime ? new Date(session.endtime) : new Date();
+    
+    let finalAccumulatedPause = session.accumulated_pause_seconds || 0;
+    if (session.status === 'paused' && session.pause_start_time) {
+      let actualResumeTime = endTime;
+      if (session.auto_resume_at && endTime > new Date(session.auto_resume_at)) {
+        actualResumeTime = new Date(session.auto_resume_at);
+      }
+      const activePauseMs = Math.max(0, actualResumeTime - new Date(session.pause_start_time));
+      finalAccumulatedPause += Math.floor(activePauseMs / 1000);
+    }
+
+    let diffMs = endTime - startTime;
+    diffMs -= (finalAccumulatedPause * 1000);
+    const session_duration = Math.max(0, Math.ceil(diffMs / 60000));
+    const session_duration_seconds = Math.max(0, Math.floor(diffMs / 1000));
+
+    // Pricing logic (cloned from /stop)
+    const pricePerMin = Number(table.pricePerMin || table.price_per_min || 0);
+    const pricePerHalfHour = Number(table.pricePerHalfHour || table.price_per_half_hour || 0);
+    const pricePerHour = Number(table.pricePerHour || table.price_per_hour || 0);
+    const frameCharge = Number(table.frameCharge || table.frame_charge || 0);
+
+    let table_charges = 0;
+    if (session.bookingtype === 'frame') {
+       table_charges = (session.framecount || 1) * frameCharge;
+    } else if (pricePerHour > 0 && pricePerHalfHour > 0) {
+      const hours = Math.floor(session_duration / 60);
+      const remainderMins = Math.floor(session_duration % 60);
+      let durationCost = hours * pricePerHour;
+      if (remainderMins > 0 && remainderMins <= 10) {
+        durationCost += remainderMins * pricePerMin;
+      } else if (remainderMins > 10 && remainderMins <= 30) {
+        durationCost += pricePerHalfHour;
+      } else if (remainderMins > 30) {
+        durationCost += pricePerHour;
+      }
+      table_charges = durationCost;
+    } else {
+      table_charges = session_duration * pricePerMin;
+    }
+
+    // Fetch linked orders
+    const orders = await Order.findAll({
+      where: addStationFilter({ session_id: id, status: ["received", "pending", "ready", "completed"] }, req.stationId),
+      select: "*, OrderItems:orderitems(*, MenuItem:menuitems(*))",
+    });
+
+    let menu_charges = 0;
+    const order_items = [];
+
+    orders.forEach(order => {
+      menu_charges += Number(order.total) || 0;
+      if (order.OrderItems) {
+        order.OrderItems.forEach(item => {
+          order_items.push({
+            name: item.MenuItem?.name || "Unknown Item",
+            qty: item.qty || 1,
+            price: Number(item.priceEach || item.MenuItem?.price || 0),
+            amount: (Number(item.priceEach || item.MenuItem?.price || 0)) * (item.qty || 1)
+          });
+        });
+      }
+    });
+
+    const total_amount = table_charges + menu_charges;
+
+    // Construct "Virtual Bill"
+    const virtualBill = {
+      bill_number: "CURRENT",
+      customer_name: session.customer_name || "Guest",
+      table_id: session.tableid,
+      session_id: session.activeid,
+      table_charges,
+      menu_charges,
+      total_amount,
+      status: "pending",
+      session_duration,
+      session_duration_seconds,
+      order_items,
+      session_status: session.status,
+      start_time: session.starttime,
+      accumulated_pause_seconds: session.accumulated_pause_seconds || 0,
+      table_info: {
+        name: table.name,
+        game_name: gameName,
+        price_per_min: pricePerMin,
+        price_per_half_hour: pricePerHalfHour,
+        price_per_hour: pricePerHour,
+        frame_charge: frameCharge,
+        booking_type: session.bookingtype
+      },
+      updatedAt: new Date().toISOString()
+    };
+
+    res.json(virtualBill);
+  } catch (err) {
+    console.error("Current Bill Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get("/:id", auth, stationContext, async (req, res) => {
   try {
     const where = addStationFilter({ activeid: req.params.id }, req.stationId);

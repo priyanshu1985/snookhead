@@ -306,8 +306,8 @@ router.get("/revenue", auth, stationContext, async (req, res) => {
     let revenueQuery = supabase
       .from("bills")
       .select("totalamount")
-      .gte("createdat", startDate.toISOString())
-      .lte("createdat", endDate.toISOString())
+      .gte("createdAt", startDate.toISOString())
+      .lte("createdAt", endDate.toISOString())
       .eq("status", "paid");
 
     revenueQuery = applyStationFilter(revenueQuery, req.stationId);
@@ -326,8 +326,8 @@ router.get("/revenue", auth, stationContext, async (req, res) => {
     let prevRevenueQuery = supabase
       .from("bills")
       .select("totalamount")
-      .gte("createdat", prevStartDate.toISOString())
-      .lte("createdat", prevEndDate.toISOString())
+      .gte("createdAt", prevStartDate.toISOString())
+      .lte("createdAt", prevEndDate.toISOString())
       .eq("status", "paid");
 
     prevRevenueQuery = applyStationFilter(prevRevenueQuery, req.stationId);
@@ -350,7 +350,7 @@ router.get("/revenue", auth, stationContext, async (req, res) => {
     const revenueBreakdownMap = {};
     (revenueData || []).forEach(bill => {
       // Adjust date logic if needed, simplify to YYYY-MM-DD
-      const dateKey = new Date(bill.createdat || new Date()).toISOString().split('T')[0];
+      const dateKey = new Date(bill.createdAt || new Date()).toISOString().split('T')[0];
       if (!revenueBreakdownMap[dateKey]) {
         revenueBreakdownMap[dateKey] = { date: dateKey, revenue: 0, count: 0 };
       }

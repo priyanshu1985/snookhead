@@ -18,6 +18,8 @@ import {
   addStationToData,
 } from "../middleware/stationContext.js";
 import { checkQueueAndAssign } from "../utils/queueManager.js";
+import { getSupabase } from "../config/supabase.js";
+import { generateSequentialBillNo } from "../utils/billUtils.js";
 
 const router = express.Router();
 
@@ -376,11 +378,8 @@ router.post(
         });
       }
 
-      // 4. Generate unique bill number
-      const bill_number = `BILL-${Date.now()}-${Math.random()
-        .toString(36)
-        .substr(2, 9)
-        .toUpperCase()}`;
+      // 4. Generate unique bill number (Sequential daily reset - Domino's style)
+      const bill_number = await generateSequentialBillNo(req.stationId);
 
       // 5. Create items summary
       // Check if it's frame mode (implied by frame_charges > 0 and duration near 0, or explicit booking_type logic if we had it)
