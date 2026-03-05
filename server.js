@@ -1,25 +1,16 @@
 // server.js
-// Touch to force restart!!
 import "dotenv/config";
 import dns from "node:dns";
-
-// 🔥 Bypassing local DNS hijacking by forcing Google DNS
-// try {
-//   dns.setServers(["8.8.8.8", "8.8.4.4"]);
-//   console.log("🛠️ DNS servers forced to Google DNS (8.8.8.8)");
-// } catch (error) {
-//   console.warn("⚠️ Failed to set custom DNS servers:", error.message);
-// }
-
-if (dns.setDefaultResultOrder) {
-  dns.setDefaultResultOrder("ipv4first");
-}
+import http from "http";
 import express from "express";
 import cors from "cors";
+import { Server as SocketIOServer } from "socket.io";
+import cron from "node-cron";
 
 import { getSupabase, testConnection } from "./config/supabase.js";
 import { securityHeaders } from "./middleware/security.js";
 import { rateLimit } from "./middleware/rateLimiter.js";
+import { setIO, emitToStation } from "./utils/socketManager.js";
 
 // Import all route modules
 import authRoutes from "./routes/auth.js";
@@ -44,10 +35,16 @@ import ownerPanelRoutes from "./routes/ownerPanel.js";
 import stockImagesRoutes from "./routes/stockImages.js";
 import expensesRoutes from "./routes/expenses.js";
 import kitchenExpensesRoutes from "./routes/kitchenExpenses.js";
+import attendanceRoutes from "./routes/attendance.js";
+import uploadRoutes from "./routes/upload.js";
+
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder("ipv4first");
+}
 
 const app = express();
 
-// Add process error handlers for debugging
+// Process error handlers
 process.on("uncaughtException", (error) => {
   console.error("🚨 Uncaught Exception:", error);
   process.exit(1);
@@ -59,15 +56,10 @@ process.on("unhandledRejection", (reason, promise) => {
 });
 
 // Middleware
-app.use(securityHeaders); // Must be before other middlewares
-// We use 2000 requests per 15 minutes. 500 was still too strict for multiple active users and polling.
+app.use(securityHeaders);
 app.use(rateLimit(2000, 15 * 60 * 1000));
-
-// Permissive CORS: Allow all origins for initial deployment
 app.use(cors());
-
 app.use(express.json());
-// Serve static files from public directory
 app.use("/static", express.static("public"));
 
 // Get Supabase client
@@ -96,64 +88,137 @@ app.use("/api/owner/panel", ownerPanelRoutes);
 app.use("/api/stock-images", stockImagesRoutes);
 app.use("/api/expenses", expensesRoutes);
 app.use("/api/kitchen-expenses", kitchenExpensesRoutes);
-import attendanceRoutes from "./routes/attendance.js";
 app.use("/api/attendance", attendanceRoutes);
-import uploadRoutes from "./routes/upload.js";
 app.use("/api/upload", uploadRoutes);
 
-// Basic health check endpoint
 app.get("/health", (req, res) => {
   res.json({ status: "Server is running" });
 });
 
-// Start server with proper async handling
+// ── node-cron: Auto-release expired timer sessions every 1 minute ─────────────
+const startCronJobs = () => {
+  cron.schedule("* * * * *", async () => {
+    try {
+      const now = new Date().toISOString();
+
+      const { data: expiredSessions, error } = await supabase
+        .from("activetables")
+        .select("activeid, tableid, gameid, stationid, bookingtype, bookingendtime, status")
+        .eq("status", "active")
+        .eq("bookingtype", "timer")
+        .lt("bookingendtime", now);
+
+      if (error) {
+        console.error("🕐 [Cron] Error querying expired sessions:", error.message);
+        return;
+      }
+
+      if (!expiredSessions || expiredSessions.length === 0) return;
+
+      console.log(`🕐 [Cron] Auto-releasing ${expiredSessions.length} expired session(s)`);
+
+      for (const session of expiredSessions) {
+        try {
+          const endTime = new Date().toISOString();
+
+          // Mark session as completed
+          await supabase
+            .from("activetables")
+            .update({ status: "completed", endtime: endTime })
+            .eq("activeid", session.activeid);
+
+          // Free the table
+          await supabase
+            .from("tableassets")
+            .update({ status: "available" })
+            .eq("id", session.tableid);
+
+          console.log(`✅ [Cron] Released session ${session.activeid} for table ${session.tableid}`);
+
+          // Notify connected clients
+          emitToStation(session.stationid, "session:changed", {
+            action: "auto-release",
+            activeId: session.activeid,
+            tableId: session.tableid,
+          });
+        } catch (sessionErr) {
+          console.error(`❌ [Cron] Failed to release session ${session.activeid}:`, sessionErr.message);
+        }
+      }
+    } catch (err) {
+      console.error("🕐 [Cron] Unexpected error:", err.message);
+    }
+  });
+
+  console.log("🕐 Cron: auto-release expired sessions every 1 min");
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function startServer() {
   try {
-    // Test connection on startup
     console.log("🔗 Testing Supabase connection...");
     const connected = await testConnection();
     if (!connected) {
       throw new Error("Failed to connect to Supabase");
     }
 
-    const PORT = process.env.PORT || 4000; // Use port 4000 to match frontend config
+    const PORT = process.env.PORT || 4000;
 
-    const HOST = "0.0.0.0";
-    const server = app.listen(PORT, HOST, () => {
-      console.log(`✅ Server running on http://${HOST}:${PORT}`);
-      console.log(`📊 Health check: http://${HOST}:${PORT}/api/health`);
-      console.log(`👥 Users API: http://${HOST}:${PORT}/api/users`);
+    // Wrap Express in an HTTP server for socket.io
+    const httpServer = http.createServer(app);
+
+    const io = new SocketIOServer(httpServer, {
+      cors: {
+        origin: "*",
+        methods: ["GET", "POST"],
+      },
+    });
+
+    // Register shared socket.io instance for use in routes
+    setIO(io);
+
+    io.on("connection", (socket) => {
+      console.log(`🔌 Socket connected: ${socket.id}`);
+
+      // Clients join their station room so events are scoped per station
+      socket.on("join-station", (stationId) => {
+        if (stationId) {
+          socket.join(`station:${stationId}`);
+          console.log(`📡 Socket ${socket.id} joined station:${stationId}`);
+        }
+      });
+
+      socket.on("disconnect", () => {
+        console.log(`🔌 Socket disconnected: ${socket.id}`);
+      });
+    });
+
+    const server = httpServer.listen(PORT, () => {
+      console.log(`✅ Server running on http://localhost:${PORT}`);
+      console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+      console.log(`🔌 WebSocket ready on ws://localhost:${PORT}`);
       console.log("🎯 Server is ready and listening for requests");
     });
 
-    // Keep the server alive
     server.keepAliveTimeout = 120000;
     server.headersTimeout = 120000;
 
-    // Keep the process alive with stdin
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(true);
       process.stdin.resume();
     }
 
-    server.on("close", () => {
-      console.log("🔴 Server closed");
-    });
+    server.on("close", () => console.log("🔴 Server closed"));
+    server.on("error", (error) => console.error("🚨 Server error:", error));
 
-    server.on("error", (error) => {
-      console.error("🚨 Server error:", error);
-    });
-
-    // Prevent process from exiting
     process.on("SIGINT", () => {
       console.log("\n🛑 Received SIGINT. Graceful shutdown...");
-      server.close(() => {
-        process.exit(0);
-      });
+      server.close(() => process.exit(0));
     });
 
-    console.log("✨ Server startup completed successfully");
+    startCronJobs();
 
+    console.log("✨ Server startup completed successfully");
     return server;
   } catch (error) {
     console.error("❌ Failed to start server:", error.message);
@@ -162,4 +227,3 @@ async function startServer() {
 }
 
 startServer();
-

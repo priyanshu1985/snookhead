@@ -23,6 +23,7 @@ import { checkTimeConflicts } from "../middleware/timeConflicts.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { emitToStation } from "../utils/socketManager.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -430,6 +431,13 @@ router.post(
         { where: { id: table.id } },
       );
 
+      // Notify connected clients that session state changed
+      emitToStation(req.stationId, "session:changed", {
+        action: "start",
+        tableId: table_id,
+        activeId: session.activeid || session.active_id,
+      });
+
       res.status(201).json({
         message: "Session started",
         session,
@@ -623,6 +631,13 @@ router.post(
         req.stationId,
       );
       const bill = await Bill.create(billData);
+
+      // Notify connected clients that session state changed
+      emitToStation(req.stationId, "session:changed", {
+        action: "stop",
+        tableId: session.tableid,
+        activeId: active_id,
+      });
 
       res.json({
         message: queueResult.assigned
@@ -897,6 +912,13 @@ router.post(
 
       const bill = await Bill.create(billData);
 
+      // Notify connected clients that session was auto-released
+      emitToStation(req.stationId, "session:changed", {
+        action: "auto-release",
+        activeId: session.activeid || session.active_id,
+        tableId: session.tableid,
+      });
+
       res.json({
         message: queueResult.assigned
           ? `Session auto-released. ${queueResult.message}`
@@ -1132,7 +1154,7 @@ router.get("/:id/current-bill", auth, stationContext, async (req, res) => {
     // Calculate table charges
     const startTime = new Date(session.starttime);
     const endTime = session.endtime ? new Date(session.endtime) : new Date();
-    
+
     let finalAccumulatedPause = session.accumulated_pause_seconds || 0;
     if (session.status === 'paused' && session.pause_start_time) {
       let actualResumeTime = endTime;
@@ -1156,7 +1178,7 @@ router.get("/:id/current-bill", auth, stationContext, async (req, res) => {
 
     let table_charges = 0;
     if (session.bookingtype === 'frame') {
-       table_charges = (session.framecount || 1) * frameCharge;
+      table_charges = (session.framecount || 1) * frameCharge;
     } else if (pricePerHour > 0 && pricePerHalfHour > 0) {
       const hours = Math.floor(session_duration / 60);
       const remainderMins = Math.floor(session_duration % 60);

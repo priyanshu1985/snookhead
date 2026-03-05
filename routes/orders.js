@@ -7,6 +7,7 @@ import {
   addStationFilter,
   addStationToData,
 } from "../middleware/stationContext.js";
+import { emitToStation } from "../utils/socketManager.js";
 
 const router = express.Router();
 
@@ -138,7 +139,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
             const changeAmount = isCancellation ? totalChange : -totalChange;
 
             const { previousStock, newStock } = await Inventory.adjustStock(inventoryItem.id, changeAmount);
-            
+
             const { InventoryLog } = await import("../models/index.js");
             if (InventoryLog) {
               await InventoryLog.create({
@@ -177,6 +178,13 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
 
     await Order.update(finalUpdate, { where: { id: order.id } });
     order.total = calculatedTotal;
+
+    // Notify kitchen/staff that a new order was placed
+    emitToStation(req.stationId, "order:new", {
+      orderId: order.id,
+      personName: order.personName,
+      order_source: order.order_source,
+    });
 
     res.status(201).json({
       message: !hasPreparedItems ? "Order completed (packed items only)" : "Order created successfully",
@@ -373,8 +381,8 @@ router.post("/:orderId/items", auth, stationContext, async (req, res) => {
 
       // --- STOCK CHECK (PACKED ONLY) ---
       if (menuItem.item_type === 'packed' && menuItem.stock !== undefined && menuItem.stock < qty) {
-        return res.status(400).json({ 
-          error: `Insufficient stock for ${menuItem.name}. Available: ${menuItem.stock}` 
+        return res.status(400).json({
+          error: `Insufficient stock for ${menuItem.name}. Available: ${menuItem.stock}`
         });
       }
       // --------------------
@@ -435,6 +443,12 @@ router.patch("/:id/status", auth, stationContext, async (req, res) => {
 
     await Order.update({ status }, { where: { id: order.id } });
     order.status = status;
+
+    // Notify kitchen/staff that an order status changed
+    emitToStation(req.stationId, "order:updated", {
+      orderId: order.id,
+      status,
+    });
 
     res.json({
       message: "Order status updated",
