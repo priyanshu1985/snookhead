@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,10 +11,12 @@ import {
   StatusBar,
   Animated,
   Platform,
+  FlatList,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { LineChart } from 'react-native-chart-kit';
+import { BarChart } from 'react-native-chart-kit';
 import Icon from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { ownerAPI } from '../../services/api';
@@ -22,120 +24,169 @@ import { ownerAPI } from '../../services/api';
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
 
-// Custom Pie Chart Component
-const PieChart = ({ data }) => {
-  const total = data.reduce(
-    (sum, item) => sum + parseFloat(item.value || 0),
-    0,
-  );
+// --- REUSABLE COMPONENTS ---
 
-  if (total === 0) {
+/**
+ * MetricCard Component
+ * 2x2 Grid card for main metrics
+ */
+const MetricCard = React.memo(({ title, value, icon, backgroundColor, trend, trendColor, positive, isAlert, badge, onPress, loading }) => {
+  if (loading) {
     return (
-      <View style={styles.pieChartEmpty}>
-        <Text style={styles.pieChartEmptyText}>No Data</Text>
+      <View style={[styles.metricCard, { backgroundColor: '#F3F4F6' }]}>
+        <ActivityIndicator size="small" color="#9CA3AF" />
       </View>
     );
   }
 
-  return (
-    <View style={styles.pieChartContainer}>
-      {data.map((item, index) => {
-        const percentage = (parseFloat(item.value || 0) / total) * 100;
-        return (
-          <View key={index} style={styles.pieChartLegendItem}>
-            <View
-              style={[styles.pieChartDot, { backgroundColor: item.color }]}
-            />
-            <View style={styles.pieChartLegendDetails}>
-              <Text style={styles.pieChartLegendLabel}>{item.label}</Text>
-              <Text style={styles.pieChartLegendValue}>
-                {item.formatted} ({percentage.toFixed(1)}%)
-              </Text>
-            </View>
-          </View>
-        );
-      })}
-    </View>
-  );
-};
+  const isPositiveValue = typeof value === 'string' ? !value.includes('-') : value >= 0;
+  const valueColor = isPositiveValue ? '#1F2937' : '#EF4444';
 
-// Custom Progress Bar Component
-const ProgressBar = ({ percentage, color, height = 8 }) => {
   return (
-    <View style={[styles.progressBarContainer, { height }]}>
-      <View
-        style={[
-          styles.progressBarFill,
-          {
-            width: `${Math.min(percentage, 100)}%`,
-            backgroundColor: color,
-            height,
-          },
-        ]}
+    <TouchableOpacity 
+      style={[styles.metricCard, { backgroundColor }]} 
+      onPress={onPress} 
+      activeOpacity={0.8}
+    >
+      <View style={styles.metricHeader}>
+        <View style={styles.metricIconContainer}>
+          {icon}
+        </View>
+        {badge && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{badge}</Text>
+          </View>
+        )}
+      </View>
+      <Text style={styles.metricLabel}>{title}</Text>
+      <Text style={[styles.metricValue, { color: valueColor }]}>{value}</Text>
+      {trend && (
+        <View style={styles.trendContainer}>
+          <Text style={[styles.trendText, { color: trendColor || '#6B7280' }]}>
+            {positive ? '📈 ' : ''}{trend}
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+});
+
+/**
+ * StatCard Component
+ * Smaller cards for sub-metrics
+ */
+const StatCard = React.memo(({ title, value, icon, percentage, color }) => (
+  <View style={styles.statCard}>
+    <View style={styles.statCardHeader}>
+      <View style={[styles.statIconContainer, { backgroundColor: color + '20' }]}>
+        {icon}
+      </View>
+      <Text style={styles.statCardValue}>{value}</Text>
+    </View>
+    <Text style={styles.statCardTitle}>{title}</Text>
+    {percentage !== undefined && (
+      <View style={styles.progressContainer}>
+        <View style={[styles.progressBar, { width: `${percentage}%`, backgroundColor: color }]} />
+      </View>
+    )}
+  </View>
+));
+
+/**
+ * RevenueDistributionChart Component
+ */
+const RevenueDistributionChart = React.memo(({ data }) => {
+  const chartConfig = {
+    backgroundColor: '#ffffff',
+    backgroundGradientFrom: '#ffffff',
+    backgroundGradientTo: '#ffffff',
+    decimalPlaces: 0,
+    color: (opacity = 1) => `rgba(255, 149, 0, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
+    style: {
+      borderRadius: 16,
+    },
+    propsForLabels: {
+      fontSize: 10,
+    }
+  };
+
+  const chartData = {
+    labels: data.map(d => d.category),
+    datasets: [
+      {
+        data: data.map(d => d.value),
+        colors: data.map(d => (opacity = 1) => d.color),
+      },
+    ],
+  };
+
+  return (
+    <View style={styles.chartWrapper}>
+      <BarChart
+        data={chartData}
+        width={width - 32}
+        height={220}
+        yAxisLabel="₹"
+        chartConfig={chartConfig}
+        verticalLabelRotation={0}
+        fromZero
+        withCustomBarColorFromData
+        flatColor
+        style={{
+          marginVertical: 8,
+          borderRadius: 16,
+        }}
       />
     </View>
   );
-};
+});
 
-// Chart colors for games
-const CHART_COLORS = [
-  '#FF8C42',
-  '#4CAF50',
-  '#2196F3',
-  '#9C27B0',
-  '#FF5252',
-  '#FFC107',
-  '#26A69A',
-  '#EC407A',
-];
+// --- MODALS ---
 
-// Game icons mapping
-const GAME_ICONS = {
-  snooker: 'grid-outline',
-  pool: 'ellipse-outline',
-  ps5: 'game-controller-outline',
-  chess: 'apps-outline',
-  carrom: 'square-outline',
-  'table tennis': 'tennisball-outline',
-  default: 'game-controller-outline',
-};
+const DetailModal = ({ visible, onClose, title, children }) => (
+  <Modal
+    animationType="slide"
+    transparent={true}
+    visible={visible}
+    onRequestClose={onClose}
+  >
+    <View style={styles.modalOverlay}>
+      <View style={styles.modalContent}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>{title}</Text>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <Icon name="close" size={24} color="#1F2937" />
+          </TouchableOpacity>
+        </View>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {children}
+        </ScrollView>
+      </View>
+    </View>
+  </Modal>
+);
+
+// --- MAIN DASHBOARD TAB ---
 
 export default function OwnerDashboard({ navigation, inTabbedView = false }) {
   const [selectedPeriod, setSelectedPeriod] = useState('Week');
+  const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState([]);
-  const [gameData, setGameData] = useState([]);
-  const [chartData, setChartData] = useState([]);
-  const [currentDate, setCurrentDate] = useState('');
-  const [summary, setSummary] = useState(null);
-  const [revenueBreakdown, setRevenueBreakdown] = useState(null);
-  const [operationalInsights, setOperationalInsights] = useState(null);
+  const [activeSubTab, setActiveSubTab] = useState('SOURCE'); // SOURCE, METHOD, TOP
+  const [selectedModal, setSelectedModal] = useState(null);
 
-  // Custom Date Range State
   const [customStartDate, setCustomStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 7)));
   const [customEndDate, setCustomEndDate] = useState(new Date());
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
-  const [revenueTrendData, setRevenueTrendData] = useState(null);
 
   const periods = ['Day', 'Week', 'Month', 'Custom'];
-
-  const getGameIcon = gameName => {
-    const name = gameName.toLowerCase();
-    return GAME_ICONS[name] || GAME_ICONS.default;
-  };
-
-  const getUsageStatus = usage => {
-    if (usage >= 70) return { status: 'High usage', color: '#FF8C42' };
-    if (usage >= 40) return { status: 'Good usage', color: '#FFC107' };
-    return { status: 'Low usage', color: '#FF5252' };
-  };
 
   const fetchDashboardData = useCallback(async () => {
     try {
       const period = selectedPeriod.toLowerCase();
-      
       let startStr = null;
       let endStr = null;
       if (period === 'custom') {
@@ -143,218 +194,25 @@ export default function OwnerDashboard({ navigation, inTabbedView = false }) {
         endStr = customEndDate.toISOString();
       }
 
-      const data = await ownerAPI.getSummary(period, startStr, endStr);
-
-      // Fetch Revenue Data specifically for the LineChart
-      try {
-         const revDataResponse = await ownerAPI.getRevenue(period, startStr, endStr);
-         if (revDataResponse && revDataResponse.revenueBreakdown && revDataResponse.revenueBreakdown.length > 0) {
-            setRevenueTrendData(revDataResponse.revenueBreakdown);
-         } else {
-            setRevenueTrendData(null);
-         }
-      } catch (e) {
-         console.warn("Failed to fetch revenue trend data:", e);
-         setRevenueTrendData(null);
-      }
-
-      // Financial Metrics Stats (Top Cards)
-      const formattedStats = [
-        {
-          id: 1,
-          title: 'Total Revenue',
-          value: data.summary?.totalRevenueFormatted || '₹0',
-          trend: data.summary?.revenueTrend || '+0%',
-          icon: 'cash-outline',
-          bgColor: '#E8F5E9',
-          trendColor: '#4CAF50',
-          positive: true,
-        },
-        {
-          id: 2,
-          title: 'Net Profit',
-          value: data.summary?.netProfitFormatted || '₹0',
-          trend: data.summary?.expensesFormatted
-            ? `Expenses: ${data.summary.expensesFormatted}`
-            : 'No expenses',
-          icon: 'trending-up-outline',
-          bgColor: data.summary?.netProfit >= 0 ? '#E8F5E9' : '#FFEBEE',
-          trendColor: data.summary?.netProfit >= 0 ? '#4CAF50' : '#FF5252',
-          positive: data.summary?.netProfit >= 0,
-        },
-        {
-          id: 3,
-          title: 'Occupancy Rate',
-          value: `${data.summary?.occupancyRate?.toFixed(1) || 0}%`,
-          trend: `${data.summary?.activeTables || 0}/${
-            data.summary?.totalTables || 0
-          } tables active`,
-          icon: 'grid-outline',
-          bgColor: '#FFF3E0',
-          trendColor: '#FF8C42',
-          positive: true,
-        },
-        {
-          id: 4,
-          title: 'Inventory Health',
-          value: String(
-            data.stats?.find(s => s.title === 'Low Stock Items')?.value || 0,
-          ),
-          trend:
-            data.stats?.find(s => s.title === 'Low Stock Items')?.trend ||
-            'Healthy',
-          icon: 'cube-outline',
-          bgColor:
-            (data.stats?.find(s => s.title === 'Low Stock Items')?.value || 0) >
-            0
-              ? '#FFEBEE'
-              : '#E8F5E9',
-          trendColor:
-            (data.stats?.find(s => s.title === 'Low Stock Items')?.value || 0) >
-            0
-              ? '#FF5252'
-              : '#4CAF50',
-          positive:
-            (data.stats?.find(s => s.title === 'Low Stock Items')?.value ||
-              0) === 0,
-          isAlert:
-            (data.stats?.find(s => s.title === 'Low Stock Items')?.value || 0) >
-            0,
-        },
-      ];
-      setStats(formattedStats);
-
-      // Revenue Breakdown (Game vs Food & Bev)
-      const gameRev = data.summary?.gameRevenue || 0;
-      const foodRev = data.summary?.foodRevenue || 0;
-      const totalRev = gameRev + foodRev || 1; // Avoid division by zero
-      setRevenueBreakdown({
-        game: {
-          amount: data.summary?.gameRevenueFormatted || '₹0',
-          percentage: ((gameRev / totalRev) * 100).toFixed(1),
-        },
-        food: {
-          amount: data.summary?.foodRevenueFormatted || '₹0',
-          percentage: ((foodRev / totalRev) * 100).toFixed(1),
-        },
-      });
-
-      // Operational Insights
-      const avgDuration = data.summary?.avgSessionDuration || 0;
-      setOperationalInsights({
-        avgSessionDuration: avgDuration > 0 ? `${avgDuration} mins` : 'N/A',
-        peakActivity: data.summary?.peakHourLabel || 'N/A',
-        totalSessions: data.summary?.totalSessions || 0,
-      });
-
-      // Store full summary for detailed analysis
-      setSummary(data.summary);
-
-      // Format game utilization data for chart (from existing gameData)
-      const games = data.gameData || [];
-      const formattedChartData = games.map((game, index) => ({
-        game: game.name,
-        value: game.usage || 0,
-        color: CHART_COLORS[index % CHART_COLORS.length],
-      }));
-      setChartData(formattedChartData);
-
-      // Format game revenue data
-      setGameData(games.slice(0, 5));
-
-      // Set current date string based on selection
-      if (period === 'custom') {
-         setCurrentDate(
-            `${customStartDate.toLocaleDateString()} - ${customEndDate.toLocaleDateString()}`
-         );
-      } else {
-         setCurrentDate(
-            data.currentDate ||
-            new Date().toLocaleDateString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-            }),
-         );
-      }
+      const response = await ownerAPI.getSummary(period, startStr, endStr);
+      setDashboardData(response);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      // Set default empty data on error
-      setStats([
-        {
-          id: 1,
-          title: 'Total Revenue',
-          value: '₹0',
-          trend: '+0%',
-          icon: 'cash-outline',
-          bgColor: '#E8F5E9',
-          trendColor: '#4CAF50',
-          positive: true,
-        },
-        {
-          id: 2,
-          title: 'Net Profit',
-          value: '₹0',
-          trend: 'No expenses',
-          icon: 'trending-up-outline',
-          bgColor: '#E8F5E9',
-          trendColor: '#4CAF50',
-          positive: true,
-        },
-        {
-          id: 3,
-          title: 'Occupancy Rate',
-          value: '0%',
-          trend: '0/0 tables active',
-          icon: 'grid-outline',
-          bgColor: '#FFF3E0',
-          trendColor: '#FF8C42',
-          positive: true,
-        },
-        {
-          id: 4,
-          title: 'Inventory Health',
-          value: '0',
-          trend: 'Healthy',
-          icon: 'cube-outline',
-          bgColor: '#E8F5E9',
-          trendColor: '#4CAF50',
-          positive: true,
-          isAlert: false,
-        },
-      ]);
-      setChartData([]);
-      setGameData([]);
-      setRevenueBreakdown({
-        game: { amount: '₹0', percentage: '0' },
-        food: { amount: '₹0', percentage: '0' },
-      });
-      setOperationalInsights({
-        avgSessionDuration: 'N/A',
-        peakActivity: 'N/A',
-        totalSessions: 0,
-      });
-      setSummary(null);
-      setCurrentDate(
-        new Date().toLocaleDateString('en-US', {
-          month: 'long',
-          day: 'numeric',
-          year: 'numeric',
-        }),
-      );
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
     }
-  }, [selectedPeriod]);
+  }, [selectedPeriod, customStartDate, customEndDate]);
 
   useEffect(() => {
     setIsLoading(true);
-    fetchDashboardData().finally(() => setIsLoading(false));
+    fetchDashboardData();
   }, [fetchDashboardData]);
 
-  const onRefresh = useCallback(async () => {
+  const onRefresh = () => {
     setRefreshing(true);
-    await fetchDashboardData();
-    setRefreshing(false);
-  }, [fetchDashboardData]);
+    fetchDashboardData();
+  };
 
   const onStartDateChange = (event, selectedDate) => {
     setShowStartPicker(Platform.OS === 'ios');
@@ -366,1413 +224,710 @@ export default function OwnerDashboard({ navigation, inTabbedView = false }) {
     if (selectedDate) setCustomEndDate(selectedDate);
   };
 
-  return inTabbedView ? (
-    // When inside tabs, just return the content without SafeAreaView
-    <View style={styles.tabbedContainer}>
+  // Derived Data for Display
+  const summary = dashboardData?.summary || {};
+  const breakdown = summary.breakdown || {};
+  
+  const revenueValue = `₹${(summary.totalRevenue || 0).toLocaleString()}`;
+  const expensesValue = `₹${(summary.expenses || 0).toLocaleString()}`;
+  const profitValue = `₹${(summary.netProfit || 0).toLocaleString()}`;
+  const creditsValue = `-₹${(dashboardData?.totalOwed || 0).toLocaleString()}`;
+  
+  const revenueTrend = dashboardData?.stats?.find(s => s.title === 'Total Revenue')?.trend || '+40%';
+  const expensesTrend = `Expenses: ₹${(summary.expenses || 0).toLocaleString()}`;
+  const profitTrend = `Expenses: ₹0.00`; // As per requirement
+  const creditsBadge = `${dashboardData?.debtors?.length || 0} Members Overdue`;
+
+  const chartData = [
+    { category: 'Game Revenue', value: summary.gameRevenue || 0, color: '#FF9500' },
+    { category: 'Food & Bev', value: summary.foodRevenue || 0, color: '#10B981' },
+  ];
+
+  return (
+    <View style={styles.mainContainer}>
       <ScrollView
-        style={styles.content}
+        style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={['#FF8C42']}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#FF9500']} />
         }
       >
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#FF8C42" />
-            <Text style={styles.loadingText}>Loading dashboard...</Text>
+        {/* Date / Time Filter */}
+        <View style={styles.dateSection}>
+          <View style={styles.dateContainer}>
+            <Icon name="calendar-outline" size={20} color="#6B7280" />
+            <Text style={styles.dateText}>
+              {dashboardData?.currentDate || 'March 5, 2026'}
+            </Text>
           </View>
-        ) : (
-          <>
-            {/* Date and Period Selector */}
-            <View style={styles.dateSection}>
-              <View style={styles.dateContainer}>
-                <Icon name="calendar-outline" size={20} color="#999" />
-                <Text style={styles.dateText}>
-                  {currentDate || 'Loading...'}
-                </Text>
-              </View>
-              <View style={styles.periodSelector}>
-                {periods.map(period => (
-                  <TouchableOpacity
-                    key={period}
-                    style={[
-                      styles.periodBtn,
-                      selectedPeriod === period && styles.periodBtnActive,
-                    ]}
-                    onPress={() => setSelectedPeriod(period)}
-                  >
-                    <Text
-                      style={[
-                        styles.periodText,
-                        selectedPeriod === period && styles.periodTextActive,
-                      ]}
-                    >
-                      {period}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-                {/* Custom Date Pickers (Shown if Custom is selected) */}
-                {selectedPeriod === 'Custom' && (
-                  <View style={styles.customDateContainer}>
-                    <View style={styles.datePickerWrapper}>
-                      <Text style={styles.datePickerLabel}>Start Date</Text>
-                      <TouchableOpacity
-                        style={styles.datePickerBtn}
-                        onPress={() => setShowStartPicker(true)}
-                      >
-                        <Icon name="calendar-outline" size={16} color="#FF8C42" />
-                        <Text style={styles.datePickerBtnText}>
-                          {customStartDate.toLocaleDateString(undefined, {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                          })}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <Icon name="arrow-forward-outline" size={16} color="#ccc" style={{ marginTop: 22, marginHorizontal: 10 }} />
-
-                    <View style={styles.datePickerWrapper}>
-                      <Text style={styles.datePickerLabel}>End Date</Text>
-                      <TouchableOpacity
-                        style={styles.datePickerBtn}
-                        onPress={() => setShowEndPicker(true)}
-                      >
-                        <Icon name="calendar-outline" size={16} color="#FF8C42" />
-                        <Text style={styles.datePickerBtnText}>
-                          {customEndDate.toLocaleDateString(undefined, {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                          })}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    {showStartPicker && (
-                      <DateTimePicker
-                        value={customStartDate}
-                        mode="date"
-                        display="default"
-                        onChange={onStartDateChange}
-                        maximumDate={customEndDate}
-                      />
-                    )}
-                    {showEndPicker && (
-                      <DateTimePicker
-                        value={customEndDate}
-                        mode="date"
-                        display="default"
-                        onChange={onEndDateChange}
-                        minimumDate={customStartDate}
-                        maximumDate={new Date()}
-                      />
-                    )}
-                  </View>
-                )}
-            </View>
-
-            {/* Stats Grid */}
-            <View style={styles.statsGrid}>
-              {stats.map((stat, idx) => (
-                <View
-                  key={stat.id}
+          <View style={styles.periodSelector}>
+            {periods.map(period => (
+              <TouchableOpacity
+                key={period}
+                style={[
+                  styles.periodBtn,
+                  selectedPeriod === period && styles.periodBtnActive,
+                ]}
+                onPress={() => setSelectedPeriod(period)}
+              >
+                <Text
                   style={[
-                    styles.statCard,
-                    { backgroundColor: stat.bgColor },
-                    idx % 2 === 1 && styles.statCardRight,
+                    styles.periodText,
+                    selectedPeriod === period && styles.periodTextActive,
                   ]}
                 >
-                  <View style={styles.statHeader}>
-                    <Text style={styles.statTitle}>{stat.title}</Text>
-                    <Icon name={stat.icon} size={20} color={stat.trendColor} />
-                  </View>
-                  <Text style={styles.statValue}>{stat.value}</Text>
-                  <Text style={[styles.statTrend, { color: stat.trendColor }]}>
-                    {stat.isAlert ? '🔴 ' : '📈 '}
-                    {stat.trend}
-                  </Text>
-                </View>
-              ))}
-            </View>
-
-            {/* Revenue Breakdown Section */}
-            {revenueBreakdown && (
-              <View style={styles.breakdownSection}>
-                <Text style={styles.sectionTitle}>💰 Revenue Breakdown</Text>
-                <PieChart
-                  data={[
-                    {
-                      label: 'Game Revenue',
-                      value: revenueBreakdown.game.percentage,
-                      formatted: revenueBreakdown.game.amount,
-                      color: '#FF8C42',
-                    },
-                    {
-                      label: 'Food & Beverage',
-                      value: revenueBreakdown.food.percentage,
-                      formatted: revenueBreakdown.food.amount,
-                      color: '#4CAF50',
-                    },
-                  ]}
-                />
-              </View>
-            )}
-
-            {/* Operational Insights */}
-            {operationalInsights && (
-              <View style={styles.insightsSection}>
-                <Text style={styles.sectionTitle}>📊 Operational Insights</Text>
-                <View style={styles.insightsGrid}>
-                  <View style={styles.insightCard}>
-                    <MaterialCommunityIcons
-                      name="clock-outline"
-                      size={28}
-                      color="#2196F3"
-                    />
-                    <Text style={styles.insightLabel}>Avg Session</Text>
-                    <Text style={styles.insightValue}>
-                      {operationalInsights.avgSessionDuration}
-                    </Text>
-                  </View>
-                  <View style={styles.insightCard}>
-                    <MaterialCommunityIcons
-                      name="chart-line"
-                      size={28}
-                      color="#FF8C42"
-                    />
-                    <Text style={styles.insightLabel}>Peak Time</Text>
-                    <Text style={styles.insightValue}>
-                      {operationalInsights.peakActivity}
-                    </Text>
-                  </View>
-                  <View style={styles.insightCard}>
-                    <MaterialCommunityIcons
-                      name="account-group"
-                      size={28}
-                      color="#9C27B0"
-                    />
-                    <Text style={styles.insightLabel}>Sessions</Text>
-                    <Text style={styles.insightValue}>
-                      {operationalInsights.totalSessions}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {/* Detailed Revenue Analysis */}
-            {summary?.breakdown && (
-              <View style={styles.analysisSection}>
-                <Text style={styles.sectionTitle}>
-                  📈 Detailed Revenue Analysis
+                  {period}
                 </Text>
-
-                {/* --- Revenue Trend Line Chart --- */}
-                {revenueTrendData && revenueTrendData.length > 0 && (
-                   <View style={styles.trendChartContainer}>
-                     <Text style={styles.trendChartTitle}>Revenue Trends</Text>
-                     <LineChart
-                       data={{
-                         labels: revenueTrendData.map(item => {
-                             // Format label based on period (e.g. DD/MM for custom/week, or HH:mm for day)
-                             if (selectedPeriod === 'Day') return item.date.substring(11, 16);
-                             return item.date.substring(5, 10);
-                         }),
-                         datasets: [
-                           {
-                             data: revenueTrendData.map(item => item.revenue)
-                           }
-                         ]
-                       }}
-                       width={width - 32 - 40} // card width minus padding. padding=20 on analysisCard
-                       height={220}
-                       yAxisLabel="₹"
-                       chartConfig={{
-                         backgroundColor: '#ffffff',
-                         backgroundGradientFrom: '#ffffff',
-                         backgroundGradientTo: '#ffffff',
-                         decimalPlaces: 0, 
-                         color: (opacity = 1) => `rgba(255, 140, 66, ${opacity})`,
-                         labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                         style: {
-                           borderRadius: 16
-                         },
-                         propsForDots: {
-                           r: "4",
-                           strokeWidth: "2",
-                           stroke: "#FF8C42"
-                         }
-                       }}
-                       bezier
-                       style={{
-                         marginVertical: 8,
-                         borderRadius: 16
-                       }}
-                     />
-                   </View>
-                )}
-
-                {/* Revenue by Flow */}
-                <View style={styles.analysisCard}>
-                  <Text style={styles.analysisCardTitle}>
-                    🔄 Revenue by Flow
-                  </Text>
-                  <View style={styles.analysisTable}>
-                    <View style={styles.analysisRow}>
-                      <Text style={styles.analysisRowLabel}>
-                        📱 Dashboard Direct
-                      </Text>
-                      <Text style={styles.analysisRowValue}>
-                        ₹
-                        {summary.breakdown.flow.dashboard?.toFixed(2) || '0.00'}
-                      </Text>
-                    </View>
-                    <View style={styles.analysisRow}>
-                      <Text style={styles.analysisRowLabel}>⏳ Queue</Text>
-                      <Text style={styles.analysisRowValue}>
-                        ₹{summary.breakdown.flow.queue?.toFixed(2) || '0.00'}
-                      </Text>
-                    </View>
-                    <View style={styles.analysisRow}>
-                      <Text style={styles.analysisRowLabel}>
-                        📅 Reservation
-                      </Text>
-                      <Text style={styles.analysisRowValue}>
-                        ₹
-                        {summary.breakdown.flow.reservation?.toFixed(2) ||
-                          '0.00'}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* Revenue by Booking Type */}
-                <View style={styles.analysisCard}>
-                  <Text style={styles.analysisCardTitle}>
-                    🎯 Revenue by Booking Type
-                  </Text>
-                  <View style={styles.analysisTable}>
-                    <View style={styles.analysisRow}>
-                      <Text style={styles.analysisRowLabel}>⏱️ Timer Mode</Text>
-                      <Text style={styles.analysisRowValue}>
-                        ₹
-                        {summary.breakdown.bookingType.timer?.toFixed(2) ||
-                          '0.00'}
-                      </Text>
-                    </View>
-                    <View style={styles.analysisRow}>
-                      <Text style={styles.analysisRowLabel}>🎮 Set Game</Text>
-                      <Text style={styles.analysisRowValue}>
-                        ₹
-                        {summary.breakdown.bookingType.set?.toFixed(2) ||
-                          '0.00'}
-                      </Text>
-                    </View>
-                    <View style={styles.analysisRow}>
-                      <Text style={styles.analysisRowLabel}>🎱 Frame Mode</Text>
-                      <Text style={styles.analysisRowValue}>
-                        ₹
-                        {summary.breakdown.bookingType.frame?.toFixed(2) ||
-                          '0.00'}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* Revenue Collection Methods */}
-                <View style={styles.analysisCard}>
-                  <Text style={styles.analysisCardTitle}>
-                    💳 Payment Methods
-                  </Text>
-                  <View style={styles.analysisTable}>
-                    <View style={styles.analysisRow}>
-                      <Text style={styles.analysisRowLabel}>💵 Cash</Text>
-                      <Text style={styles.analysisRowValue}>
-                        ₹
-                        {summary.breakdown.paymentMode.cash?.toFixed(2) ||
-                          '0.00'}
-                      </Text>
-                    </View>
-                    <View style={styles.analysisRow}>
-                      <Text style={styles.analysisRowLabel}>📱 UPI/Online</Text>
-                      <Text style={styles.analysisRowValue}>
-                        ₹
-                        {summary.breakdown.paymentMode.upi?.toFixed(2) ||
-                          '0.00'}
-                      </Text>
-                    </View>
-                    <View style={styles.analysisRow}>
-                      <Text style={styles.analysisRowLabel}>👛 Wallet</Text>
-                      <Text style={styles.analysisRowValue}>
-                        ₹
-                        {summary.breakdown.paymentMode.wallet?.toFixed(2) ||
-                          '0.00'}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {/* Game Utilization Section */}
-            <View style={styles.utilizationSection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>🎮 Game Utilization</Text>
-                <TouchableOpacity>
-                  <Text style={styles.detailsLink}>Details</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Chart */}
-              <View style={styles.chartContainer}>
-                <Text style={styles.chartLabel}>
-                  Top 5 Products with Highest Sales Data
-                </Text>
-                <View style={styles.chart}>
-                  {chartData.map((item, idx) => (
-                    <View key={idx} style={styles.chartRow}>
-                      <Text style={styles.chartGameName}>{item.game}</Text>
-                      <View style={styles.barContainer}>
-                        <View
-                          style={[
-                            styles.bar,
-                            {
-                              width: `${item.value}%`,
-                              backgroundColor: item.color,
-                            },
-                          ]}
-                        />
-                      </View>
-                      <Text style={styles.chartValue}>{item.value}%</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-
-              {/* Game Revenue List */}
-              <View style={styles.revenueList}>
-                {gameData.map(game => (
-                  <View key={game.name} style={styles.gameCard}>
-                    <View style={styles.gameIconContainer}>
-                      <Icon name={game.icon} size={32} color="#FF8C42" />
-                    </View>
-                    <View style={styles.gameInfo}>
-                      <Text style={styles.gameName}>{game.name}</Text>
-                      <Text style={styles.gameRevenue}>
-                        {game.revenue} revenue
-                      </Text>
-                    </View>
-                    <View style={styles.gameStatus}>
-                      <Text
-                        style={[styles.statusText, { color: game.statusColor }]}
-                      >
-                        {game.status}
-                      </Text>
-                      <View style={styles.usageIndicator}>
-                        <View
-                          style={[
-                            styles.usageFill,
-                            {
-                              width: `${game.usage}%`,
-                              backgroundColor: game.statusColor,
-                            },
-                          ]}
-                        />
-                      </View>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            {/* Bottom Spacing */}
-            <View style={styles.bottomSpacing} />
-          </>
-        )}
-      </ScrollView>
-    </View>
-  ) : (
-    // Original standalone view with SafeAreaView
-    <SafeAreaView style={styles.safeContainer} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <View style={styles.container}>
-        {/* Header - only show when not in tabbed view */}
-        {!inTabbedView && (
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <Icon name="layers-outline" size={28} color="#1E3A5F" />
-              <Text style={styles.headerTitle}>SNOKEHEAD</Text>
-            </View>
-            <View style={styles.headerRight}>
-              <TouchableOpacity>
-                <Icon name="notifications-outline" size={24} color="#FF8C42" />
               </TouchableOpacity>
-              <TouchableOpacity>
-                <Icon name="menu" size={28} color="#333" />
+            ))}
+          </View>
+
+          {selectedPeriod === 'Custom' && (
+            <View style={styles.customDateContainer}>
+              <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowStartPicker(true)}>
+                <Text style={styles.datePickerBtnText}>{customStartDate.toLocaleDateString()}</Text>
               </TouchableOpacity>
+              <Text style={styles.dateSeparator}>to</Text>
+              <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowEndPicker(true)}>
+                <Text style={styles.datePickerBtnText}>{customEndDate.toLocaleDateString()}</Text>
+              </TouchableOpacity>
+              {showStartPicker && <DateTimePicker value={customStartDate} mode="date" onChange={onStartDateChange} />}
+              {showEndPicker && <DateTimePicker value={customEndDate} mode="date" onChange={onEndDateChange} />}
+            </View>
+          )}
+        </View>
+
+        {/* SECTION 1: KEY METRICS (2x2 Grid) */}
+        <View style={styles.metricsGrid}>
+          <MetricCard
+            title="REVENUE"
+            value={revenueValue}
+            icon={<Icon name="business-outline" size={24} color="#FFFFFF" />}
+            backgroundColor="#FF9500"
+            trend={revenueTrend}
+            positive={true}
+            onPress={() => setSelectedModal('REVENUE')}
+            loading={isLoading}
+          />
+          <MetricCard
+            title="EXPENSES"
+            value={expensesValue}
+            icon={<Icon name="document-text-outline" size={24} color="#4B5563" />}
+            backgroundColor="#F3F4F6"
+            trend={expensesTrend}
+            onPress={() => setSelectedModal('EXPENSES')}
+            loading={isLoading}
+          />
+          <MetricCard
+            title="NET PROFIT"
+            value={profitValue}
+            icon={<Icon name="trending-up-outline" size={24} color="#FFFFFF" />}
+            backgroundColor="#10B981"
+            trend={profitTrend}
+            onPress={() => setSelectedModal('PROFIT')}
+            loading={isLoading}
+          />
+          <MetricCard
+            title="CREDITS"
+            value={creditsValue}
+            icon={<Icon name="star-outline" size={24} color="#FF9500" />}
+            backgroundColor="#FFF7ED"
+            badge={creditsBadge}
+            onPress={() => setSelectedModal('CREDITS')}
+            loading={isLoading}
+          />
+        </View>
+
+        {/* SECTION 2: REVENUE SUB-SECTIONS */}
+        <View style={styles.subTabContainer}>
+          <TouchableOpacity 
+            style={[styles.subTab, activeSubTab === 'SOURCE' && styles.subTabActive]} 
+            onPress={() => setActiveSubTab('SOURCE')}
+          >
+            <Text style={[styles.subTabText, activeSubTab === 'SOURCE' && styles.subTabTextActive]}>REVENUE BY SOURCE</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.subTab, activeSubTab === 'METHOD' && styles.subTabActive]} 
+            onPress={() => setActiveSubTab('METHOD')}
+          >
+            <Text style={[styles.subTabText, activeSubTab === 'METHOD' && styles.subTabTextActive]}>COLLECTION METHOD</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.subTab, activeSubTab === 'TOP' && styles.subTabActive]} 
+            onPress={() => setActiveSubTab('TOP')}
+          >
+            <Text style={[styles.subTabText, activeSubTab === 'TOP' && styles.subTabTextActive]}>TOP PERFORMING</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Featured Card */}
+        <View style={styles.featuredCard}>
+          <View style={styles.featuredHeader}>
+            <View style={styles.featuredIconBg}>
+              <Icon name="business" size={20} color="#FF9500" />
+            </View>
+            <Text style={styles.featuredTitle}>TOTAL REVENUE</Text>
+          </View>
+          <Text style={styles.featuredValue}>{revenueValue}</Text>
+        </View>
+
+        {/* Side Metrics Row */}
+        <View style={styles.sideMetricsRow}>
+          <StatCard
+            title="REVENUE BY GAME"
+            value={summary.gameRevenueFormatted || '₹0'}
+            icon={<Icon name="game-controller-outline" size={20} color="#FF9500" />}
+            percentage={((summary.gameRevenue || 0) / (summary.totalRevenue || 1)) * 100}
+            color="#FF9500"
+          />
+          <StatCard
+            title="REVENUE BY FOOD"
+            value={summary.foodRevenueFormatted || '₹0'}
+            icon={<Icon name="fast-food-outline" size={20} color="#10B981" />}
+            percentage={((summary.foodRevenue || 0) / (summary.totalRevenue || 1)) * 100}
+            color="#10B981"
+          />
+        </View>
+
+        {/* SECTION 3: OVERALL REVENUE DISTRIBUTION CHART */}
+        <View style={styles.chartSection}>
+          <View style={styles.chartHeader}>
+            <Text style={styles.sectionTitle}>Overall Revenue Distribution</Text>
+            <View style={styles.liveIndicator}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>Real-time data</Text>
             </View>
           </View>
-        )}
+          <RevenueDistributionChart data={chartData} />
+        </View>
 
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={['#FF8C42']}
-            />
-          }
-        >
-          {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#FF8C42" />
-              <Text style={styles.loadingText}>Loading dashboard...</Text>
-            </View>
-          ) : (
-            <>
-              {/* Date and Period Selector */}
-              <View style={styles.dateSection}>
-                <View style={styles.dateContainer}>
-                  <Icon name="calendar-outline" size={20} color="#999" />
-                  <Text style={styles.dateText}>
-                    {currentDate || 'Loading...'}
-                  </Text>
-                </View>
-                <View style={styles.periodSelector}>
-                  {periods.map(period => (
-                    <TouchableOpacity
-                      key={period}
-                      style={[
-                        styles.periodBtn,
-                        selectedPeriod === period && styles.periodBtnActive,
-                      ]}
-                      onPress={() => setSelectedPeriod(period)}
-                    >
-                      <Text
-                        style={[
-                          styles.periodText,
-                          selectedPeriod === period && styles.periodTextActive,
-                        ]}
-                      >
-                        {period}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+        <View style={styles.bottomSpacing} />
+      </ScrollView>
 
-                {/* Custom Date Pickers (Shown if Custom is selected) */}
-                {selectedPeriod === 'Custom' && (
-                  <View style={styles.customDateContainer}>
-                    <View style={styles.datePickerWrapper}>
-                      <Text style={styles.datePickerLabel}>Start Date</Text>
-                      <TouchableOpacity
-                        style={styles.datePickerBtn}
-                        onPress={() => setShowStartPicker(true)}
-                      >
-                        <Icon name="calendar-outline" size={16} color="#FF8C42" />
-                        <Text style={styles.datePickerBtnText}>
-                          {customStartDate.toLocaleDateString(undefined, {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                          })}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+      {/* --- MODALS --- */}
 
-                    <Icon name="arrow-forward-outline" size={16} color="#ccc" style={{ marginTop: 22, marginHorizontal: 10 }} />
+      {/* Revenue Detail Modal */}
+      <DetailModal
+        visible={selectedModal === 'REVENUE'}
+        onClose={() => setSelectedModal(null)}
+        title="Revenue Details"
+      >
+        <View style={styles.modalCardLarge}>
+          <Text style={styles.modalCardLabel}>Total Revenue</Text>
+          <Text style={styles.modalCardValueLarge}>{revenueValue}</Text>
+        </View>
+        <View style={styles.detailList}>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Revenue by Game</Text>
+            <Text style={styles.detailValue}>{summary.gameRevenueFormatted}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Revenue by Food</Text>
+            <Text style={styles.detailValue}>{summary.foodRevenueFormatted}</Text>
+          </View>
+        </View>
+        <RevenueDistributionChart data={chartData} />
+      </DetailModal>
 
-                    <View style={styles.datePickerWrapper}>
-                      <Text style={styles.datePickerLabel}>End Date</Text>
-                      <TouchableOpacity
-                        style={styles.datePickerBtn}
-                        onPress={() => setShowEndPicker(true)}
-                      >
-                        <Icon name="calendar-outline" size={16} color="#FF8C42" />
-                        <Text style={styles.datePickerBtnText}>
-                          {customEndDate.toLocaleDateString(undefined, {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                          })}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+      {/* Expenses Detail Modal */}
+      <DetailModal
+        visible={selectedModal === 'EXPENSES'}
+        onClose={() => setSelectedModal(null)}
+        title="Expenses Details"
+      >
+        <View style={styles.modalCardLarge}>
+          <Text style={styles.modalCardLabel}>Total Expenses</Text>
+          <Text style={styles.modalCardValueLarge}>{expensesValue}</Text>
+          <Text style={styles.modalCardSub}>100% of declared costs</Text>
+        </View>
+        <View style={styles.statCardsGrid}>
+          <StatCard
+            title="Owner Expenses"
+            value={`₹${(summary.expenseSegregation?.owner || 0).toLocaleString()}`}
+            percentage={59}
+            color="#FF9500"
+          />
+          <StatCard
+            title="Food Expenses"
+            value={`₹${(summary.expenseSegregation?.kitchen || 0).toLocaleString()}`}
+            percentage={41}
+            color="#10B981"
+          />
+        </View>
+      </DetailModal>
 
-                    {showStartPicker && (
-                      <DateTimePicker
-                        value={customStartDate}
-                        mode="date"
-                        display="default"
-                        onChange={onStartDateChange}
-                        maximumDate={customEndDate}
-                      />
-                    )}
-                    {showEndPicker && (
-                      <DateTimePicker
-                        value={customEndDate}
-                        mode="date"
-                        display="default"
-                        onChange={onEndDateChange}
-                        minimumDate={customStartDate}
-                        maximumDate={new Date()}
-                      />
-                    )}
-                  </View>
-                )}
-              </View>
+      {/* Net Profit Detail Modal */}
+      <DetailModal
+        visible={selectedModal === 'PROFIT'}
+        onClose={() => setSelectedModal(null)}
+        title="Profit Details"
+      >
+        <View style={[styles.modalCardLarge, { backgroundColor: '#E1F5FE' }]}>
+          <Text style={styles.modalCardLabel}>Net Profit</Text>
+          <Text style={[styles.modalCardValueLarge, { color: summary.netProfit < 0 ? '#EF4444' : '#10B981' }]}>
+            {profitValue}
+          </Text>
+        </View>
+        <View style={styles.detailList}>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Profit by Game</Text>
+            <Text style={styles.detailValue}>₹{(summary.estimatedProfitBySource?.game || 0).toLocaleString()}</Text>
+          </View>
+          <View style={styles.detailItem}>
+            <Text style={styles.detailLabel}>Profit by Food</Text>
+            <Text style={styles.detailValue}>₹{(summary.estimatedProfitBySource?.prepared || 0).toLocaleString()}</Text>
+          </View>
+        </View>
+      </DetailModal>
 
-              {/* Stats Grid */}
-              <View style={styles.statsGrid}>
-                {stats.map((stat, idx) => (
-                  <View
-                    key={stat.id}
-                    style={[
-                      styles.statCard,
-                      { backgroundColor: stat.bgColor },
-                      idx % 2 === 1 && styles.statCardRight,
-                    ]}
-                  >
-                    <View style={styles.statHeader}>
-                      <Text style={styles.statTitle}>{stat.title}</Text>
-                      <Icon
-                        name={stat.icon}
-                        size={20}
-                        color={stat.trendColor}
-                      />
-                    </View>
-                    <Text style={styles.statValue}>{stat.value}</Text>
-                    <Text
-                      style={[styles.statTrend, { color: stat.trendColor }]}
-                    >
-                      {stat.isAlert ? '🔴 ' : '📈 '}
-                      {stat.trend}
-                    </Text>
-                  </View>
-                ))}
-              </View>
+      {/* Credits Detail Modal */}
+      <DetailModal
+        visible={selectedModal === 'CREDITS'}
+        onClose={() => setSelectedModal(null)}
+        title="Credits Details"
+      >
+        <View style={[styles.modalCardLarge, { backgroundColor: '#FEF2F2', borderColor: '#FECACA', borderWidth: 1 }]}>
+          <Text style={[styles.modalCardLabel, { color: '#EF4444' }]}>Recoverable Credit</Text>
+          <Text style={[styles.modalCardValueLarge, { color: '#EF4444' }]}>{creditsValue}</Text>
+          <View style={styles.memberBadge}>
+            <Text style={styles.memberBadgeText}>{dashboardData?.debtors?.length || 0} Members</Text>
+          </View>
+        </View>
+        
+        <View style={styles.listHeader}>
+          <Text style={styles.listTitle}>Overdue Members</Text>
+        </View>
+        
+        {dashboardData?.debtors?.map(member => (
+          <View key={member.id} style={styles.memberRow}>
+            <Text style={styles.memberName}>{member.name}</Text>
+            <Text style={styles.memberStatus}>NEGATIVE</Text>
+          </View>
+        ))}
 
-              {/* Revenue Breakdown Section */}
-              {revenueBreakdown && (
-                <View style={styles.breakdownSection}>
-                  <Text style={styles.sectionTitle}>💰 Revenue Breakdown</Text>
-                  <PieChart
-                    data={[
-                      {
-                        label: 'Game Revenue',
-                        value: revenueBreakdown.game.percentage,
-                        formatted: revenueBreakdown.game.amount,
-                        color: '#FF8C42',
-                      },
-                      {
-                        label: 'Food & Beverage',
-                        value: revenueBreakdown.food.percentage,
-                        formatted: revenueBreakdown.food.amount,
-                        color: '#4CAF50',
-                      },
-                    ]}
-                  />
-                </View>
-              )}
+        <View style={styles.infoNotice}>
+          <Icon name="information-circle" size={20} color="#6B7280" />
+          <Text style={styles.infoNoticeText}>
+            Negative balances indicate member credits that need to be recovered.
+          </Text>
+        </View>
+      </DetailModal>
 
-              {/* Operational Insights */}
-              {operationalInsights && (
-                <View style={styles.insightsSection}>
-                  <Text style={styles.sectionTitle}>
-                    📊 Operational Insights
-                  </Text>
-                  <View style={styles.insightsGrid}>
-                    <View style={styles.insightCard}>
-                      <MaterialCommunityIcons
-                        name="clock-outline"
-                        size={28}
-                        color="#2196F3"
-                      />
-                      <Text style={styles.insightLabel}>Avg Session</Text>
-                      <Text style={styles.insightValue}>
-                        {operationalInsights.avgSessionDuration}
-                      </Text>
-                    </View>
-                    <View style={styles.insightCard}>
-                      <MaterialCommunityIcons
-                        name="chart-line"
-                        size={28}
-                        color="#FF8C42"
-                      />
-                      <Text style={styles.insightLabel}>Peak Time</Text>
-                      <Text style={styles.insightValue}>
-                        {operationalInsights.peakActivity}
-                      </Text>
-                    </View>
-                    <View style={styles.insightCard}>
-                      <MaterialCommunityIcons
-                        name="account-group"
-                        size={28}
-                        color="#9C27B0"
-                      />
-                      <Text style={styles.insightLabel}>Sessions</Text>
-                      <Text style={styles.insightValue}>
-                        {operationalInsights.totalSessions}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {/* Detailed Revenue Analysis */}
-              {summary?.breakdown && (
-                <View style={styles.analysisSection}>
-                  <Text style={styles.sectionTitle}>
-                    📈 Detailed Revenue Analysis
-                  </Text>
-
-                  {/* --- Revenue Trend Line Chart --- */}
-                  {revenueTrendData && revenueTrendData.length > 0 && (
-                     <View style={styles.trendChartContainer}>
-                       <Text style={styles.trendChartTitle}>Revenue Trends</Text>
-                       <LineChart
-                         data={{
-                           labels: revenueTrendData.map(item => {
-                               // Format label based on period (e.g. DD/MM for custom/week, or HH:mm for day)
-                               if (selectedPeriod === 'Day') return item.date.substring(11, 16);
-                               return item.date.substring(5, 10);
-                           }),
-                           datasets: [
-                             {
-                               data: revenueTrendData.map(item => item.revenue)
-                             }
-                           ]
-                         }}
-                         width={width - 32 - 40} // card width minus padding. padding=20 on analysisCard
-                         height={220}
-                         yAxisLabel="₹"
-                         chartConfig={{
-                           backgroundColor: '#ffffff',
-                           backgroundGradientFrom: '#ffffff',
-                           backgroundGradientTo: '#ffffff',
-                           decimalPlaces: 0, 
-                           color: (opacity = 1) => `rgba(255, 140, 66, ${opacity})`,
-                           labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                           style: {
-                             borderRadius: 16
-                           },
-                           propsForDots: {
-                             r: "4",
-                             strokeWidth: "2",
-                             stroke: "#FF8C42"
-                           }
-                         }}
-                         bezier
-                         style={{
-                           marginVertical: 8,
-                           borderRadius: 16
-                         }}
-                       />
-                     </View>
-                  )}
-
-                  {/* Revenue by Flow */}
-                  <View style={styles.analysisCard}>
-                    <Text style={styles.analysisCardTitle}>
-                      🔄 Revenue by Flow
-                    </Text>
-                    <View style={styles.analysisTable}>
-                      <View style={styles.analysisRow}>
-                        <Text style={styles.analysisRowLabel}>
-                          📱 Dashboard Direct
-                        </Text>
-                        <Text style={styles.analysisRowValue}>
-                          ₹
-                          {summary.breakdown.flow.dashboard?.toFixed(2) ||
-                            '0.00'}
-                        </Text>
-                      </View>
-                      <View style={styles.analysisRow}>
-                        <Text style={styles.analysisRowLabel}>⏳ Queue</Text>
-                        <Text style={styles.analysisRowValue}>
-                          ₹{summary.breakdown.flow.queue?.toFixed(2) || '0.00'}
-                        </Text>
-                      </View>
-                      <View style={styles.analysisRow}>
-                        <Text style={styles.analysisRowLabel}>
-                          📅 Reservation
-                        </Text>
-                        <Text style={styles.analysisRowValue}>
-                          ₹
-                          {summary.breakdown.flow.reservation?.toFixed(2) ||
-                            '0.00'}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Revenue by Booking Type */}
-                  <View style={styles.analysisCard}>
-                    <Text style={styles.analysisCardTitle}>
-                      🎯 Revenue by Booking Type
-                    </Text>
-                    <View style={styles.analysisTable}>
-                      <View style={styles.analysisRow}>
-                        <Text style={styles.analysisRowLabel}>
-                          ⏱️ Timer Mode
-                        </Text>
-                        <Text style={styles.analysisRowValue}>
-                          ₹
-                          {summary.breakdown.bookingType.timer?.toFixed(2) ||
-                            '0.00'}
-                        </Text>
-                      </View>
-                      <View style={styles.analysisRow}>
-                        <Text style={styles.analysisRowLabel}>🎮 Set Game</Text>
-                        <Text style={styles.analysisRowValue}>
-                          ₹
-                          {summary.breakdown.bookingType.set?.toFixed(2) ||
-                            '0.00'}
-                        </Text>
-                      </View>
-                      <View style={styles.analysisRow}>
-                        <Text style={styles.analysisRowLabel}>
-                          🎱 Frame Mode
-                        </Text>
-                        <Text style={styles.analysisRowValue}>
-                          ₹
-                          {summary.breakdown.bookingType.frame?.toFixed(2) ||
-                            '0.00'}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Revenue Collection Methods */}
-                  <View style={styles.analysisCard}>
-                    <Text style={styles.analysisCardTitle}>
-                      💳 Payment Methods
-                    </Text>
-                    <View style={styles.analysisTable}>
-                      <View style={styles.analysisRow}>
-                        <Text style={styles.analysisRowLabel}>💵 Cash</Text>
-                        <Text style={styles.analysisRowValue}>
-                          ₹
-                          {summary.breakdown.paymentMode.cash?.toFixed(2) ||
-                            '0.00'}
-                        </Text>
-                      </View>
-                      <View style={styles.analysisRow}>
-                        <Text style={styles.analysisRowLabel}>
-                          📱 UPI/Online
-                        </Text>
-                        <Text style={styles.analysisRowValue}>
-                          ₹
-                          {summary.breakdown.paymentMode.upi?.toFixed(2) ||
-                            '0.00'}
-                        </Text>
-                      </View>
-                      <View style={styles.analysisRow}>
-                        <Text style={styles.analysisRowLabel}>👛 Wallet</Text>
-                        <Text style={styles.analysisRowValue}>
-                          ₹
-                          {summary.breakdown.paymentMode.wallet?.toFixed(2) ||
-                            '0.00'}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {/* Game Utilization Section */}
-              <View style={styles.utilizationSection}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>🎮 Game Utilization</Text>
-                  <TouchableOpacity>
-                    <Text style={styles.detailsLink}>Details</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Chart */}
-                <View style={styles.chartContainer}>
-                  <Text style={styles.chartLabel}>
-                    Top 5 Products with Highest Sales Data
-                  </Text>
-                  <View style={styles.chart}>
-                    {chartData.map((item, idx) => (
-                      <View key={idx} style={styles.chartRow}>
-                        <Text style={styles.chartGameName}>{item.game}</Text>
-                        <View style={styles.barContainer}>
-                          <View
-                            style={[
-                              styles.bar,
-                              {
-                                width: `${item.value}%`,
-                                backgroundColor: item.color,
-                              },
-                            ]}
-                          />
-                        </View>
-                        <Text style={styles.chartValue}>{item.value}%</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Game Revenue List */}
-                <View style={styles.revenueList}>
-                  {gameData.map(game => (
-                    <View key={game.name} style={styles.gameCard}>
-                      <View style={styles.gameIconContainer}>
-                        <Icon name={game.icon} size={32} color="#FF8C42" />
-                      </View>
-                      <View style={styles.gameInfo}>
-                        <Text style={styles.gameName}>{game.name}</Text>
-                        <Text style={styles.gameRevenue}>
-                          {game.revenue} revenue
-                        </Text>
-                      </View>
-                      <View style={styles.gameStatus}>
-                        <Text
-                          style={[
-                            styles.statusText,
-                            { color: game.statusColor },
-                          ]}
-                        >
-                          {game.status}
-                        </Text>
-                        <View style={styles.usageIndicator}>
-                          <View
-                            style={[
-                              styles.usageFill,
-                              {
-                                width: `${game.usage}%`,
-                                backgroundColor: game.statusColor,
-                              },
-                            ]}
-                          />
-                        </View>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
-
-              {/* Bottom Spacing */}
-              <View style={styles.bottomSpacing} />
-            </>
-          )}
-        </ScrollView>
-      </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  tabbedContainer: {
+  mainContainer: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F9FAFB',
   },
-  safeContainer: {
+  scrollView: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1E3A5F',
-    letterSpacing: 1.2,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  content: {
-    flex: 1,
-    padding: 16,
   },
   dateSection: {
-    marginBottom: 20,
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
   dateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   dateText: {
-    fontSize: 15,
-    color: '#555',
+    fontSize: 16,
     fontWeight: '600',
+    color: '#1F2937',
   },
   periodSelector: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 25,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
     padding: 4,
+  },
+  periodBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  periodBtnActive: {
+    backgroundColor: '#FFFFFF',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
-  periodBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    minWidth: 80,
-    alignItems: 'center',
-  },
-  periodBtnActive: {
-    backgroundColor: '#FF8C42',
-    elevation: 3,
-    shadowColor: '#FF8C42',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
   periodText: {
-    fontSize: 13,
-    color: '#999',
-    fontWeight: '600',
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
   },
   periodTextActive: {
-    color: '#fff',
-    fontWeight: 'bold',
+    color: '#FF9500',
+    fontWeight: '700',
   },
-  // Custom Date Styles
   customDateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-    marginBottom: 16,
-    width: '100%',
-    paddingHorizontal: 8,
-  },
-  datePickerWrapper: {
-    flex: 1,
-  },
-  datePickerLabel: {
-    fontSize: 12,
-    color: '#777',
-    marginBottom: 6,
-    fontWeight: '600',
-    paddingLeft: 4,
+    marginTop: 12,
+    gap: 8,
   },
   datePickerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
+    flex: 1,
+    backgroundColor: '#F9FAFB',
     borderWidth: 1,
-    borderColor: '#E8E8E8',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    padding: 10,
+    alignItems: 'center',
   },
   datePickerBtnText: {
     fontSize: 14,
-    color: '#333',
-    marginLeft: 8,
-    fontWeight: '500',
+    color: '#1F2937',
   },
-  statsGrid: {
+  dateSeparator: {
+    color: '#9CA3AF',
+  },
+  metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 20,
-  },
-  statCard: {
-    width: CARD_WIDTH,
-    borderRadius: 16,
-    padding: 18,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  statCardRight: {
-    marginLeft: 'auto',
-  },
-  statHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  statTitle: {
-    fontSize: 11,
-    color: '#666',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  statValue: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
-    marginBottom: 8,
-  },
-  statTrend: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  // Revenue Breakdown Enhanced
-  breakdownSection: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 16,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  breakdownRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
-  },
-  breakdownCard: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 14,
-    padding: 18,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#E8E8E8',
-  },
-  breakdownLabel: {
-    fontSize: 11,
-    color: '#666',
-    marginTop: 10,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  breakdownAmount: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
-    marginTop: 8,
-  },
-  breakdownPercent: {
-    fontSize: 15,
-    color: '#FF8C42',
-    marginTop: 6,
-    fontWeight: 'bold',
-  },
-  // Operational Insights Enhanced
-  insightsSection: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 16,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  insightsGrid: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 16,
-  },
-  insightCard: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 14,
-    padding: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E8E8E8',
-  },
-  insightLabel: {
-    fontSize: 10,
-    color: '#666',
-    marginTop: 8,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  insightValue: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  // Detailed Revenue Analysis Enhanced
-  analysisSection: {
-    marginBottom: 16,
-  },
-  analysisCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 12,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  analysisCardTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
-    marginBottom: 16,
-  },
-  analysisTable: {
+    padding: 12,
     gap: 8,
   },
-  analysisRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
-  },
-  analysisRowLabel: {
-    fontSize: 13,
-    color: '#555',
-    fontWeight: '600',
-  },
-  analysisRowValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
-  },
-  utilizationSection: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 20,
+  metricCard: {
+    width: (width - 32) / 2,
+    minHeight: 140,
+    borderRadius: 12,
+    padding: 16,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
   },
-  sectionHeader: {
+  metricHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
+  metricIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  detailsLink: {
-    fontSize: 14,
-    color: '#FF8C42',
-    fontWeight: '600',
+  badge: {
+    backgroundColor: '#FECACA',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  chartContainer: {
-    marginBottom: 18,
+  badgeText: {
+    fontSize: 10,
+    color: '#B91C1C',
+    fontWeight: '700',
   },
-  chartLabel: {
+  metricLabel: {
     fontSize: 12,
-    color: '#777',
-    marginBottom: 14,
     fontWeight: '600',
+    color: '#6B7280',
+    textTransform: 'uppercase',
   },
-  chart: {
+  metricValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginVertical: 4,
+  },
+  trendContainer: {
+    marginTop: 'auto',
+  },
+  trendText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  subTabContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginTop: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  subTab: {
+    marginRight: 24,
+    paddingBottom: 12,
+  },
+  subTabActive: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#FF9500',
+  },
+  subTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9CA3AF',
+  },
+  subTabTextActive: {
+    color: '#FF9500',
+  },
+  featuredCard: {
+    backgroundColor: '#FFFFFF',
+    margin: 16,
+    borderRadius: 12,
+    padding: 20,
+    borderTopWidth: 2,
+    borderTopColor: '#FF9500',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+  featuredHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  featuredIconBg: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: '#FFF7ED',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  featuredTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  featuredValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  sideMetricsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
     gap: 12,
   },
-  chartRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  chartGameName: {
-    width: 70,
-    fontSize: 13,
-    color: '#555',
-    fontWeight: '600',
-  },
-  barContainer: {
+  statCard: {
     flex: 1,
-    height: 24,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    overflow: 'hidden',
-  },
-  bar: {
-    height: '100%',
-    borderRadius: 12,
-  },
-  chartValue: {
-    width: 40,
-    fontSize: 13,
-    color: '#1A1A1A',
-    fontWeight: 'bold',
-    textAlign: 'right',
-  },
-  revenueList: {
-    borderTopWidth: 1,
-    borderTopColor: '#E8E8E8',
-    paddingTop: 16,
-  },
-  gameCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    marginBottom: 10,
-  },
-  gameIconContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: '#FFF3E0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-    elevation: 2,
-    shadowColor: '#FF8C42',
+    padding: 16,
+    elevation: 3,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
-  gameInfo: {
-    flex: 1,
-  },
-  gameName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1A1A1A',
-  },
-  gameRevenue: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 4,
-  },
-  gameStatus: {
-    alignItems: 'flex-end',
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
+  statCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
   },
-  usageIndicator: {
-    width: 70,
-    height: 6,
-    backgroundColor: '#E8E8E8',
-    borderRadius: 3,
-    overflow: 'hidden',
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  usageFill: {
-    height: '100%',
-    borderRadius: 3,
+  statCardValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
   },
-  // Pie Chart Styles
-  pieChartContainer: {
+  statCardTitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  progressContainer: {
+    height: 4,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 2,
     marginTop: 12,
   },
-  pieChartLegendItem: {
+  progressBar: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  chartSection: {
+    margin: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+  chartHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  liveIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 10,
-    marginBottom: 8,
+    gap: 6,
   },
-  pieChartDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 12,
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
   },
-  pieChartLegendDetails: {
-    flex: 1,
-  },
-  pieChartLegendLabel: {
-    fontSize: 13,
-    color: '#555',
+  liveText: {
+    fontSize: 12,
+    color: '#10B981',
     fontWeight: '600',
-    marginBottom: 2,
-  },
-  pieChartLegendValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
-  },
-  pieChartEmpty: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 30,
-  },
-  pieChartEmptyText: {
-    fontSize: 14,
-    color: '#999',
-  },
-  // Progress Bar Styles
-  progressBarContainer: {
-    backgroundColor: '#E8E8E8',
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    borderRadius: 10,
   },
   bottomSpacing: {
     height: 100,
   },
-  loadingContainer: {
+  modalOverlay: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 100,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
   },
-  loadingText: {
-    marginTop: 16,
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalCardLarge: {
+    padding: 24,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalCardLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  modalCardValueLarge: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#1F2937',
+  },
+  modalCardSub: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 4,
+  },
+  detailList: {
+    gap: 16,
+    marginBottom: 24,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  detailLabel: {
+    fontSize: 14,
+    color: '#4B5563',
+  },
+  detailValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  statCardsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  memberBadge: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 12,
+  },
+  memberBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  listHeader: {
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  listTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  memberRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  memberName: {
     fontSize: 15,
-    color: '#666',
+    color: '#1F2937',
     fontWeight: '500',
+  },
+  memberStatus: {
+    fontSize: 14,
+    color: '#EF4444',
+    fontWeight: '700',
+  },
+  infoNotice: {
+    flexDirection: 'row',
+    backgroundColor: '#F9FAFB',
+    padding: 16,
+    borderRadius: 12,
+    gap: 12,
+    marginTop: 24,
+  },
+  infoNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#6B7280',
+    lineHeight: 18,
   },
 });

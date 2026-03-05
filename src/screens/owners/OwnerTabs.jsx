@@ -12,6 +12,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import OwnerDashboard from './OwnerDashboard';
 import EmployeeManagement from './EmployeeManagement';
 import ExpenseManagement from './ExpenseManagement';
+import AttendanceScreen from './AttendanceScreen';
 
 const { width } = Dimensions.get('window');
 
@@ -37,6 +38,12 @@ export default function OwnerTabs({ navigation }) {
       icon: 'receipt-outline',
       iconActive: 'receipt',
     },
+    {
+      id: 'attendance',
+      label: 'Attendance',
+      icon: 'calendar-outline',
+      iconActive: 'calendar',
+    },
   ];
 
   const renderContent = () => {
@@ -47,6 +54,8 @@ export default function OwnerTabs({ navigation }) {
         return <EmployeeManagement navigation={navigation} />;
       case 'expenses':
         return <ExpenseManagement navigation={navigation} />;
+      case 'attendance':
+        return <AttendanceScreen navigation={navigation} />;
       default:
         return <OwnerDashboard navigation={navigation} inTabbedView={true} />;
     }

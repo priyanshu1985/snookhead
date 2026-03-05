@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import Header from '../../components/common/Header';
 import { API_URL } from '../../../config';
+import apiClient from '../../services/apiClient';
 
 export default function ScannerScreen({ navigation, route }) {
   const scanMode = route?.params?.scanMode;
@@ -139,19 +140,16 @@ export default function ScannerScreen({ navigation, route }) {
         return;
       }
 
-      // Validate QR code with backend
-      const response = await fetch(`${API_URL}/api/wallets/scan`, {
+      // Validate QR code with backend using apiClient for automatic token management
+      const response = await apiClient.request('/api/wallets/scan', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({
           qr_data: qrData,
         }),
       });
 
       const result = await response.json();
+      setIsScanning(false);
 
       if (response.ok && result.wallet && result.customer) {
         // Check if customer is active
@@ -641,6 +639,14 @@ export default function ScannerScreen({ navigation, route }) {
     </View>
   );
 }
+
+const generateTestQRData = () => {
+  return JSON.stringify({
+    type: 'WALLET',
+    wallet_id: '8ca2227e-d177-405e-baeb-a1bc1f245a91',
+    customer_id: 'a2c9-0bf1-4a56-a3fd-09b940f97520',
+  });
+};
 
 const styles = StyleSheet.create({
   container: {

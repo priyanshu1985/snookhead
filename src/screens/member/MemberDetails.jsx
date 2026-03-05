@@ -10,6 +10,7 @@ import {
   Image,
   Modal,
   TextInput,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -114,12 +115,7 @@ export default function MemberDetails({ route, navigation }) {
         const walletData = await response.json();
         console.log('Wallet data received:', walletData);
 
-        // Ensure qr_code is properly formatted
-        if (walletData.qr_code && typeof walletData.qr_code === 'object') {
-          console.log('QR code is an object:', walletData.qr_code);
-          walletData.qr_code = null; // Reset if it's not a string
-        }
-
+        // QR code generation removed from here as per request (sent via email only)
         setWallet(walletData);
         setError(null);
       } else if (response.status === 404) {
@@ -327,25 +323,6 @@ export default function MemberDetails({ route, navigation }) {
                   <Text style={styles.addAmountButtonText}>Add Amount</Text>
                 </TouchableOpacity>
               </View>
-
-              {wallet.qr_code &&
-                typeof wallet.qr_code === 'string' &&
-                wallet.qr_code.trim() !== '' && (
-                  <View style={styles.qrContainer}>
-                    <Text style={styles.qrLabel}>QR Code</Text>
-                    <Image
-                      source={{ uri: wallet.qr_code }}
-                      style={styles.qrImage}
-                      resizeMode="contain"
-                      onError={error => {
-                        console.log(
-                          'QR Image load error:',
-                          error.nativeEvent.error,
-                        );
-                      }}
-                    />
-                  </View>
-                )}
             </View>
           ) : null}
         </View>
@@ -565,161 +542,163 @@ export default function MemberDetails({ route, navigation }) {
           setSelectedTransaction(null);
         }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalContent}>
-              {/* Header */}
-              <View style={styles.modalHeader}>
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowTransactionDetails(false);
-                    setSelectedTransaction(null);
-                  }}
-                  style={styles.headerBackButton}
+        {selectedTransaction && (
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <View style={styles.modalContent}>
+                {/* Header */}
+                <View style={styles.modalHeader}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowTransactionDetails(false);
+                      setSelectedTransaction(null);
+                    }}
+                    style={styles.headerBackButton}
+                  >
+                    <Icon name="chevron-back" size={24} color="#333" />
+                  </TouchableOpacity>
+                  <Text style={styles.modalTitle}>Bill Details</Text>
+                  <View style={styles.statusBadgeCompleted}>
+                    <Icon
+                      name="checkmark-circle"
+                      size={14}
+                      color="#4CAF50"
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text style={styles.statusCompletedText}>Completed</Text>
+                  </View>
+                </View>
+
+                <ScrollView
+                  style={styles.detailsModalBody}
+                  showsVerticalScrollIndicator={false}
                 >
-                  <Icon name="chevron-back" size={24} color="#333" />
-                </TouchableOpacity>
-                <Text style={styles.modalTitle}>Bill Details</Text>
-                <View style={styles.statusBadgeCompleted}>
-                  <Icon
-                    name="checkmark-circle"
-                    size={14}
-                    color="#4CAF50"
-                    style={{ marginRight: 4 }}
-                  />
-                  <Text style={styles.statusCompletedText}>Completed</Text>
-                </View>
-              </View>
-
-              <ScrollView
-                style={styles.detailsModalBody}
-                showsVerticalScrollIndicator={false}
-              >
-                {/* Bill Number */}
-                <View style={styles.billNumberContainer}>
-                  <Text style={styles.billNumber}>
-                    {selectedTransaction.bill_id
-                      ? `BILL-${selectedTransaction.bill_id}`
-                      : `TXN-${selectedTransaction.id}`}
-                  </Text>
-                  <Text style={styles.billLabel}>Paid Bill</Text>
-                </View>
-
-                {/* Customer Info Card */}
-                <View style={styles.customerInfoCard}>
-                  <View style={styles.customerRow}>
-                    <Text style={styles.customerName}>
-                      {member.name || 'Customer'}
+                  {/* Bill Number */}
+                  <View style={styles.billNumberContainer}>
+                    <Text style={styles.billNumber}>
+                      {selectedTransaction.bill_id
+                        ? `BILL-${selectedTransaction.bill_id}`
+                        : `TXN-${selectedTransaction.id}`}
                     </Text>
-                    <Text style={styles.dateText}>
-                      {formatDate(
-                        selectedTransaction.created_at ||
-                          selectedTransaction.createdAt,
-                      )}
-                    </Text>
+                    <Text style={styles.billLabel}>Paid Bill</Text>
                   </View>
 
-                  {/* Items List */}
-                  {selectedTransaction.order_items &&
-                  Array.isArray(selectedTransaction.order_items) &&
-                  selectedTransaction.order_items.length > 0 ? (
-                    selectedTransaction.order_items.map((item, index) => (
-                      <View key={index} style={styles.itemRow}>
+                  {/* Customer Info Card */}
+                  <View style={styles.customerInfoCard}>
+                    <View style={styles.customerRow}>
+                      <Text style={styles.customerName}>
+                        {member.name || 'Customer'}
+                      </Text>
+                      <Text style={styles.dateText}>
+                        {formatDate(
+                          selectedTransaction.created_at ||
+                            selectedTransaction.createdAt,
+                        )}
+                      </Text>
+                    </View>
+
+                    {/* Items List */}
+                    {selectedTransaction.order_items &&
+                    Array.isArray(selectedTransaction.order_items) &&
+                    selectedTransaction.order_items.length > 0 ? (
+                      selectedTransaction.order_items.map((item, index) => (
+                        <View key={index} style={styles.itemRow}>
+                          <View style={styles.itemLeft}>
+                            <View style={styles.itemIcon}>
+                              <Icon
+                                name="cube-outline"
+                                size={24}
+                                color="#4CAF50"
+                              />
+                            </View>
+                            <View>
+                              <Text style={styles.itemName}>
+                                {item.name || 'Item'}
+                              </Text>
+                              <Text style={styles.itemQuantity}>
+                                {item.quantity || 1} unit
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={styles.itemPrice}>
+                            ₹
+                            {((item.price || 0) * (item.quantity || 1)).toFixed(
+                              2,
+                            )}
+                          </Text>
+                        </View>
+                      ))
+                    ) : (
+                      <View style={styles.itemRow}>
                         <View style={styles.itemLeft}>
                           <View style={styles.itemIcon}>
                             <Icon
-                              name="cube-outline"
+                              name="game-controller-outline"
                               size={24}
                               color="#4CAF50"
                             />
                           </View>
                           <View>
                             <Text style={styles.itemName}>
-                              {item.name || 'Item'}
+                              {selectedTransaction.game_name || 'Table Charges'}
                             </Text>
                             <Text style={styles.itemQuantity}>
-                              {item.quantity || 1} unit
+                              {selectedTransaction.duration
+                                ? `${selectedTransaction.duration} mins`
+                                : '1 unit'}
                             </Text>
                           </View>
                         </View>
                         <Text style={styles.itemPrice}>
-                          ₹
-                          {((item.price || 0) * (item.quantity || 1)).toFixed(
-                            2,
-                          )}
+                          ₹{selectedTransaction.amount.toFixed(2)}
                         </Text>
                       </View>
-                    ))
-                  ) : (
-                    <View style={styles.itemRow}>
-                      <View style={styles.itemLeft}>
-                        <View style={styles.itemIcon}>
-                          <Icon
-                            name="game-controller-outline"
-                            size={24}
-                            color="#4CAF50"
-                          />
-                        </View>
-                        <View>
-                          <Text style={styles.itemName}>
-                            {selectedTransaction.game_name || 'Table Charges'}
-                          </Text>
-                          <Text style={styles.itemQuantity}>
-                            {selectedTransaction.duration
-                              ? `${selectedTransaction.duration} mins`
-                              : '1 unit'}
-                          </Text>
-                        </View>
+                    )}
+                  </View>
+
+                  {/* Watermark */}
+                  <View style={styles.watermark}>
+                    <Icon name="fish" size={100} color="#F0F0F0" />
+                    <Text style={styles.watermarkText}>SNOKEHEAD</Text>
+                  </View>
+
+                  {/* Payment Details Card */}
+                  <View style={styles.paymentDetailsCard}>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Mobile No. :</Text>
+                      <Text style={styles.detailValue}>
+                        {member.contact || '+91 XXXXXXXXXX'}
+                      </Text>
+                    </View>
+
+                    {selectedTransaction.wallet_amount !== undefined && (
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Wallet Amount :</Text>
+                        <Text style={styles.detailValue}>
+                          ₹{selectedTransaction.wallet_amount.toFixed(2)}
+                        </Text>
                       </View>
-                      <Text style={styles.itemPrice}>
+                    )}
+
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Total Amount :</Text>
+                      <Text style={styles.detailValue}>
                         ₹{selectedTransaction.amount.toFixed(2)}
                       </Text>
                     </View>
-                  )}
-                </View>
 
-                {/* Watermark */}
-                <View style={styles.watermark}>
-                  <Icon name="fish" size={100} color="#F0F0F0" />
-                  <Text style={styles.watermarkText}>SNOKEHEAD</Text>
-                </View>
-
-                {/* Payment Details Card */}
-                <View style={styles.paymentDetailsCard}>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Mobile No. :</Text>
-                    <Text style={styles.detailValue}>
-                      {member.contact || '+91 XXXXXXXXXX'}
-                    </Text>
-                  </View>
-
-                  {selectedTransaction.wallet_amount !== undefined && (
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Wallet Amount :</Text>
-                      <Text style={styles.detailValue}>
-                        ₹{selectedTransaction.wallet_amount.toFixed(2)}
-                      </Text>
-                    </View>
-                  )}
-
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Total Amount :</Text>
-                    <Text style={styles.detailValue}>
-                      ₹{selectedTransaction.amount.toFixed(2)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Status :</Text>
-                    <View style={styles.statusBadgePaid}>
-                      <Text style={styles.statusPaidText}>PAID</Text>
+                      <Text style={styles.detailLabel}>Status :</Text>
+                      <View style={styles.statusBadgePaid}>
+                        <Text style={styles.statusPaidText}>PAID</Text>
+                      </View>
                     </View>
                   </View>
-                </View>
-              </ScrollView>
+                </ScrollView>
+              </View>
             </View>
           </View>
-        </View>
+        )}
       </Modal>
     </SafeAreaView>
   );
@@ -933,26 +912,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     fontWeight: '500',
-  },
-
-  qrContainer: {
-    alignItems: 'center',
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-
-  qrLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
-  },
-
-  qrImage: {
-    width: 150,
-    height: 150,
   },
 
   // Add Amount Button Styles

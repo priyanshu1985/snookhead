@@ -318,6 +318,9 @@ export default function HomeScreen({ navigation }) {
                   activeSession?.durationminutes ||
                   null,
                 game_id: gameId,
+                // Pass payment info
+                advance_payment: activeSession?.advance_payment || activeSession?.advancepayment || 0,
+                payment_type: activeSession?.payment_type || activeSession?.paymenttype || 'pay_later',
                 // Pass queue details
                 queueBooking: table.queueBooking,
                 bookingType:
@@ -800,6 +803,8 @@ export default function HomeScreen({ navigation }) {
           booking_type: table.bookingType,
           frame_count: table.frameCount,
           current_frame_start_time: table.currentFrameStartTime,
+          advance_payment: table.advance_payment,
+          payment_type: table.payment_type,
         },
         gameType,
         color,

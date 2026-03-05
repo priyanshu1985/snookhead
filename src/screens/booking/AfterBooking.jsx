@@ -34,17 +34,21 @@ export default function AfterBooking({ route, navigation }) {
     timeOption = 'Set Time',
     timeDetails,
     preSelectedFoodItems = [], // Food items added during booking
-    reservationPayment, // Payment info from reservation
+    reservationPayment: initialReservationPayment, // Payment info from reservation
   } = route.params || {};
 
-  console.log('AfterBooking received params:', {
-    table: table?.name,
-    session: session?.id,
-    gameType,
-    timeOption,
-    timeDetails,
-    preSelectedFoodItems: preSelectedFoodItems?.length || 0,
-    reservationPayment: reservationPayment,
+  // Initialize reservationPayment from route params or session data
+  const [reservationPayment, setReservationPayment] = useState(() => {
+    if (initialReservationPayment) return initialReservationPayment;
+    
+    // Fallback: Try to derive from session data
+    if (session?.advance_payment !== undefined || session?.advancepayment !== undefined) {
+      return {
+        advancePayment: parseFloat(session.advance_payment || session.advancepayment || 0),
+        paymentType: session.payment_type || session.paymenttype || 'pay_later'
+      };
+    }
+    return null;
   });
 
   const [remainingSeconds, setRemainingSeconds] = useState(0);

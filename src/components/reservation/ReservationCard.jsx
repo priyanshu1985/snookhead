@@ -23,9 +23,14 @@ const ReservationCard = ({
     calculateTimeStatus();
     const interval = setInterval(calculateTimeStatus, 60000); // Update every minute
     return () => clearInterval(interval);
-  }, [reservation]);
+  }, [reservation.status, reservation]);
 
   const calculateTimeStatus = () => {
+    if (reservation.status === 'active') {
+      setTimeStatus('ongoing');
+      return;
+    }
+
     const now = new Date();
     const startTime = new Date(
       reservation.fromTime ||
@@ -50,6 +55,15 @@ const ReservationCard = ({
 
   const getStatusConfig = () => {
     switch (timeStatus) {
+      case 'ongoing':
+        return {
+          color: '#2196F3',
+          backgroundColor: '#E3F2FD',
+          borderColor: '#2196F3',
+          label: 'Ongoing',
+          icon: 'play-circle-outline',
+          pulse: true,
+        };
       case 'starting-soon':
         return {
           color: '#FF8C42',
@@ -310,7 +324,7 @@ const ReservationCard = ({
       {/* Action Buttons */}
       <View style={styles.actions}>
         {/* Edit */}
-        {timeStatus === 'upcoming' && (
+        {timeStatus === 'upcoming' && reservation.status !== 'active' && (
           <TouchableOpacity
             style={[styles.actionButton, styles.secondaryButton]}
             onPress={() => onEdit(reservation)}
@@ -321,13 +335,15 @@ const ReservationCard = ({
         )}
 
         {/* Cancel */}
-        <TouchableOpacity
-          style={[styles.actionButton, styles.dangerButton]}
-          onPress={handleCancel}
-        >
-          <Icon name="close-circle-outline" size={18} color="#F44336" />
-          <Text style={styles.dangerButtonText}>Cancel</Text>
-        </TouchableOpacity>
+        {reservation.status !== 'active' && (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.dangerButton]}
+            onPress={handleCancel}
+          >
+            <Icon name="close-circle-outline" size={18} color="#F44336" />
+            <Text style={styles.dangerButtonText}>Cancel</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Mark No-Show (for overdue) */}
         {timeStatus === 'overdue' && (

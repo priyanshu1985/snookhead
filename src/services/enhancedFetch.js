@@ -57,7 +57,7 @@ const refreshAccessToken = async () => {
 
   try {
     // Use original fetch to avoid infinite recursion
-    const response = await originalFetch(`${API_URL}/api/auth/refresh`, {
+    const response = await originalFetch(`${API_URL}/api/auth/refresh-token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -137,8 +137,8 @@ const enhancedFetch = async (url, options = {}) => {
         throw new Error('Authentication failed');
       }
 
-      if (errorData.code === 'TOKEN_EXPIRED') {
-        console.log('Token expired, attempting refresh...');
+      if (errorData.code === 'TOKEN_EXPIRED' || errorData.code === 'TOKEN_INVALID') {
+        console.log('Token issues detected, attempting refresh...');
 
         // If already refreshing, wait for it to complete
         if (isRefreshing) {
@@ -153,10 +153,14 @@ const enhancedFetch = async (url, options = {}) => {
                     Authorization: `Bearer ${token}`,
                   },
                 };
+                // Fresh timeout for retry
+                const retryTimeout = new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error('Retry timeout')), timeout),
+                );
                 resolve(
                   Promise.race([
                     originalFetch(fullUrl, retryOptions),
-                    timeoutPromise,
+                    retryTimeout,
                   ]),
                 );
               },
@@ -180,9 +184,14 @@ const enhancedFetch = async (url, options = {}) => {
             },
           };
 
+          // Fresh timeout for retry
+          const retryTimeout = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Retry timeout')), timeout),
+          );
+
           response = await Promise.race([
             originalFetch(fullUrl, retryOptions),
-            timeoutPromise,
+            retryTimeout,
           ]);
           console.log('Retry response status:', response.status);
         } catch (error) {
