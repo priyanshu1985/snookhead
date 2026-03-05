@@ -34,23 +34,28 @@ const generateAccessToken = (user) => {
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    const lowerEmail = email ? email.trim().toLowerCase() : "";
 
     // Validation
-    if (!email || !password) {
+    if (!lowerEmail || !password) {
       return res
         .status(400)
         .json({ error: "Please provide email and password" });
     }
 
-    // Check for user
-    const user = await User.findOne({ where: { email } });
+    console.log(`🔍 Login attempt for: ${lowerEmail}`);
+
+    // Check for user (using lowercased email for consistency)
+    const user = await User.findOne({ where: { email: lowerEmail } });
     if (!user) {
+      console.log(`❌ User not found by email: ${lowerEmail}`);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     // Check password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
+      console.log(`❌ Incorrect password for: ${lowerEmail}`);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
@@ -154,9 +159,13 @@ router.post("/login", async (req, res) => {
     }
 
     res.json({
+      success: true,
       accessToken,
       refreshToken,
-      user: userWithoutPassword,
+      user: {
+        ...userWithoutPassword,
+        station_id: freshUser.stationid, // Map for frontend convenience
+      }
     });
   } catch (err) {
     console.error("Login error:", err);
@@ -170,16 +179,17 @@ router.post("/login", async (req, res) => {
 router.post("/register", async (req, res) => {
   try {
     const { name, email, password, phone, role } = req.body;
+    const lowerEmail = email ? email.trim().toLowerCase() : "";
 
     // Validation
-    if (!name || !email || !password) {
+    if (!name || !lowerEmail || !password) {
       return res
         .status(400)
         .json({ error: "Please provide name, email, and password" });
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({ where: { email } });
+    const existingUser = await User.findOne({ where: { email: lowerEmail } });
     if (existingUser) {
       return res
         .status(409)
@@ -193,7 +203,7 @@ router.post("/register", async (req, res) => {
     // Create user with pending status (default role is 'owner' for new registrations)
     await User.create({
       name,
-      email,
+      email: lowerEmail,
       passwordHash: hashedPassword,
       phone: phone || null,
       role: role || "owner", // Default to owner for new registrations
@@ -336,6 +346,7 @@ router.post("/verify-otp", async (req, res) => {
     const { passwordHash: _, ...userWithoutPassword } = freshUserForToken.toJSON();
 
     res.json({
+      success: true,
       message: "Email verified successfully. Welcome!",
       accessToken,
       refreshToken,
@@ -406,7 +417,10 @@ router.post("/refresh-token", validateRefreshToken, async (req, res) => {
     }
 
     const accessToken = generateAccessToken(user);
-    res.json({ accessToken });
+    res.json({
+      success: true,
+      accessToken,
+    });
   } catch (err) {
     console.error("Refresh token error:", err);
     res.status(500).json({ error: "Server error" });
@@ -450,7 +464,11 @@ router.get("/me", auth, async (req, res) => {
     }
 
     res.json({
-      user: userWithoutPassword,
+      success: true,
+      user: {
+        ...userWithoutPassword,
+        station_id: user.stationid,
+      },
       station: stationInfo,
       debugInfo: {
         jwt_station_id: req.user.station_id,

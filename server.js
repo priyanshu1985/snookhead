@@ -118,10 +118,11 @@ async function startServer() {
 
     const PORT = process.env.PORT || 4000; // Use port 4000 to match frontend config
 
-    const server = app.listen(PORT, () => {
-      console.log(`✅ Server running on http://localhost:${PORT}`);
-      console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
-      console.log(`👥 Users API: http://localhost:${PORT}/api/users`);
+    const HOST = "0.0.0.0";
+    const server = app.listen(PORT, HOST, () => {
+      console.log(`✅ Server running on http://${HOST}:${PORT}`);
+      console.log(`📊 Health check: http://${HOST}:${PORT}/api/health`);
+      console.log(`👥 Users API: http://${HOST}:${PORT}/api/users`);
       console.log("🎯 Server is ready and listening for requests");
     });
 
