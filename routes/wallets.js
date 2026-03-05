@@ -84,8 +84,15 @@ router.get("/customer/:customer_id", auth, stationContext, async (req, res) => {
       }
     }
 
-    if (!wallet) {
-      return res.status(404).json({ error: "Wallet/Customer not found" });
+    if (wallet && wallet.qrcode) {
+      // Convert buffer/object to base64 if needed
+      if (typeof wallet.qrcode === 'object' && wallet.qrcode.data) {
+        wallet.qr_code = `data:image/png;base64,${Buffer.from(wallet.qrcode.data).toString('base64')}`;
+      } else if (Buffer.isBuffer(wallet.qrcode)) {
+        wallet.qr_code = `data:image/png;base64,${wallet.qrcode.toString('base64')}`;
+      } else if (typeof wallet.qrcode === 'string') {
+        wallet.qr_code = `data:image/png;base64,${wallet.qrcode}`;
+      }
     }
 
     res.json(wallet);
@@ -493,63 +500,7 @@ router.post(
 
 
 
-/* =====================================================
-   CLEAR CREDIT - filtered by station
-   ===================================================== */
-router.post(
-  "/clear-credit",
-  auth,
-  stationContext,
-  authorize("staff", "admin", "owner"),
-  async (req, res) => {
-    try {
-      const { customer_id, paymentMethod } = req.body;
 
-      const wallet = await findWalletByCustomerId(customer_id, req.stationId);
-      if (!wallet) {
-        return res.status(404).json({ error: "Wallet not found for this customer" });
-      }
-
-      if (Number(wallet.balance) >= 0) {
-        return res.status(400).json({ error: "No credit to clear. Wallet balance is positive or zero." });
-      }
-
-      const deficitAmount = Math.abs(Number(wallet.balance));
-      const newBalance = 0;
-
-      await Wallet.update({
-        balance: newBalance,
-        lasttransactionat: new Date()
-      }, { where: { id: wallet.id } });
-
-      // Create Transaction Record
-      await WalletTransaction.create(
-        {
-          walletid: wallet.id,
-          customerid: wallet.customerid,
-          amount: deficitAmount,
-          balancebefore: wallet.balance,
-          balanceafter: newBalance,
-          stationid: req.stationId,
-          type: "TOPUP",
-          description: "Clear Credit via " + (paymentMethod || "Cash"),
-          createdAt: new Date()
-        }
-      );
-
-      // Update local object for response
-      wallet.balance = newBalance;
-
-      res.json({
-        message: "Credit cleared",
-        new_balance: wallet.balance,
-      });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: err.message });
-    }
-  }
-);
 /* =====================================================
    SCAN QR → Get Customer + Wallet - filtered by station
    ===================================================== */
@@ -561,36 +512,40 @@ router.post(
   async (req, res) => {
     try {
       const { qr_data } = req.body;
-
-      if (!qr_data) {
-        return res.status(400).json({ error: "qr_data required" });
-      }
+      console.log("🔍 Scanning QR Data:", qr_data);
 
       let decoded;
       try {
         decoded = JSON.parse(qr_data);
-      } catch {
-        return res.status(400).json({ error: "Invalid QR data" });
+      } catch (e) {
+        console.error("❌ QR Parse Error:", e.message);
+        return res.status(400).json({ error: "Invalid QR format. Please scan a valid wallet QR code." });
       }
 
       if (decoded.type !== "WALLET") {
-        return res.status(400).json({ error: "Invalid QR type" });
+        console.error("❌ Invalid QR Type:", decoded.type);
+        return res.status(400).json({ error: `Unsupported QR Type: ${decoded.type || 'Unknown'}` });
       }
 
       const where = addStationFilter({ id: decoded.wallet_id }, req.stationId);
-      const wallet = await Wallet.findOne({
-        where,
-        include: [
-          {
-            model: Customer,
-            attributes: ["id", "name", "phone", "email", "is_active"],
-          },
-        ],
-      });
+      const wallet = await Wallet.findOne({ where });
 
       if (!wallet) {
-        return res.status(404).json({ error: "Wallet not found" });
+        console.error("❌ Wallet not found for ID:", decoded.wallet_id, "Station:", req.stationId);
+        return res.status(404).json({ error: "Wallet not found. This QR might belong to another station or is invalid." });
       }
+
+      // Manually fetch customer as joins/includes are not supported in current model layer
+      const customer = await Customer.findOne({
+        where: { id: wallet.customerid }
+      });
+
+      if (!customer) {
+        console.error("❌ Customer not found for wallet:", wallet.id);
+        return res.status(404).json({ error: "Customer associated with this wallet not found." });
+      }
+
+      console.log("✅ QR Validated successfully for:", customer.name);
 
       res.json({
         wallet: {
@@ -598,7 +553,10 @@ router.post(
           balance: wallet.balance,
           currency: wallet.currency,
         },
-        customer: wallet.Customer,
+        customer: {
+          ...customer,
+          isactive: customer.isactive 
+        },
       });
     } catch (err) {
       console.error(err);

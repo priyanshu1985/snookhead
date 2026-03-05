@@ -722,3 +722,35 @@
   "checkingAgainst": []
 }
 
+{
+  "body": {
+    "table_id": 82,
+    "game_id": 52,
+    "user_id": null,
+    "duration_minutes": 30,
+    "booking_type": "set_time",
+    "frame_count": null,
+    "customer_name": "Walk-in Customer",
+    "customerid": null,
+    "cart": []
+  },
+  "tableId": 82,
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": 82,
+    "game_id": 52,
+    "user_id": null,
+    "duration_minutes": 60,
+    "booking_type": "set_time",
+    "frame_count": null,
+    "customer_name": "Walk-in Customer",
+    "customerid": null,
+    "cart": []
+  },
+  "tableId": 82,
+  "checkingAgainst": []
+}
+
