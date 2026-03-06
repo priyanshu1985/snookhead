@@ -927,3 +927,258 @@
   "checkingAgainst": []
 }
 
+{
+  "body": {
+    "table_id": "41",
+    "game_id": 24,
+    "duration_minutes": 2,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "41",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "73",
+    "game_id": 24,
+    "duration_minutes": 30,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "73",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": 41,
+    "game_id": 24,
+    "duration_minutes": 60,
+    "booking_type": "timer",
+    "notes": "[PAID_UPI: 36390]",
+    "reservationId": 112,
+    "customer_name": "zdfghj"
+  },
+  "tableId": 41,
+  "checkingAgainst": [
+    {
+      "id": 112
+    }
+  ]
+}
+
+{
+  "body": {
+    "table_id": "41",
+    "game_id": 24,
+    "duration_minutes": 2,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "41",
+  "checkingAgainst": [
+    {
+      "id": 113
+    }
+  ]
+}
+
+{
+  "body": {
+    "table_id": "41",
+    "game_id": 24,
+    "duration_minutes": 30,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "41",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "41",
+    "game_id": 24,
+    "duration_minutes": 1,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "41",
+  "checkingAgainst": [
+    {
+      "id": 114
+    }
+  ]
+}
+
+{
+  "body": {
+    "table_id": 41,
+    "game_id": 24,
+    "duration_minutes": 60,
+    "booking_type": "timer",
+    "notes": "[PAID_CASH: 36390]",
+    "reservationId": 114,
+    "customer_name": "cvbn"
+  },
+  "tableId": 41,
+  "checkingAgainst": [
+    {
+      "id": 114
+    }
+  ]
+}
+
+{
+  "body": {
+    "table_id": "51",
+    "game_id": 24,
+    "duration_minutes": 0,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "set",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "51",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "74",
+    "game_id": 24,
+    "duration_minutes": 0,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "set",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "74",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": 73,
+    "game_id": 24,
+    "duration_minutes": 90,
+    "booking_type": "timer",
+    "notes": "[PAID_UPI: 125]",
+    "reservationId": 115,
+    "customer_name": "sdfgh"
+  },
+  "tableId": 73,
+  "checkingAgainst": [
+    {
+      "id": 115
+    }
+  ]
+}
+
+{
+  "body": {
+    "table_id": 73,
+    "game_id": 24,
+    "duration_minutes": 90,
+    "booking_type": "timer",
+    "notes": "[PAID_UPI: 125]",
+    "reservationId": 115,
+    "customer_name": "sdfgh"
+  },
+  "tableId": 73,
+  "checkingAgainst": [
+    {
+      "id": 115
+    }
+  ]
+}
+
+{
+  "body": {
+    "table_id": 73,
+    "game_id": 24,
+    "duration_minutes": 60,
+    "booking_type": "timer",
+    "notes": "[PAID_CASH: 75]",
+    "reservationId": 116,
+    "customer_name": "kalyan"
+  },
+  "tableId": 73,
+  "checkingAgainst": [
+    {
+      "id": 116
+    }
+  ]
+}
+
+{
+  "body": {
+    "table_id": "73",
+    "game_id": 24,
+    "duration_minutes": 15,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "frame",
+    "frame_count": 1,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "73",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": 41,
+    "game_id": 24,
+    "duration_minutes": 60,
+    "booking_type": "set",
+    "set_time": "",
+    "notes": "",
+    "reservationId": 117,
+    "customer_name": "kalyan"
+  },
+  "tableId": 41,
+  "checkingAgainst": [
+    {
+      "id": 117
+    }
+  ]
+}
+
+{
+  "body": {
+    "table_id": 41,
+    "game_id": 24,
+    "duration_minutes": 60,
+    "booking_type": "timer",
+    "notes": "[PAID_CASH: 150]",
+    "reservationId": 118,
+    "customer_name": "tygbyvyu"
+  },
+  "tableId": 41,
+  "checkingAgainst": [
+    {
+      "id": 118
+    }
+  ]
+}
+

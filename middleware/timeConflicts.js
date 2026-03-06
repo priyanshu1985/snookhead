@@ -19,10 +19,16 @@ const checkTimeConflicts = async (req, res, next) => {
         body.tableid ||
         params.tableId ||
         params.table_id,
-      startTime:
-        (body.start_time || body.startTime || body.fromTime)
+      startTime: (() => {
+        const d = body.reservation_date || body.reservationDate || body.date;
+        const t = body.start_time || body.startTime || body.fromTime;
+        if (d && t && typeof t === 'string' && t.includes(':')) {
+          return new Date(`${d}T${t}:00+05:30`);
+        }
+        return (body.start_time || body.startTime || body.fromTime)
           ? new Date(body.start_time || body.startTime || body.fromTime)
-          : new Date(),
+          : new Date();
+      })(),
       endTime: body.end_time || body.endTime || body.toTime,
       durationMinutes:
         body.duration_minutes || body.durationMinutes || body.duration,

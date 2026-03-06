@@ -113,30 +113,37 @@ router.post(
         return res.status(404).json({ error: "Table not found" });
       }
 
-      if (table.status !== "available") {
-        // Safe check: If table says not available, check if there are actual active sessions.
-        // If there are stale sessions, we should probably close them or error out.
-        // But for robust "Start", let's ensure we close any existing active sessions for this table
-        // to prevent "ghost" sessions.
-        const existingSessions = await ActiveTable.findAll({
-          where: addStationFilter(
-            { tableid: table_id, status: ["active", "paused"] },
-            req.stationId,
-          ),
-        });
+      // --- CRITICAL FIX: Ensure no phantom sessions exist for this table ---
+      // Always check for and close any existing active/paused sessions for this table
+      // before starting a new one, even if the table status says "available".
+      // This prevents "silently active" sessions from lingering.
+      const existingSessions = await ActiveTable.findAll({
+        where: addStationFilter(
+          { tableid: table_id, status: ["active", "paused"] },
+          req.stationId,
+        ),
+      });
 
-        if (existingSessions.length > 0) {
-          // Close them
-          const endTime = new Date();
-          await ActiveTable.update(
-            { endtime: endTime, status: "completed" },
-            {
-              where: addStationFilter(
-                { tableid: table_id, status: ["active", "paused"] },
-                req.stationId,
-              ),
-            },
-          );
+      if (existingSessions.length > 0) {
+        console.log(`[Start Session] Closing ${existingSessions.length} phantom sessions for table ${table_id}`);
+        const endTime = new Date();
+        await ActiveTable.update(
+          { endtime: endTime, status: "completed" },
+          {
+            where: addStationFilter(
+              { tableid: table_id, status: ["active", "paused"] },
+              req.stationId,
+            ),
+          },
+        );
+        
+        // Notify clients that sessions were closed
+        for (const s of existingSessions) {
+          emitToStation(req.stationId, "session:changed", {
+            action: "stop",
+            tableId: table_id,
+            activeId: s.activeid || s.active_id,
+          });
         }
       }
 
@@ -595,10 +602,10 @@ router.post(
       if (session.bookingtype === 'frame') {
         table_charges = (session.framecount || 1) * actualFrameCharges;
       } else {
-        // Calculate cost for base minutes (uses block pricing if multiple of 30)
-        if (base_minutes > 0 && base_minutes % 30 === 0) {
-          const hours = Math.floor(base_minutes / 60);
-          const halfHours = Math.floor((base_minutes % 60) / 30);
+        // Use the unified block pricing logic for the total session duration
+        if (session_duration > 0 && session_duration % 30 === 0) {
+          const hours = Math.floor(session_duration / 60);
+          const halfHours = Math.floor((session_duration % 60) / 30);
           
           if (actualPricePerHour > 0) {
             table_charges += hours * actualPricePerHour;
@@ -616,16 +623,8 @@ router.post(
             }
           }
         } else {
-          table_charges = Math.floor(base_minutes) * actualPricePerMin;
-        }
-
-        // Add cost for manual extra minutes
-        if (manual_extra === 30 && actualPricePerHalfHour > 0) {
-          table_charges += actualPricePerHalfHour;
-        } else if (manual_extra === 60 && actualPricePerHour > 0) {
-          table_charges += actualPricePerHour;
-        } else {
-          table_charges += manual_extra * actualPricePerMin;
+          // Non-standard duration: bill per minute
+          table_charges = Math.floor(session_duration) * actualPricePerMin;
         }
       }
 

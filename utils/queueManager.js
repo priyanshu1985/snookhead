@@ -9,6 +9,7 @@ import {
   addStationFilter,
   addStationToData,
 } from "../middleware/stationContext.js";
+import { emitToStation } from "./socketManager.js";
 
 // Helper function to check queue and optionally auto-assign next person when table is freed
 export async function checkQueueAndAssign(tableId, gameId, stationId, autoAssign = true) {
@@ -154,6 +155,13 @@ export async function checkQueueAndAssign(tableId, gameId, stationId, autoAssign
       console.log(
         `[QueueManager] Created session ${newSession.activeid} for ${nextInQueue.customername}`,
       );
+
+      // Notify clients
+      emitToStation(stationId, "session:changed", {
+        action: "start",
+        tableId: tableId,
+        activeId: newSession.activeid || newSession.active_id,
+      });
 
       // Check for existing pending order linked to this queue entry
       try {

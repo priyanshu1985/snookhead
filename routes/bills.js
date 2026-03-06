@@ -20,6 +20,7 @@ import {
 import { checkQueueAndAssign } from "../utils/queueManager.js";
 import { getSupabase } from "../config/supabase.js";
 import { generateSequentialBillNo } from "../utils/billUtils.js";
+import { emitToStation } from "../utils/socketManager.js";
 
 const router = express.Router();
 
@@ -322,10 +323,10 @@ router.post(
         const base_minutes = Math.max(0, session_duration - manual_extra);
 
         let durationCost = 0;
-        // Calculate cost for base minutes (uses block pricing if multiple of 30)
-        if (base_minutes > 0 && base_minutes % 30 === 0) {
-          const hours = Math.floor(base_minutes / 60);
-          const halfHours = Math.floor((base_minutes % 60) / 30);
+        // Use the unified block pricing logic for the total session duration
+        if (session_duration > 0 && session_duration % 30 === 0) {
+          const hours = Math.floor(session_duration / 60);
+          const halfHours = Math.floor((session_duration % 60) / 30);
           
           if (actualPricePerHour > 0) {
             durationCost += hours * actualPricePerHour;
@@ -343,16 +344,8 @@ router.post(
             }
           }
         } else {
-          durationCost = Math.floor(base_minutes) * actualPricePerMin;
-        }
-
-        // Add cost for manual extra minutes
-        if (manual_extra === 30 && actualPricePerHalfHour > 0) {
-          durationCost += actualPricePerHalfHour;
-        } else if (manual_extra === 60 && actualPricePerHour > 0) {
-          durationCost += actualPricePerHour;
-        } else {
-          durationCost += manual_extra * actualPricePerMin;
+          // Non-standard duration: bill per minute
+          durationCost = Math.floor(session_duration) * actualPricePerMin;
         }
         
         table_charges = durationCost + Number(frame_charges || 0);
@@ -502,29 +495,21 @@ router.post(
       const bill = await Bill.create(billData);
 
       // --- CRITICAL FIX: Update Queue Status ---
-      // We must mark queue as served regardless of whether a session_id exists.
-      // Sometimes session is lost but queue remains "seated", causing phantom occupation.
       if (table_id) {
         try {
-          // Find queue entry first (checking both seated AND assigned to be safe)
           const queueEntries = await Queue.findAll({
             where: {
               preferredtableid: table_id,
-              status: ["seated", "assigned"], // Array filter now supported!
+              status: ["seated", "assigned"],
               ...(req.stationId ? { stationid: req.stationId } : {})
             }
           });
 
           if (queueEntries.length > 0) {
             for (const q of queueEntries) {
-              await Queue.update(
-                { status: "served" },
-                { where: { id: q.id } }
-              );
-              console.log(`[Bill] Updated Queue ID ${q.id} (Status: ${q.status}) to served for table ${table_id}`);
+              await Queue.update({ status: "served" }, { where: { id: q.id } });
+              console.log(`[Bill] Updated Queue ID ${q.id} to served`);
             }
-          } else {
-            console.log(`[Bill] No linked queue entry found for table ${table_id} (Checked seated/assigned)`);
           }
         } catch (qErr) {
           console.error("Failed to update queue status on billing:", qErr);
@@ -532,69 +517,58 @@ router.post(
       }
 
       // --- CRITICAL FIX: Stop Session & Free Table ---
-      // When a bill is created, the session should be considered finished and table available.
-      // Lookup session by table_id if session_id is missing/invalid
       let targetSessionId = session_id;
       if (!targetSessionId && table_id) {
         try {
-          // Find active session for this table
           const activeSession = await ActiveTable.findOne({
             where: {
               tableid: table_id,
-              status: 'active'
+              status: ['active', 'paused'] // Support both active and paused
             }
           });
           if (activeSession) {
             targetSessionId = activeSession.activeid;
-            console.log(`[Bill] Found active session ${targetSessionId} for table ${table_id} (was missing in request)`);
+            console.log(`[Bill] Found session ${targetSessionId} for table ${table_id}`);
           }
         } catch (findErr) {
-          console.error("Failed to find active session for table:", findErr);
+          console.error("Failed to find session for table:", findErr);
         }
       }
 
       if (targetSessionId) {
         try {
           await ActiveTable.update(
-            {
-              status: 'completed',
-              endtime: new Date(),
-              // final_amount: total_amount // Optional if schema supports it
-            },
+            { status: 'completed', endtime: new Date() },
             { where: { activeid: targetSessionId } }
           );
           console.log(`[Bill] Stopped ActiveTable session ${targetSessionId}`);
+          
+          // Emit socket event for session change
+          emitToStation(req.stationId, "session:changed", {
+            action: "stop",
+            tableId: table_id,
+            activeId: targetSessionId,
+          });
         } catch (stopErr) {
           console.error("Failed to stop session on billing:", stopErr);
         }
       }
 
-
-
       // Always release table if we have a table_id
       if (table_id) {
         try {
-          await TableAsset.update(
-            { status: 'available' },
-            { where: { id: table_id } }
-          );
+          await TableAsset.update({ status: 'available' }, { where: { id: table_id } });
           console.log(`[Bill] Set Table ${table_id} to available`);
+          
+          // Emit socket event for table status change
+          emitToStation(req.stationId, "table:changed", {
+            tableId: table_id,
+            status: "available",
+          });
 
-          try {
-            // Close any active OR strictly pending (if stuck) reservations for this table
-            // Split into two updates to avoid ORM array/enum issues
-            await Reservation.update(
-              { status: 'done' },
-              { where: { tableId: table_id, status: 'active' } }
-            );
-            await Reservation.update(
-              { status: 'done' },
-              { where: { tableId: table_id, status: 'pending' } }
-            );
-            console.log(`[Bill] Closed active/pending reservations for table ${table_id}`);
-          } catch (resErr) {
-            console.error("Failed to close linked reservation:", resErr);
-          }
+          // Close reservations
+          await Reservation.update({ status: 'done' }, { where: { tableId: table_id, status: 'active' } });
+          await Reservation.update({ status: 'done' }, { where: { tableId: table_id, status: 'pending' } });
 
           // --- CHECK QUEUE AND ASSIGN ---
           // Now that table is available, check if anyone is waiting for this game

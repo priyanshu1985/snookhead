@@ -166,8 +166,8 @@ router.post(
         });
       }
 
-      // Parse date and time
-      const fromTime = new Date(`${reservation_date}T${start_time}`);
+      // Parse date and time - Follow IST timing (+05:30)
+      const fromTime = new Date(`${reservation_date}T${start_time}:00+05:30`);
       const toTime = new Date(
         fromTime.getTime() + (duration_minutes || 60) * 60000,
       );
@@ -476,26 +476,34 @@ router.put("/:id", auth, stationContext, async (req, res) => {
       // But better: Fetch current if generic update?
       // The modal usually sends full payload.
 
+      // Get date and time parts specifically for Asia/Kolkata to handle extraction correctly from UTC timestamps
+      const currentFromTime = r.fromTime ? new Date(r.fromTime) : null;
+      
       const dateStr =
         updates.reservation_date ||
-        (r.fromTime ? new Date(r.fromTime).toISOString().split("T")[0] : null);
+        (currentFromTime ? 
+          new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(currentFromTime) : 
+          null);
+          
       const timeStr =
         updates.start_time ||
-        (r.fromTime
-          ? new Date(r.fromTime).toLocaleTimeString("en-GB", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-          : null);
+        (currentFromTime ? 
+          new Intl.DateTimeFormat('en-GB', { 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            hour12: false, 
+            timeZone: 'Asia/Kolkata' 
+          }).format(currentFromTime) : 
+          null);
 
       if (dateStr && timeStr) {
-        const fromTime = new Date(`${dateStr}T${timeStr}`);
+        // Parse as IST (+05:30)
+        const fromTime = new Date(`${dateStr}T${timeStr}:00+05:30`);
         allowedUpdates.fromTime = fromTime;
 
         // Recalculate end time
         const duration = updates.duration_minutes || r.durationminutes || 60;
         allowedUpdates.toTime = new Date(fromTime.getTime() + duration * 60000);
-        // allowedUpdates.durationminutes = duration; // Column does not exist
       }
     } else if (updates.duration_minutes) {
       // Only duration changed

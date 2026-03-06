@@ -17,6 +17,7 @@ import {
   addStationToData,
 } from "../middleware/stationContext.js";
 import { checkTimeConflicts } from "../middleware/timeConflicts.js";
+import { emitToStation } from "../utils/socketManager.js";
 
 const router = express.Router();
 
@@ -529,11 +530,11 @@ router.post(
 
       // Update table status to reserved
       await TableAsset.update(
-        { status: "reserved" },
+        { status: "reserved" }, // Using reserved as occupied is not in enum
         { where: { id: parseInt(tableid) } },
       );
 
-      // Create active session automatically when queue member is assigned
+      // Create active session automatically
       const startTime = new Date();
       let bookingEndTime = null;
       if (
@@ -567,6 +568,13 @@ router.post(
       );
 
       const session = await ActiveTable.create(sessionData);
+
+      // Notify clients
+      emitToStation(req.stationId, "session:changed", {
+        action: "start",
+        tableId: tableid,
+        activeId: session.activeid || session.active_id,
+      });
 
       // Fetch updated entry
       const updatedEntry = await Queue.findByPk(id);
@@ -726,6 +734,13 @@ router.post(
       );
 
       const autoSession = await ActiveTable.create(sessionData);
+
+      // Notify clients
+      emitToStation(req.stationId, "session:changed", {
+        action: "start",
+        tableId: availableTable.id,
+        activeId: autoSession.activeid || autoSession.active_id,
+      });
 
       // Fetch updated entry
       const updatedEntry = await Queue.findByPk(nextEntry.id);
