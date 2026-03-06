@@ -754,3 +754,176 @@
   "checkingAgainst": []
 }
 
+{
+  "body": {
+    "table_id": "53",
+    "game_id": 37,
+    "duration_minutes": 30,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "53",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "53",
+    "game_id": 37,
+    "duration_minutes": 30,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "53",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "53",
+    "game_id": 37,
+    "duration_minutes": 1,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "53",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "53",
+    "game_id": 37,
+    "duration_minutes": 1,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "53",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "53",
+    "game_id": 37,
+    "duration_minutes": 1,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "53",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "54",
+    "game_id": 37,
+    "duration_minutes": 30,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "54",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "55",
+    "game_id": 37,
+    "duration_minutes": 30,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "55",
+  "checkingAgainst": [
+    {
+      "id": 111
+    }
+  ]
+}
+
+{
+  "body": {
+    "table_id": "55",
+    "game_id": 37,
+    "duration_minutes": 30,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "55",
+  "checkingAgainst": [
+    {
+      "id": 111
+    }
+  ]
+}
+
+{
+  "body": {
+    "table_id": "57",
+    "game_id": 38,
+    "duration_minutes": 30,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "57",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "57",
+    "game_id": 38,
+    "duration_minutes": 30,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "57",
+  "checkingAgainst": []
+}
+
+{
+  "body": {
+    "table_id": "55",
+    "game_id": 37,
+    "duration_minutes": 30,
+    "customer_name": "Walk-in Customer",
+    "booking_type": "timer",
+    "frame_count": null,
+    "cart": [],
+    "food_orders": []
+  },
+  "tableId": "55",
+  "checkingAgainst": []
+}
+

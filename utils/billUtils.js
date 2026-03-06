@@ -49,13 +49,15 @@ export const generateSequentialBillNo = async (stationId) => {
       throw error;
     }
 
-    // Extract the numeric part (N) from #YYYYMMDD-N and find the max
+    // Extract the numeric part (N) from the bill number and find the max
     let maxNum = 0;
     if (bills && bills.length > 0) {
       bills.forEach(b => {
         const parts = b.billnumber?.split('-');
         if (parts && parts.length > 1) {
-          const num = parseInt(parts[1], 10);
+          // The numeric part is always the last segment
+          const lastPart = parts[parts.length - 1];
+          const num = parseInt(lastPart, 10);
           if (!isNaN(num) && num > maxNum) {
             maxNum = num;
           }
@@ -65,8 +67,10 @@ export const generateSequentialBillNo = async (stationId) => {
 
     const nextNum = maxNum + 1;
     
-    // Final Format: #YYYYMMDD-N
-    return `#${dateKey}-${nextNum}`;
+    // Final Format: #S{stationId}-{YYYYMMDD}-{N}
+    // This ensures uniqueness across stations even if they have the same sequence.
+    const stationPrefix = stationId ? `S${stationId}-` : '';
+    return `#${stationPrefix}${dateKey}-${nextNum}`;
   } catch (err) {
     console.error("Critical: Failed to generate sequential bill number. Falling back to timestamp.", err);
     // Safe fallback to ensure bill creation doesn't fail

@@ -298,6 +298,7 @@ router.post(
         booking_time,
         table_price_per_min,
         frame_charges = 0,
+        manual_extra_minutes = 0,
       } = req.body;
 
       // 1. Calculate table charges
@@ -317,25 +318,45 @@ router.post(
         let actualPricePerHalfHour = Number(table.pricePerHalfHour || table.price_per_half_hour || 0);
         let actualPricePerHour = Number(table.pricePerHour || table.price_per_hour || 0);
 
-        actualFrameCharges = frame_charges !== undefined ? Number(frame_charges) : 0;
+        const manual_extra = Number(manual_extra_minutes || 0);
+        const base_minutes = Math.max(0, session_duration - manual_extra);
 
-        if (actualPricePerHour > 0 && actualPricePerHalfHour > 0) {
-          const hours = Math.floor(session_duration / 60);
-          const remainderMins = Math.floor(session_duration % 60);
-
-          let durationCost = hours * actualPricePerHour;
-          if (remainderMins > 0 && remainderMins <= 10) {
-            durationCost += remainderMins * actualPricePerMin;
-          } else if (remainderMins > 10 && remainderMins <= 30) {
-            durationCost += actualPricePerHalfHour;
-          } else if (remainderMins > 30) {
-            durationCost += actualPricePerHour;
+        let durationCost = 0;
+        // Calculate cost for base minutes (uses block pricing if multiple of 30)
+        if (base_minutes > 0 && base_minutes % 30 === 0) {
+          const hours = Math.floor(base_minutes / 60);
+          const halfHours = Math.floor((base_minutes % 60) / 30);
+          
+          if (actualPricePerHour > 0) {
+            durationCost += hours * actualPricePerHour;
+          } else if (actualPricePerHalfHour > 0) {
+            durationCost += hours * 2 * actualPricePerHalfHour;
+          } else {
+            durationCost += hours * 60 * actualPricePerMin;
           }
-          table_charges = durationCost + actualFrameCharges;
+          
+          if (halfHours > 0) {
+            if (actualPricePerHalfHour > 0) {
+              durationCost += halfHours * actualPricePerHalfHour;
+            } else {
+              durationCost += halfHours * 30 * actualPricePerMin;
+            }
+          }
         } else {
-          // Fallback to strict per minute logic
-          table_charges = session_duration * actualPricePerMin + actualFrameCharges;
+          durationCost = Math.floor(base_minutes) * actualPricePerMin;
         }
+
+        // Add cost for manual extra minutes
+        if (manual_extra === 30 && actualPricePerHalfHour > 0) {
+          durationCost += actualPricePerHalfHour;
+        } else if (manual_extra === 60 && actualPricePerHour > 0) {
+          durationCost += actualPricePerHour;
+        } else {
+          durationCost += manual_extra * actualPricePerMin;
+        }
+        
+        table_charges = durationCost + Number(frame_charges || 0);
+
       }
 
       // 2. Calculate menu charges
@@ -655,6 +676,7 @@ router.post("/calculate-pricing", auth, stationContext, async (req, res) => {
       selected_menu_items = [],
       session_duration = 0,
       frame_charges = 0,
+      manual_extra_minutes = 0,
     } = req.body;
 
     let pricing = {
@@ -680,21 +702,45 @@ router.post("/calculate-pricing", auth, stationContext, async (req, res) => {
         const pricePerHour = parseFloat(table.pricePerHour || table.price_per_hour || 0);
         const frameCharge = parseFloat(table.frameCharge || table.frame_charge || 0);
 
-        if (pricePerHour > 0 && pricePerHalfHour > 0) {
-          const hours = Math.floor(session_duration / 60);
-          const remainderMins = Math.floor(session_duration % 60);
-          let durationCost = hours * pricePerHour;
-          if (remainderMins > 0 && remainderMins <= 10) {
-            durationCost += remainderMins * pricePerMin;
-          } else if (remainderMins > 10 && remainderMins <= 30) {
-            durationCost += pricePerHalfHour;
-          } else if (remainderMins > 30) {
-            durationCost += pricePerHour;
+        const manual_extra = Number(manual_extra_minutes || 0);
+        const base_minutes = Math.max(0, session_duration - manual_extra);
+
+        let durationCost = 0;
+        // Calculate cost for base minutes (uses block pricing if multiple of 30)
+        if (base_minutes > 0 && base_minutes % 30 === 0) {
+          const hours = Math.floor(base_minutes / 60);
+          const halfHours = Math.floor((base_minutes % 60) / 30);
+          
+          if (pricePerHour > 0) {
+            durationCost += hours * pricePerHour;
+          } else if (pricePerHalfHour > 0) {
+            durationCost += hours * 2 * pricePerHalfHour;
+          } else {
+            durationCost += hours * 60 * pricePerMin;
           }
-          pricing.table_charges = durationCost + frame_charges;
+          
+          if (halfHours > 0) {
+            if (pricePerHalfHour > 0) {
+              durationCost += halfHours * pricePerHalfHour;
+            } else {
+              durationCost += halfHours * 30 * pricePerMin;
+            }
+          }
         } else {
-          pricing.table_charges = session_duration * pricePerMin + frame_charges;
+          durationCost = Math.floor(base_minutes) * pricePerMin;
         }
+
+        // Add cost for manual extra minutes
+        if (manual_extra === 30 && pricePerHalfHour > 0) {
+          durationCost += pricePerHalfHour;
+        } else if (manual_extra === 60 && pricePerHour > 0) {
+          durationCost += pricePerHour;
+        } else {
+          durationCost += manual_extra * pricePerMin;
+        }
+        
+        pricing.table_charges = durationCost + frame_charges;
+
 
         pricing.breakdown.table_info = {
           name: table.name,

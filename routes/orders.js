@@ -8,6 +8,7 @@ import {
   addStationToData,
 } from "../middleware/stationContext.js";
 import { emitToStation } from "../utils/socketManager.js";
+import { generateSequentialOrderNo } from "../utils/orderUtils.js";
 
 const router = express.Router();
 
@@ -42,10 +43,14 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       });
     }
 
+    // Generate unique order number (Sequential daily reset)
+    const order_number = await generateSequentialOrderNo(req.stationId);
+
     // Create order with station_id for multi-tenancy
     const orderData = addStationToData(
       {
         userId: req.user.id, // from auth token
+        order_number: order_number, // Mapped to column
         personName: personName || "Walk-in Customer",
         total: Number(orderTotal) || 0,
         paymentMethod,
@@ -190,6 +195,7 @@ router.post("/", auth, stationContext, requireStation, async (req, res) => {
       message: !hasPreparedItems ? "Order completed (packed items only)" : "Order created successfully",
       order: {
         id: order.id,
+        order_number: order.order_number || order.id,
         personName: order.personName,
         total: order.total,
         paymentMethod: order.paymentMethod,
