@@ -99,7 +99,7 @@ const RevenueDistributionChart = React.memo(({ data }) => {
   const chartConfig = {
     backgroundColor: '#ffffff',
     backgroundGradientFrom: '#ffffff',
-    backgroundGradientTo: '#ffffff',
+    backgroundGradientTo: '#961919',
     decimalPlaces: 0,
     color: (opacity = 1) => `rgba(255, 149, 0, ${opacity})`,
     labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
@@ -183,6 +183,14 @@ export default function OwnerDashboard({ navigation, inTabbedView = false }) {
   const [showEndPicker, setShowEndPicker] = useState(false);
 
   const periods = ['Day', 'Week', 'Month', 'Custom'];
+  const subTabs = useMemo(
+    () => [
+      { id: 'SOURCE', label: 'REVENUE BY SOURCE' },
+      { id: 'METHOD', label: 'COLLECTION METHOD' },
+      { id: 'TOP', label: 'TOP PERFORMING' },
+    ],
+    [],
+  );
 
   const fetchDashboardData = useCallback(async () => {
     try {
